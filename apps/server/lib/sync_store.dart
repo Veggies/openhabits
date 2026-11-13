@@ -1,0 +1,167 @@
+import 'dart:convert';
+
+import 'package:core/core.dart';
+import 'package:sqlite3/sqlite3.dart';
+
+/// Server-side sync state: the winning change for every field of every
+/// person's data, stamped with a server sequence number so devices can pull
+/// everything newer than the last sequence they saw.
+class SyncStore {
+  final Database db;
+  late int _seq;
+  late Hlc _clock;
+
+  SyncStore(this.db) {
+    _migrate();
+    _seq = _maxSeq();
+    // Packed HLCs sort as text, so MAX finds the latest one written.
+    final latest =
+        db.select('SELECT MAX(hlc) AS h FROM fields').first['h'] as String?;
+    _clock = latest == null
+        ? const Hlc.zero(serverNodeId)
+        : const Hlc.zero(serverNodeId).receive(Hlc.parse(latest), _now());
+  }
+
+  factory SyncStore.open(String path) => SyncStore(sqlite3.open(path));
+
+  factory SyncStore.inMemory() => SyncStore(sqlite3.openInMemory());
+
+  void _migrate() {
+    final columns = {
+      for (final r in db.select("PRAGMA table_info('fields')")) r['name'],
+    };
+    if (columns.isNotEmpty && !columns.contains('user_id')) {
+      // Data from before accounts existed. It's kept under an empty user id
+      // and handed to the owner when the owner account is created.
+      db.execute('ALTER TABLE fields RENAME TO fields_v1');
+    }
+    db.execute('''
+      CREATE TABLE IF NOT EXISTS fields (
+        user_id TEXT NOT NULL,
+        tbl TEXT NOT NULL,
+        row_id TEXT NOT NULL,
+        field TEXT NOT NULL,
+        value TEXT,
+        hlc TEXT NOT NULL,
+        seq INTEGER NOT NULL,
+        PRIMARY KEY (user_id, tbl, row_id, field)
+      );
+      CREATE INDEX IF NOT EXISTS fields_user_seq ON fields (user_id, seq);
+    ''');
+    if (columns.isNotEmpty && !columns.contains('user_id')) {
+      db.execute(
+        "INSERT INTO fields SELECT '', tbl, row_id, field, value, hlc, seq FROM fields_v1",
+      );
+      db.execute('DROP TABLE fields_v1');
+    }
+  }
+
+  int _maxSeq() =>
+      db.select('SELECT COALESCE(MAX(seq), 0) AS s FROM fields').first['s']
+          as int;
+
+  /// Gives data stored without an owner (from before accounts) to [userId].
+  void adoptUnownedData(String userId) =>
+      db.execute("UPDATE fields SET user_id = ? WHERE user_id = ''", [userId]);
+
+  /// Node id for changes the server makes itself, e.g. calendar imports.
+  static const serverNodeId = 'server';
+
+  static int _now() => DateTime.now().millisecondsSinceEpoch;
+
+  /// A timestamp for a server-made change, ordered after everything seen.
+  Hlc stamp() => _clock = _clock.send(_now());
+
+  int get cursor => _seq;
+
+  /// Applies [changes] to [userId]'s data using the shared merge rule.
+  /// Returns how many won.
+  int apply(String userId, List<Change> changes) {
+    final read = db.prepare(
+      'SELECT hlc FROM fields WHERE user_id = ? AND tbl = ? AND row_id = ? AND field = ?',
+    );
+    final write = db.prepare(
+      'INSERT OR REPLACE INTO fields (user_id, tbl, row_id, field, value, hlc, seq) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?)',
+    );
+    var applied = 0;
+    db.execute('BEGIN');
+    try {
+      for (final change in changes) {
+        final rows = read.select([
+          userId,
+          change.table,
+          change.rowId,
+          change.field,
+        ]);
+        final current = rows.isEmpty
+            ? null
+            : Change(
+                table: change.table,
+                rowId: change.rowId,
+                field: change.field,
+                value: null,
+                hlc: Hlc.parse(rows.first['hlc'] as String),
+              );
+        _clock = _clock.receive(change.hlc, _now());
+        if (!shouldApply(change, current)) continue;
+        write.execute([
+          userId,
+          change.table,
+          change.rowId,
+          change.field,
+          jsonEncode(change.value),
+          change.hlc.pack(),
+          ++_seq,
+        ]);
+        applied++;
+      }
+      db.execute('COMMIT');
+    } catch (_) {
+      db.execute('ROLLBACK');
+      _seq = _maxSeq();
+      rethrow;
+    } finally {
+      read.close();
+      write.close();
+    }
+    return applied;
+  }
+
+  /// Every field of [userId]'s data whose winning value changed after [since].
+  List<Change> changesSince(String userId, int since) => [
+    for (final row in db.select(
+      'SELECT tbl, row_id, field, value, hlc FROM fields '
+      'WHERE user_id = ? AND seq > ? ORDER BY seq',
+      [userId, since],
+    ))
+      Change(
+        table: row['tbl'] as String,
+        rowId: row['row_id'] as String,
+        field: row['field'] as String,
+        value: jsonDecode(row['value'] as String),
+        hlc: Hlc.parse(row['hlc'] as String),
+      ),
+  ];
+
+  /// Every row of [userId]'s [table] (including deleted ones) as field maps.
+  Map<String, Map<String, Object?>> rows(String userId, String table) {
+    final result = <String, Map<String, Object?>>{};
+    for (final row in db.select(
+      'SELECT row_id, field, value FROM fields WHERE user_id = ? AND tbl = ?',
+      [userId, table],
+    )) {
+      result.putIfAbsent(row['row_id'] as String, () => {})[row['field']
+          as String] = jsonDecode(
+        row['value'] as String,
+      );
+    }
+    return result;
+  }
+
+  /// Removes all of [userId]'s data.
+  void deleteUserData(String userId) =>
+      db.execute('DELETE FROM fields WHERE user_id = ?', [userId]);
+
+  void close() => db.close();
+}

@@ -1,0 +1,19 @@
+# Start the server, then open http://<this-computer>:8080 to finish setup.
+#
+#   docker compose up -d
+#
+# Host networking lets "Enable remote access" ask your router to open a
+# port (UPnP). It works on Linux (including TrueNAS); on macOS and Windows,
+# Docker runs in a VM, so forward the port on your router by hand instead.
+services:
+  server:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    network_mode: host
+    volumes:
+      - data:/data
+    restart: unless-stopped
+
+volumes:
+  data:

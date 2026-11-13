@@ -1,0 +1,567 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:core/core.dart';
+import 'package:shelf/shelf.dart';
+import 'package:shelf_router/shelf_router.dart';
+
+import 'auth/auth_store.dart';
+import 'auth/oidc.dart';
+import 'calendar/calendar_sync.dart';
+import 'remote/remote_access.dart';
+import 'settings_store.dart';
+import 'sync_store.dart';
+import 'web/qr_svg.dart';
+import 'web/setup_page.dart';
+
+/// Builds the HTTP handler.
+///
+/// Public routes: `/`, `/health`, `/auth/info`, `/auth/login`,
+/// `/auth/redeem` and the OIDC routes. Everything else needs
+/// `Authorization: Bearer <session token>`.
+Handler buildHandler(
+  SyncStore store,
+  AuthStore auth, {
+  CalendarSync? calendars,
+  OidcProvider? oidc,
+  String serverName = 'Tasks',
+
+  /// Trust X-Forwarded-For / CF-Connecting-IP for the client address. Only
+  /// safe behind a proxy or tunnel that sets them.
+  bool trustProxy = false,
+
+  /// The server's public address, if it has one, for pairing QR codes.
+  String? publicUrl,
+
+  /// Settings changed from the setup page. Without them the admin routes
+  /// are unavailable.
+  SettingsStore? settings,
+  RemoteAccess? remote,
+
+  /// Fingerprint of the self-signed certificate used for remote access.
+  String? fingerprint,
+
+  /// The current single sign-on provider; it changes when the owner edits
+  /// the settings. Falls back to [oidc].
+  OidcProvider? Function()? currentOidc,
+
+  /// Called after settings change, so the server can rebuild what depends
+  /// on them.
+  void Function()? onSettingsChanged,
+}) {
+  OidcProvider? sso() => currentOidc != null ? currentOidc() : oidc;
+
+  /// Where devices can reach this server away from home. The fingerprint is
+  /// only included for the automatic address, which uses our own
+  /// certificate; a custom address has a normal one.
+  Map<String, Object?>? remoteInfo() {
+    final url = remote?.url ?? publicUrl;
+    if (url == null) return null;
+    final selfSigned = remote?.url != null && settings?.publicUrl == null;
+    return {'url': url, 'fingerprint': selfSigned ? fingerprint : null};
+  }
+
+  Map<String, Object?> remoteJson() => {
+    'status': remote!.status.toJson(),
+    'port': settings!.remotePort,
+    'publicUrl': settings.publicUrl,
+    'httpsPort': remote.httpsPort,
+    'fingerprint': fingerprint,
+  };
+  User userOf(Request r) => r.context['user'] as User;
+
+  String clientOf(Request r) {
+    if (trustProxy) {
+      final forwarded =
+          r.headers['cf-connecting-ip'] ??
+          r.headers['x-forwarded-for']?.split(',').first.trim();
+      if (forwarded != null && forwarded.isNotEmpty) return forwarded;
+    }
+    final info = r.context['shelf.io.connection_info'];
+    return info is HttpConnectionInfo ? info.remoteAddress.address : '';
+  }
+
+  Future<Map<String, Object?>> body(Request r) async {
+    final text = await r.readAsString();
+    if (text.isEmpty) return {};
+    final decoded = jsonDecode(text);
+    if (decoded is! Map<String, Object?>) {
+      throw const FormatException('Expected a JSON object.');
+    }
+    return decoded;
+  }
+
+  Response signedIn(User user, String device) => _json({
+    'token': auth.createSession(user.id, device),
+    'user': user.toJson(),
+  });
+
+  final router = Router()
+    ..get(
+      '/',
+      (Request _) => Response.ok(
+        setupPageHtml,
+        headers: {
+          'content-type': 'text/html; charset=utf-8',
+          'x-frame-options': 'DENY',
+          'referrer-policy': 'no-referrer',
+          'cache-control': 'no-store',
+        },
+      ),
+    )
+    ..get('/health', (Request _) => Response.ok('ok'))
+    // What the app needs before signing in.
+    ..get(
+      '/auth/info',
+      (Request _) => _json({
+        'name': serverName,
+        'hasUsers': auth.hasUsers,
+        'needsSetup': !auth.hasUsers,
+        'oidc': switch (sso()) {
+          final p? => {'label': p.config.label},
+          null => null,
+        },
+        'remote': remoteInfo(),
+      }),
+    )
+    ..post('/auth/login', (Request r) async {
+      final b = await body(r);
+      final user = auth.signIn(
+        b['username'] as String? ?? '',
+        b['password'] as String? ?? '',
+        client: clientOf(r),
+      );
+      return signedIn(user, b['device'] as String? ?? '');
+    })
+    // Exchanges a one-time code (QR pairing or OIDC) for a session.
+    ..post('/auth/redeem', (Request r) async {
+      final b = await body(r);
+      return signedIn(
+        auth.redeemCode(b['code'] as String? ?? ''),
+        b['device'] as String? ?? '',
+      );
+    })
+    ..get('/auth/oidc/start', (Request r) async {
+      final oidc = sso();
+      if (oidc == null) {
+        return Response.notFound('Single sign-on is not configured.');
+      }
+      final redirect = Uri.tryParse(
+        r.url.queryParameters['redirect_uri'] ?? '',
+      );
+      if (redirect == null || !OidcProvider.isAllowedAppRedirect(redirect)) {
+        return Response.badRequest(body: 'Invalid redirect_uri.');
+      }
+      return Response.found(await oidc.start(redirect));
+    })
+    ..get('/auth/oidc/callback', (Request r) async {
+      final oidc = sso();
+      if (oidc == null) {
+        return Response.notFound('Single sign-on is not configured.');
+      }
+      final q = r.url.queryParameters;
+      if (q['error'] != null) {
+        return _htmlError(
+          'Sign-in was cancelled',
+          q['error_description'] ?? q['error']!,
+        );
+      }
+      try {
+        final result = await oidc.finish(q['state'] ?? '', q['code'] ?? '');
+        final user = auth.userByEmail(result.email);
+        if (user == null) {
+          return _htmlError(
+            'No account for ${result.email}',
+            'Ask the server owner to add this email to your account in Settings → People.',
+          );
+        }
+        final code = auth.createCode(user.id);
+        final back = Uri.parse(result.appRedirect);
+        return Response.found(
+          back.replace(
+            queryParameters: {...back.queryParameters, 'code': code},
+          ),
+        );
+      } on OidcException catch (e) {
+        return _htmlError("Couldn't sign in", e.message);
+      }
+    })
+    // ---- Signed-in routes ----
+    ..get(
+      '/auth/me',
+      (Request r) => _json({
+        'user': userOf(r).toJson(),
+        'sessions': auth.sessionsFor(userOf(r).id),
+      }),
+    )
+    ..post('/auth/logout', (Request r) {
+      auth.endSession(_bearer(r)!);
+      return _json({'ok': true});
+    })
+    ..post('/auth/password', (Request r) async {
+      final b = await body(r);
+      final user = userOf(r);
+      auth.signIn(
+        user.username,
+        b['current'] as String? ?? '',
+        client: clientOf(r),
+      );
+      auth.setPassword(user.id, b['new'] as String? ?? '');
+      return _json({'ok': true});
+    })
+    ..post('/auth/email', (Request r) async {
+      final b = await body(r);
+      auth.setEmail(userOf(r).id, b['email'] as String?);
+      return _json({'user': auth.userById(userOf(r).id)!.toJson()});
+    })
+    // A one-time code for adding another device, shown as a QR code.
+    ..post(
+      '/auth/pairing-code',
+      (Request r) => _json({
+        'code': auth.createCode(userOf(r).id),
+        'expiresInSeconds': AuthStore.codeLifetime.inSeconds,
+        'publicUrl': remoteInfo()?['url'],
+        'remoteUrl': remoteInfo()?['url'],
+        'fingerprint': remoteInfo()?['fingerprint'],
+      }),
+    )
+    // First run: the setup page creates the owner account. Only works
+    // while the server has no accounts at all.
+    ..post('/setup', (Request r) async {
+      if (auth.hasUsers) {
+        return _jsonError(
+          409,
+          'This server is already set up. Sign in instead.',
+        );
+      }
+      final b = await body(r);
+      final user = auth.createUser(
+        b['username'] as String? ?? '',
+        password: b['password'] as String? ?? '',
+        email: b['email'] as String?,
+      );
+      return signedIn(user, b['device'] as String? ?? 'Setup page');
+    })
+    ..get('/qr.svg', (Request r) {
+      final data = r.url.queryParameters['data'] ?? '';
+      if (data.isEmpty || data.length > 1000) {
+        return _jsonError(400, 'Nothing to encode.');
+      }
+      return Response.ok(
+        qrSvg(data),
+        headers: {'content-type': 'image/svg+xml'},
+      );
+    })
+    // ---- Server settings (owner only) ----
+    ..get(
+      '/admin/remote',
+      (Request r) => _ownerOnly(r, () {
+        if (remote == null || settings == null) {
+          return _jsonError(404, 'Not available.');
+        }
+        return _json(remoteJson());
+      }),
+    )
+    ..post(
+      '/admin/remote',
+      (Request r) => _ownerOnly(r, () async {
+        if (remote == null || settings == null) {
+          return _jsonError(404, 'Not available.');
+        }
+        final b = await body(r);
+        switch (b['action']) {
+          case 'enable':
+            await remote.enable();
+          case 'manual':
+            await remote.enable(manual: true);
+          case 'disable':
+            await remote.disable();
+          default:
+            await remote.refresh();
+        }
+        return _json(remoteJson());
+      }),
+    )
+    ..put(
+      '/admin/remote',
+      (Request r) => _ownerOnly(r, () async {
+        if (remote == null || settings == null) {
+          return _jsonError(404, 'Not available.');
+        }
+        final b = await body(r);
+        final port = b['port'] as int?;
+        if (port != null) {
+          if (port < 1 || port > 65535) {
+            return _jsonError(400, 'Ports are between 1 and 65535.');
+          }
+          settings.remotePort = port;
+        }
+        final url = (b['publicUrl'] as String? ?? '').trim();
+        if (url.isNotEmpty && !RegExp(r'^https?://[^\s/]+').hasMatch(url)) {
+          return _jsonError(
+            400,
+            'Enter a full address, like https://tasks.example.com',
+          );
+        }
+        settings.publicUrl = url;
+        if (url.isNotEmpty && !settings.remoteEnabled) {
+          settings.remoteEnabled = true;
+        }
+        await remote.refresh();
+        onSettingsChanged?.call();
+        return _json(remoteJson());
+      }),
+    )
+    ..get(
+      '/admin/sso',
+      (Request r) => _ownerOnly(r, () {
+        if (settings == null) return _jsonError(404, 'Not available.');
+        final s = settings.sso;
+        final base = settings.publicUrl;
+        return _json({
+          'enabled': sso() != null,
+          'issuer': s['issuer'],
+          'clientId': s['clientId'],
+          'label': s['label'],
+          'hasSecret': (s['clientSecret'] ?? '').isNotEmpty,
+          'callbackUrl': base == null ? null : '$base/auth/oidc/callback',
+        });
+      }),
+    )
+    ..put(
+      '/admin/sso',
+      (Request r) => _ownerOnly(r, () async {
+        if (settings == null) return _jsonError(404, 'Not available.');
+        final b = await body(r);
+        final current = settings.sso;
+        final issuer = (b['issuer'] as String? ?? '').trim();
+        final clientId = (b['clientId'] as String? ?? '').trim();
+        if (issuer.isEmpty || clientId.isEmpty) {
+          settings.sso = {};
+        } else {
+          final secret = b['clientSecret'] as String? ?? '';
+          settings.sso = {
+            'issuer': issuer,
+            'clientId': clientId,
+            'clientSecret': secret.isEmpty
+                ? (current['clientSecret'] ?? '')
+                : secret,
+            'label': (b['label'] as String? ?? '').trim().isEmpty
+                ? 'SSO'
+                : (b['label'] as String).trim(),
+          };
+        }
+        onSettingsChanged?.call();
+        return _json({'ok': true});
+      }),
+    )
+    ..get(
+      '/admin/calendars',
+      (Request r) => _ownerOnly(r, () {
+        if (settings == null) return _jsonError(404, 'Not available.');
+        return _json({
+          'calendars': [
+            // Passwords never leave the server.
+            for (final c in settings.calendars) {...c, 'password': null},
+          ],
+        });
+      }),
+    )
+    ..put(
+      '/admin/calendars',
+      (Request r) => _ownerOnly(r, () async {
+        if (settings == null) return _jsonError(404, 'Not available.');
+        final b = await body(r);
+        final previous = {for (final c in settings.calendars) c['name']: c};
+        final next = <Map<String, Object?>>[];
+        for (final raw in b['calendars'] as List? ?? const []) {
+          final c = (raw as Map).cast<String, Object?>();
+          final name = (c['name'] as String? ?? '').trim();
+          final type = c['type'] as String? ?? 'ics';
+          final url = (c['url'] as String? ?? '').trim();
+          if (name.isEmpty ||
+              url.isEmpty ||
+              !{'ics', 'caldav'}.contains(type)) {
+            return _jsonError(
+              400,
+              'Each calendar needs a name and an address.',
+            );
+          }
+          final typed = c['password'] as String?;
+          // An unchanged calendar keeps its saved password.
+          final password = typed == null || typed.isEmpty
+              ? (previous[name]?['password'] as String?)
+              : typed;
+          next.add({
+            'name': name,
+            'type': type,
+            'url': url,
+            'username': ?(c['username'] as String?),
+            'password': ?password,
+            'user': ?(c['user'] as String?),
+          });
+        }
+        settings.calendars = next;
+        calendars?.sources = [for (final c in next) CalendarSource.fromJson(c)];
+        return _json({'ok': true});
+      }),
+    )
+    // ---- Household management (owner only) ----
+    ..get(
+      '/users',
+      (Request r) => _ownerOnly(
+        r,
+        () => _json({
+          'users': [for (final u in auth.users) u.toJson()],
+        }),
+      ),
+    )
+    ..post(
+      '/users',
+      (Request r) => _ownerOnly(r, () async {
+        final b = await body(r);
+        final user = auth.createUser(
+          b['username'] as String? ?? '',
+          password: b['password'] as String?,
+          email: b['email'] as String?,
+        );
+        return _json({'user': user.toJson()});
+      }),
+    )
+    ..delete(
+      '/users/<id>',
+      (Request r, String id) => _ownerOnly(r, () {
+        auth.deleteUser(id);
+        return _json({'ok': true});
+      }),
+    )
+    // Re-imports external calendars now instead of waiting for the timer.
+    ..post('/calendars/refresh', (Request _) async {
+      if (calendars == null || calendars.sources.isEmpty) {
+        return _json({'sources': 0, 'errors': <String, String>{}});
+      }
+      final errors = await calendars.run();
+      return _json({'sources': calendars.sources.length, 'errors': errors});
+    })
+    // One round trip does both directions: the device pushes its pending
+    // changes and gets back everything after its cursor.
+    //
+    // Request:  {"since": 0, "changes": [Change, ...]}
+    // Response: {"cursor": 42, "changes": [Change, ...]}
+    ..post('/sync', (Request r) async {
+      final b = await body(r);
+      final userId = userOf(r).id;
+      final since = b['since'] as int? ?? 0;
+      final changes = [
+        for (final c in b['changes'] as List? ?? const [])
+          Change.fromJson(c as Map<String, Object?>),
+      ];
+      // Imported calendar events are owned by the server.
+      store.apply(
+        userId,
+        changes.where((c) => c.table != Tables.events).toList(),
+      );
+      return _json({
+        'cursor': store.cursor,
+        // Lets devices follow the server's remote address if it changes.
+        // remoteEnabled tells devices to forget the remote address only
+        // when remote access is really off, not during a temporary problem.
+        'server': {
+          'remote': remoteInfo(),
+          'remoteEnabled': settings?.remoteEnabled ?? remoteInfo() != null,
+        },
+        'changes': [
+          for (final c in store.changesSince(userId, since)) c.toJson(),
+        ],
+      });
+    });
+
+  return const Pipeline()
+      .addMiddleware(_errors())
+      .addMiddleware(_authenticate(auth))
+      .addHandler(router.call);
+}
+
+const _publicPaths = {
+  '',
+  'setup',
+  'health',
+  'auth/info',
+  'auth/login',
+  'auth/redeem',
+  'auth/oidc/start',
+  'auth/oidc/callback',
+};
+
+String? _bearer(Request r) {
+  final header = r.headers['authorization'];
+  return header != null && header.startsWith('Bearer ')
+      ? header.substring(7)
+      : null;
+}
+
+Middleware _authenticate(AuthStore auth) =>
+    (inner) => (request) {
+      if (_publicPaths.contains(request.url.path)) return inner(request);
+      final token = _bearer(request);
+      final user = token == null ? null : auth.userForToken(token);
+      if (user == null) {
+        return Response.unauthorized(
+          jsonEncode({'error': 'Please sign in again.'}),
+          headers: {'content-type': 'application/json'},
+        );
+      }
+      return inner(request.change(context: {'user': user}));
+    };
+
+/// Turns known failures into JSON errors the app can show.
+Middleware _errors() =>
+    (inner) => (request) async {
+      try {
+        return await inner(request);
+      } on AuthException catch (e) {
+        return _jsonError(400, e.message);
+      } on FormatException catch (e) {
+        return _jsonError(400, 'Invalid request: ${e.message}');
+      } on TypeError catch (_) {
+        return _jsonError(400, 'Invalid request.');
+      }
+    };
+
+Future<Response> _ownerOnly(
+  Request r,
+  FutureOr<Response> Function() action,
+) async {
+  if (!(r.context['user'] as User).isOwner) {
+    return _jsonError(403, 'Only the server owner can manage people.');
+  }
+  return await action();
+}
+
+Response _json(Object body) => Response.ok(
+  jsonEncode(body),
+  headers: {'content-type': 'application/json'},
+);
+
+Response _jsonError(int status, String message) => Response(
+  status,
+  body: jsonEncode({'error': message}),
+  headers: {'content-type': 'application/json'},
+);
+
+const _htmlEscape = HtmlEscape();
+
+Response _htmlError(String title, String detail) => Response(
+  400,
+  body: _page(title, detail),
+  headers: {'content-type': 'text/html; charset=utf-8'},
+);
+
+String _page(String title, String detail) =>
+    '''<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${_htmlEscape.convert(title)}</title>
+<style>body{font-family:system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 1rem;color:#222}
+@media(prefers-color-scheme:dark){body{background:#111;color:#eee}}h1{font-size:1.4rem}</style></head>
+<body><h1>${_htmlEscape.convert(title)}</h1><p>${_htmlEscape.convert(detail)}</p></body></html>''';

@@ -1,0 +1,5 @@
+.git
+.fvm
+**/.dart_tool
+**/build
+apps/client

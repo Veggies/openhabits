@@ -1,0 +1,17 @@
+# Tasks server for TrueNAS (25.04 and later).
+#
+# Until Tasks is in the TrueNAS catalog: Apps → Discover Apps → ⋮ →
+# Install via YAML, paste this file, and change the dataset path below.
+# Then open http://<your-nas>:8080 to finish setup.
+services:
+  tasks:
+    image: ghcr.io/OWNER/tasks-server:latest # TODO: set when the image is published
+    # Lets "Enable remote access" ask your router to open a port (UPnP).
+    network_mode: host
+    # TrueNAS's "apps" user, so files in the dataset belong to it.
+    user: "568:568"
+    volumes:
+      # Create this dataset first (e.g. Datasets → Add Dataset under your
+      # apps dataset), owned by the "apps" user.
+      - /mnt/tank/apps/tasks:/data
+    restart: unless-stopped
