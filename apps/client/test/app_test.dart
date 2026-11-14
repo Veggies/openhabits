@@ -1,9 +1,11 @@
+import 'package:core/core.dart';
 import 'package:client/data/focus_controller.dart';
 import 'package:client/data/local_store.dart';
 import 'package:client/data/repo.dart';
 import 'package:client/data/sync_engine.dart';
 import 'package:client/main.dart';
 import 'package:client/ui/common.dart';
+import 'package:client/ui/growth_chart.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -206,7 +208,10 @@ void main() {
       repo.setPrefs({'atomicHabits': true});
       await tester.pumpAndSettle();
       expect(find.text('My habits'), findsOneWidget);
-      expect(find.text('Weekly review'), findsOneWidget);
+      expect(
+        find.text(name == 'phone' ? 'Review' : 'Weekly review'),
+        findsOneWidget,
+      );
 
       // With few habits, the list suggests the scorecard.
       await tester.tap(find.text('Not sure what to work on?'));
@@ -217,7 +222,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(repo.scorecard.single.text, 'Check phone in bed');
 
-      await tester.tap(find.text('Weekly review'));
+      await tester.tap(find.text(name == 'phone' ? 'Review' : 'Weekly review'));
       await tester.pumpAndSettle();
       expect(find.text('How the week went'), findsOneWidget);
 
@@ -227,6 +232,144 @@ void main() {
       expect(find.text('Not sure what to work on?'), findsNothing);
     });
   }
+
+  testWidgets('size check-in: grow it, and see it on the Progress tab', (
+    tester,
+  ) async {
+    final repo = await pumpApp(tester, const Size(1400, 900));
+    repo.setPrefs({'atomicHabits': true});
+    final today = dateOnly(DateTime.now());
+    final id = repo.createHabit({
+      'name': 'Read',
+      'color': 0xFF3F51B5,
+      'weekdays': [1, 2, 3, 4, 5, 6, 7],
+      'twoMinute': 'Read one page',
+    });
+    final walk = repo.createHabit({'name': 'Walk', 'color': 0xFF009688});
+    for (final h in [id, walk]) {
+      repo.updateHabit(h, {
+        'createdAt': addDays(today, -40).toUtc().toIso8601String(),
+      });
+    }
+    for (var d = 0; d < 14; d++) {
+      if (d != 3) repo.setHabitDone(id, addDays(today, -d), true);
+    }
+
+    await tester.tap(find.text('Habits').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Your version for now: Read one page'), findsOneWidget);
+    await tester.tap(find.text("Let's see"));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('you did this on 13 of the 14 days it was scheduled'),
+      findsOneWidget,
+    );
+    expect(find.text('Is it starting to feel too easy?'), findsOneWidget);
+    expect(find.text('Keep it as it is'), findsOneWidget);
+    expect(find.text('This feels right, stop asking'), findsOneWidget);
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Your new version'),
+      'Read five pages',
+    );
+    await tester.tap(find.text('Make it bigger'));
+    await tester.pumpAndSettle();
+    expect(repo.habit(id)!.plan.twoMinute, 'Read five pages');
+    expect(
+      find.text('Grown from: Read one page  →  Read five pages'),
+      findsOneWidget,
+    );
+    expect(find.text("Let's see"), findsNothing);
+
+    // The Growth tab: both habits, each can be switched off.
+    // Each card says how the habit's going. Read has only been kept up for
+    // the last two of the four weeks; Walk not at all.
+    expect(find.byType(StrengthBadge), findsNWidgets(2));
+    expect(find.widgetWithText(StrengthBadge, 'Struggling'), findsNWidgets(2));
+    final fresh = repo.createHabit({'name': 'Brand new'});
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.ancestor(
+          of: find.text('Brand new'),
+          matching: find.byType(Card),
+        ),
+        matching: find.text('Just started'),
+      ),
+      findsOneWidget,
+    );
+    repo.deleteHabit(fresh);
+    await tester.pumpAndSettle();
+
+    final scroll = repo.createHabit({
+      'name': 'Scrolling in bed',
+      'kind': 'quit',
+    });
+    repo.updateHabit(scroll, {
+      'createdAt': addDays(today, -40).toUtc().toIso8601String(),
+    });
+    // Stayed clear every day of the last four weeks but one.
+    for (var d = 0; d < 28; d++) {
+      if (d != 2) repo.setHabitDone(scroll, addDays(today, -d), true);
+    }
+    await tester.tap(find.text('Progress'));
+    await tester.pumpAndSettle();
+    expect(find.text('How your habits are going'), findsOneWidget);
+    for (final range in ['1 month', '3 months', '6 months', '1 year']) {
+      expect(find.widgetWithText(ChoiceChip, range), findsOneWidget);
+    }
+
+    // Each habit says how the last four weeks went, in words.
+    expect(find.text('BUILDING'), findsOneWidget);
+    expect(find.text('BREAKING'), findsOneWidget);
+    expect(
+      find.text('27 of 28 days clear · Going strong', findRichText: true),
+      findsOneWidget,
+    );
+    final read = repo.record(repo.habit(id)!, repo.clock(), 28);
+    expect(
+      find.textContaining(
+        '${read.done} of ${read.scheduled} days · ',
+        findRichText: true,
+      ),
+      findsOneWidget,
+    );
+    expect(find.widgetWithText(FilterChip, 'Read'), findsOneWidget);
+    expect(find.widgetWithText(FilterChip, 'Walk'), findsOneWidget);
+
+    // Hovering a square says how that week went.
+    final week = repo.weekRecord(
+      repo.habit(id)!,
+      startOfWeek(today, repo.weekStart),
+    );
+    final messages = [
+      for (final t in tester.widgetList<Tooltip>(find.byType(Tooltip)))
+        t.message ?? '',
+    ];
+    expect(
+      messages,
+      contains(
+        'Read\nThis week: ${week.done} of ${week.scheduled} '
+        'day${week.scheduled == 1 ? '' : 's'} so far\nYou changed your version to "Read five pages"',
+      ),
+    );
+
+    // The same numbers as a table.
+    await tester.tap(find.text('Show as a table'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('${week.done} of ${week.scheduled} · changed version'),
+      findsOneWidget,
+    );
+
+    // Switching a habit off hides its row.
+    await tester.tap(find.widgetWithText(FilterChip, 'Walk'));
+    await tester.pumpAndSettle();
+    expect(find.text('Walk'), findsOneWidget); // only its chip is left
+    await tester.tap(find.text('Show as squares'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('progress-grid')), findsOneWidget);
+    expect(find.text('Walk'), findsOneWidget);
+  });
 
   testWidgets('habits can be created and checked in', (tester) async {
     final repo = await pumpApp(tester, const Size(1400, 900));
@@ -319,6 +462,8 @@ void main() {
       }
 
       Future<void> next() async {
+        await tester.ensureVisible(find.text('Next'));
+        await tester.pumpAndSettle();
         await tester.tap(find.text('Next'));
         await tester.pumpAndSettle();
       }
@@ -326,8 +471,17 @@ void main() {
       await fill('I am…', 'a reader');
       await next();
       await fill('Habit', 'Read');
-      await fill('Start with', 'Read one page');
-      await fill('Build up to (optional)', 'Read 20 pages a day');
+      // Starting small is optional: the boxes appear once it's switched on.
+      expect(find.text('Your version for now'), findsNothing);
+      await tester.tap(find.text('Start small and grow it'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining(
+          'For a daily habit, "most days" means 12 out of 14.',
+        ),
+        findsOneWidget,
+      );
+      await fill('Your version for now', 'Read one page');
       await next();
       // Clicking the "When" box itself opens the time picker.
       await tester.tap(find.widgetWithText(TextField, 'When'));

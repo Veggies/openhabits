@@ -423,50 +423,87 @@ void main() {
       expect(repo.votes(id), 3);
     });
 
-    test(
-      'stepping up: suggested after two consistent weeks, snoozed by "not yet"',
-      () {
-        repo.setPrefs({'atomicHabits': true});
-        final id = repo.createHabit({
-          'name': 'Read',
-          'weekdays': [1, 2, 3, 4, 5, 6, 7],
-          'twoMinute': 'Read one page',
-          'goal': 'Read 20 pages a day',
-        });
-        repo.updateHabit(id, {
-          'createdAt': DateTime(2026, 10, 20).toUtc().toIso8601String(),
-        });
-        expect(
-          repo.readyToStepUp(repo.habit(id)!),
-          isFalse,
-        ); // not showing up yet
+    test('size check-ins: grow, keep, shrink, and "feels right"', () {
+      repo.setPrefs({'atomicHabits': true});
+      final id = repo.createHabit({
+        'name': 'Read',
+        'weekdays': [1, 2, 3, 4, 5, 6, 7],
+        'twoMinute': 'Read one page',
+      });
+      repo.updateHabit(id, {
+        'createdAt': DateTime(2026, 10, 20).toUtc().toIso8601String(),
+      });
+      Habit habit() => repo.habit(id)!;
 
-        for (var d = 0; d < 14; d++) {
-          if (d != 3) {
-            repo.setHabitDone(id, addDays(DateTime(2026, 11, 13), -d), true);
-          }
+      // Missing most days: offer to make it smaller.
+      expect(repo.sizeSuggestion(habit()), SizeSuggestion.shrink);
+
+      for (var d = 0; d < 14; d++) {
+        if (d != 3) {
+          repo.setHabitDone(id, addDays(DateTime(2026, 11, 13), -d), true);
         }
-        expect(repo.readyToStepUp(repo.habit(id)!), isTrue); // 13 of 14 days
+      }
+      expect(repo.record(habit(), repo.clock(), 14), (done: 13, scheduled: 14));
+      expect(repo.sizeSuggestion(habit()), SizeSuggestion.grow);
 
-        repo.stepUp(repo.habit(id)!, 'Read five pages');
-        final habit = repo.habit(id)!;
-        expect(habit.plan.twoMinute, 'Read five pages');
-        expect(repo.readyToStepUp(habit), isFalse); // asks again in two weeks
+      // "Most days" is 80%, rounded up.
+      expect(Repo.growDaysNeeded(14), 12); // every day
+      expect(Repo.growDaysNeeded(10), 8); // weekdays
+      expect(Repo.growDaysNeeded(6), 5); // three days a week
+      expect(Repo.growDaysNeeded(2), 2); // once a week
 
-        // Reaching the goal ends the suggestions.
-        repo.updateHabit(id, {
-          'twoMinute': 'Read 20 pages a day',
-          'steppedUpAt': '',
-        });
-        expect(repo.readyToStepUp(repo.habit(id)!), isFalse);
-      },
-    );
+      // Growing it remembers where it started.
+      repo.resize(habit(), 'Read five pages');
+      expect(habit().plan.twoMinute, 'Read five pages');
+      expect(
+        [for (final v in habit().plan.sizeHistory) v.text],
+        ['Read one page', 'Read five pages'],
+      );
+      expect(repo.sizeSuggestion(habit()), isNull); // next check in two weeks
 
-    test('quit habits count clean days', () {
-      final id = habit(kind: 'quit');
-      expect(repo.daysClean(repo.habit(id)!), 7);
-      repo.setHabitDone(id, DateTime(2026, 11, 11), true); // slipped
-      expect(repo.daysClean(repo.habit(id)!), 2);
+      // "Keep it as it is" also waits two weeks, without a new version.
+      repo.updateHabit(id, {'steppedUpAt': '2026-10-25'});
+      expect(repo.sizeSuggestion(habit()), SizeSuggestion.grow);
+      repo.keepSize(habit());
+      expect(repo.sizeSuggestion(habit()), isNull);
+      expect(habit().plan.sizeHistory, hasLength(2));
+
+      // "This feels right": no more suggestions, until undone.
+      repo.updateHabit(id, {'steppedUpAt': '2026-10-25'});
+      repo.settleSize(habit());
+      repo.updateHabit(id, {'steppedUpAt': '2026-10-25'});
+      expect(repo.sizeSuggestion(habit()), isNull);
+      repo.settleSize(habit(), settled: false);
+      repo.updateHabit(id, {'steppedUpAt': '2026-10-25'});
+      expect(repo.sizeSuggestion(habit()), SizeSuggestion.grow);
+
+      // The Progress grid's weeks (weeks start on Sunday by default).
+      // Today is Friday Nov 13; Tuesday Nov 10 was missed.
+      expect(repo.weekRecord(habit(), DateTime(2026, 11, 8)), (
+        done: 5,
+        scheduled: 6, // this week so far
+      ));
+      expect(repo.weekRecord(habit(), DateTime(2026, 11, 1)), (
+        done: 7,
+        scheduled: 7,
+      ));
+      expect(repo.weekRecord(habit(), DateTime(2026, 11, 15)), (
+        done: 0,
+        scheduled: 0, // next week hasn't started
+      ));
+    });
+
+    test('breaking a habit: a check-in means "I stayed clear"', () {
+      final id = habit(kind: 'quit'); // started Nov 6; today is Nov 13
+      expect(repo.daysClean(repo.habit(id)!), 0); // nothing marked yet
+      for (var d = 6; d <= 13; d++) {
+        if (d != 10) repo.setHabitDone(id, DateTime(2026, 11, d), true);
+      }
+      expect(repo.daysClean(repo.habit(id)!), 3); // Nov 11, 12, 13
+      expect(repo.record(repo.habit(id)!, repo.clock(), 7), (
+        done: 6,
+        scheduled: 7,
+      ));
     });
 
     test('scorecard and weekly review', () {

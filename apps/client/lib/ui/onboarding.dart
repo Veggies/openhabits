@@ -345,8 +345,8 @@ class _GuidedHabitState extends State<_GuidedHabit> {
           icon: Icons.bolt_outlined,
           title: 'What small habit proves it?',
           body:
-              'Now make it easy. Start with a version so small you could do it even on a bad day. '
-              'Once that sticks, you can grow it step by step.',
+              'Now make it easy. If you like, you can start with a tiny version and grow it '
+              'over time. That part is up to you.',
         ),
         Row(
           children: [
@@ -381,18 +381,8 @@ class _GuidedHabitState extends State<_GuidedHabit> {
             ),
           ],
         ),
-        PlanField(
-          controller: _plan['twoMinute']!,
-          label: 'Start with',
-          hint: 'e.g. Read one page',
-          help: 'So small it takes two minutes or less.',
-        ),
-        PlanField(
-          controller: _plan['goal']!,
-          label: 'Build up to (optional)',
-          hint: 'e.g. Read 20 pages a day',
-          help: "Once showing up is automatic, you'll be prompted to step up, a little at a time.",
-        ),
+        const SizedBox(height: 8),
+        BuildUpFields(startWith: _plan['twoMinute']!),
       ],
       2 => [
         const _Title(

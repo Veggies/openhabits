@@ -1,6 +1,7 @@
 import 'package:core/core.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../data/repo.dart';
 import 'common.dart';
 
 /// Creates or edits a habit. Shows the Atomic Habits fields only when the
@@ -69,7 +70,14 @@ class _HabitEditorState extends State<HabitEditor> {
     if (widget.existing == null) {
       repo.createHabit(fields);
     } else {
-      repo.updateHabit(widget.existing!.id, fields);
+      final existing = repo.habit(widget.existing!.id)!;
+      final version = _plan['twoMinute']!.text.trim();
+      repo.updateHabit(existing.id, {
+        ...fields,
+        // A changed version joins the habit's history.
+        if (version.isNotEmpty && existing.plan.twoMinute.isNotEmpty)
+          ...repo.resizeFields(existing, version),
+      });
     }
     Navigator.pop(context);
   }
@@ -168,7 +176,7 @@ class _HabitEditorState extends State<HabitEditor> {
               help: "Each time you do the habit, it's a vote for becoming this person.",
             ),
             if (kind == HabitKind.build)
-              ...buildPlanFields(context, _plan)
+              ...buildPlanFields(context, _plan, habit: widget.existing)
             else
               ...quitPlanFields(_plan),
           ],
@@ -254,6 +262,101 @@ class _HabitEditorState extends State<HabitEditor> {
   }
 }
 
+/// How "start small and grow it" works, in one place so the editor and the
+/// setup wizard say the same thing. The numbers match
+/// [Repo.growDaysNeeded] and [Repo.sizeSuggestion].
+const buildUpExplanation =
+    "Start with a version so small you can't say no, like reading one page. "
+    'Every two weeks, the app will check in. '
+    "If you've been doing it most days, it'll ask whether it's starting to feel too easy, "
+    'and you can make it a bit bigger if you like. '
+    "If you've been missing it a lot, it'll offer to make it smaller for a while. "
+    'You can always keep it as it is, or tell it the size feels right.\n\n'
+    'For a daily habit, "most days" means 12 out of 14. For one you do 3 times a week, it\'s 5 out of 6.';
+
+/// The optional "start small and grow it" part of a habit: a switch, and
+/// when it's on, the current version and how size check-ins work. Turning
+/// it off clears the version (so no check-ins happen), but remembers it in
+/// case it's turned back on.
+class BuildUpFields extends StatefulWidget {
+  final TextEditingController startWith;
+
+  /// The habit being edited, if any: used to show "you said this size feels
+  /// right" with a way to undo it.
+  final Habit? habit;
+  const BuildUpFields({super.key, required this.startWith, this.habit});
+
+  @override
+  State<BuildUpFields> createState() => _BuildUpFieldsState();
+}
+
+class _BuildUpFieldsState extends State<BuildUpFields> {
+  late bool on = widget.startWith.text.trim().isNotEmpty;
+  String _saved = '';
+
+  void _toggle(bool value) => setState(() {
+    on = value;
+    if (value) {
+      if (widget.startWith.text.isEmpty) widget.startWith.text = _saved;
+    } else {
+      _saved = widget.startWith.text;
+      widget.startWith.clear();
+    }
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final repo = AppScope.of(context).repo;
+    final habit = widget.habit == null ? null : repo.habit(widget.habit!.id);
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.outline,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Start small and grow it'),
+          subtitle: const Text(
+            'Begin with a tiny version of the habit and let it grow over time.',
+          ),
+          value: on,
+          onChanged: _toggle,
+        ),
+        if (on) ...[
+          Text(buildUpExplanation, style: muted),
+          PlanField(
+            controller: widget.startWith,
+            label: 'Your version for now',
+            hint: 'e.g. Read one page',
+            help: 'Something that takes two minutes or less to begin with.',
+          ),
+          if (habit != null && habit.plan.sizeSettled)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      "You said this size feels right, so the app won't suggest changing it.",
+                      style: muted,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () =>
+                        setState(() => repo.settleSize(habit, settled: false)),
+                    child: const Text('Start checking in again'),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ],
+    );
+  }
+}
+
 /// Lengths offered for a habit's calendar block, in minutes.
 const durationChoices = [5, 10, 15, 30, 45, 60, 90, 120];
 
@@ -311,8 +414,9 @@ String _planValue(HabitPlan p, String name) => switch (name) {
 /// The four laws for building a habit, as form sections.
 List<Widget> buildPlanFields(
   BuildContext context,
-  Map<String, TextEditingController> plan,
-) => [
+  Map<String, TextEditingController> plan, {
+  Habit? habit,
+}) => [
   const LawHeader('1', 'Make it obvious'),
   PlanField(
     controller: plan['location']!,
@@ -332,18 +436,7 @@ List<Widget> buildPlanFields(
     hint: 'e.g. Only listen to my podcast while walking',
   ),
   const LawHeader('3', 'Make it easy'),
-  PlanField(
-    controller: plan['twoMinute']!,
-    label: 'Start with',
-    hint: 'e.g. Read one page',
-    help: 'Make it so small it takes two minutes or less. To start with, the only goal is to show up every day.',
-  ),
-  PlanField(
-    controller: plan['goal']!,
-    label: 'Build up to',
-    hint: 'e.g. Read 20 pages a day',
-    help: "Once it's become automatic, the app will suggest making it a bit bigger, one small step at a time, until you get here.",
-  ),
+  BuildUpFields(startWith: plan['twoMinute']!, habit: habit),
   const LawHeader('4', 'Make it satisfying'),
   PlanField(
     controller: plan['reward']!,

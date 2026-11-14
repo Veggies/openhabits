@@ -45,6 +45,11 @@ class TagFilter extends TaskFilter {
 }
 
 /// Typed reads and writes over the [LocalStore].
+/// What a size check-in offers: [grow] asks whether a habit that's sticking
+/// feels too easy (and could be a little bigger); [shrink] offers to make a
+/// habit that's often missed a little smaller for a while.
+enum SizeSuggestion { grow, shrink }
+
 class Repo {
   final LocalStore store;
   final DateTime Function() clock;
@@ -389,6 +394,8 @@ class Repo {
       store.row(Tables.habitChecks, Habit.checkId(habitId, day))?['done'] ==
       true;
 
+  /// Checks a habit in for [day]. For a habit being broken, a check-in
+  /// means "I stayed clear today".
   void setHabitDone(String habitId, DateTime day, bool done) => store.write(
     Tables.habitChecks,
     Habit.checkId(habitId, day),
@@ -403,29 +410,79 @@ class Repo {
     forgiving: atomicHabits,
   );
 
-  /// The two-minute rule's second half: once showing up is a habit (most
-  /// scheduled days done over the last two weeks at this version), suggest
-  /// making it a little bigger.
-  bool readyToStepUp(Habit habit) {
+  /// The Goldilocks rule: keep each habit at a size that's a little
+  /// challenging but still easy to keep doing. Consistency can't tell how
+  /// hard a habit feels, so: done on most scheduled days (80%) over two
+  /// weeks means it's sticking, and the person is *asked* whether it's
+  /// starting to feel too easy ([SizeSuggestion.grow]); done on under half
+  /// suggests making it smaller. Otherwise, or if the person said the size
+  /// feels right, nothing is suggested.
+  SizeSuggestion? sizeSuggestion(Habit habit) {
     final plan = habit.plan;
-    if (!atomicHabits || habit.isQuit || plan.twoMinute.isEmpty) return false;
-    if (plan.goal.isNotEmpty &&
-        plan.twoMinute.trim().toLowerCase() == plan.goal.trim().toLowerCase()) {
-      return false;
-    }
+    if (!atomicHabits || habit.isQuit || plan.twoMinute.isEmpty) return null;
+    if (plan.sizeSettled) return null;
     final today = dateOnly(clock());
     final since = plan.steppedUpAt.isNotEmpty
         ? parseDateKey(plan.steppedUpAt)
         : dateOnly(habit.createdAt.toLocal());
-    if (daysBetween(since, today) < 14) return false;
-    return completionRate(habit, today, 14) >= 0.8;
+    if (daysBetween(since, today) < 14) return null;
+    final (:done, :scheduled) = record(habit, today, 14);
+    if (scheduled == 0) return null;
+    if (done >= growDaysNeeded(scheduled)) return SizeSuggestion.grow;
+    if (done * 2 < scheduled) return SizeSuggestion.shrink;
+    return null;
   }
 
-  /// Makes [next] the habit's current version.
-  void stepUp(Habit habit, String next) => updateHabit(habit.id, {
-    'twoMinute': next,
+  /// How many of [scheduled] days need doing before growing is suggested:
+  /// 80%, rounded up (12 of 14, 8 of 10, 5 of 6). Whole-number maths, so
+  /// 80% of 10 is exactly 8.
+  static int growDaysNeeded(int scheduled) => (scheduled * 4 + 4) ~/ 5;
+
+  /// Makes [next] the habit's current version, remembering the old one.
+  void resize(Habit habit, String next) =>
+      updateHabit(habit.id, resizeFields(habit, next));
+
+  /// The fields that change [habit]'s version to [next] (and start a new
+  /// two-week check-in period). Nothing changes if [next] is the same.
+  Fields resizeFields(Habit habit, String next) {
+    final plan = habit.plan;
+    next = next.trim();
+    if (next.isEmpty || next == plan.twoMinute) return const {};
+    final today = dateKey(clock());
+    return {
+      'twoMinute': next,
+      'steppedUpAt': today,
+      'sizeHistory': [
+        // The first change also records where it started.
+        if (plan.sizeHistory.isEmpty && plan.twoMinute.isNotEmpty)
+          {'text': plan.twoMinute, 'since': dateKey(habit.createdAt.toLocal())},
+        for (final v in plan.sizeHistory) {'text': v.text, 'since': v.since},
+        {'text': next, 'since': today},
+      ],
+    };
+  }
+
+  /// "Keep it as it is": check in again in two weeks.
+  void keepSize(Habit habit) =>
+      updateHabit(habit.id, {'steppedUpAt': dateKey(clock())});
+
+  /// "This feels right, stop asking" (or, with [settled] false, start
+  /// checking in again from today).
+  void settleSize(Habit habit, {bool settled = true}) => updateHabit(habit.id, {
+    'sizeSettled': settled,
     'steppedUpAt': dateKey(clock()),
   });
+
+  /// For the Progress grid: the days [habit] was done, out of the days it
+  /// was due, in the week starting [weekStart]. Only counts days from when
+  /// the habit was created up to today, so this week means "so far".
+  ({int done, int scheduled}) weekRecord(Habit habit, DateTime weekStart) {
+    final today = dateOnly(clock());
+    final weekEnd = addDays(dateOnly(weekStart), 6);
+    final end = weekEnd.isAfter(today) ? today : weekEnd;
+    if (end.isBefore(weekStart)) return (done: 0, scheduled: 0);
+    return record(habit, end, daysBetween(weekStart, end) + 1);
+  }
 
   /// Total check-ins: each one is a vote for the habit's identity.
   int votes(String habitId) => store
@@ -444,6 +501,13 @@ class Repo {
   /// Fraction of scheduled days done in the [days] before and including
   /// [end], counting only days since the habit started.
   double completionRate(Habit habit, DateTime end, int days) {
+    final (:done, :scheduled) = record(habit, end, days);
+    return scheduled == 0 ? 0 : done / scheduled;
+  }
+
+  /// Scheduled days done, out of scheduled days, in the [days] before and
+  /// including [end] (only counting days since the habit started).
+  ({int done, int scheduled}) record(Habit habit, DateTime end, int days) {
     var scheduled = 0;
     var done = 0;
     final start = dateOnly(habit.createdAt.toLocal());
@@ -452,9 +516,9 @@ class Repo {
       if (day.isBefore(start) || !habit.isScheduled(day)) continue;
       scheduled++;
       final hit = isHabitDone(habit.id, day);
-      if (habit.isQuit ? !hit : hit) done++;
+      if (hit) done++;
     }
-    return scheduled == 0 ? 0 : done / scheduled;
+    return (done: done, scheduled: scheduled);
   }
 
   // ---- Focus ----

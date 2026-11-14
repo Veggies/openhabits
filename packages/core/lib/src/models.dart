@@ -149,11 +149,21 @@ class HabitPlan {
   /// something so small you can't say no, and is stepped up over time.
   final String twoMinute;
 
-  /// Where the small version grows to, e.g. "Read 20 pages a day".
+  /// No longer shown: habits don't have a finish line. Kept so older data
+  /// still loads.
   final String goal;
 
-  /// When the version was last stepped up (date key), or empty.
+  /// When the size was last changed or checked in on (date key), or empty.
+  /// The next size check-in comes two weeks after this.
   final String steppedUpAt;
+
+  /// The person said the current size feels right: no more suggestions to
+  /// make it bigger or smaller.
+  final bool sizeSettled;
+
+  /// Every version the habit has had, oldest first, with the day it began.
+  /// Empty until the size first changes.
+  final List<({String text, String since})> sizeHistory;
 
   /// Temptation bundling: something you enjoy, paired with the habit.
   final String bundle;
@@ -177,6 +187,11 @@ class HabitPlan {
       twoMinute = _text(f['twoMinute']),
       goal = _text(f['goal']),
       steppedUpAt = _text(f['steppedUpAt']),
+      sizeSettled = f['sizeSettled'] == true,
+      sizeHistory = [
+        for (final v in f['sizeHistory'] as List? ?? const [])
+          if (v is Map) (text: _text(v['text']), since: _text(v['since'])),
+      ],
       bundle = _text(f['bundle']),
       reward = _text(f['reward']),
       invisible = _text(f['invisible']),
@@ -322,14 +337,10 @@ class Habit {
     return false;
   }
 
-  /// For quit habits: whole days since the last slip (or since starting).
-  int daysClean(bool Function(DateTime day) slipped, DateTime today) {
-    final t = dateOnly(today);
-    for (var day = t; !day.isBefore(_startDay); day = addDays(day, -1)) {
-      if (slipped(day)) return daysBetween(day, t);
-    }
-    return daysBetween(_startDay, t);
-  }
+  /// For habits being broken, a check-in means "I stayed clear today", so
+  /// days clean is the run of marked days, like a strict streak.
+  int daysClean(bool Function(DateTime day) stayedClear, DateTime today) =>
+      streak(stayedClear, today);
 }
 
 /// A line on the Atomic Habits "habits scorecard": an existing habit rated

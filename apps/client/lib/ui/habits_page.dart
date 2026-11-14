@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import '../data/repo.dart';
 import 'atomic_pages.dart';
 import 'common.dart';
+import 'growth_chart.dart';
 import 'habit_editor.dart';
 
 class HabitsPage extends StatefulWidget {
@@ -13,9 +14,9 @@ class HabitsPage extends StatefulWidget {
   State<HabitsPage> createState() => _HabitsPageState();
 }
 
-/// The Habits page's tabs. Scorecard and Weekly review only exist with the
+/// The Habits page's tabs. Progress, Scorecard and Weekly review only exist with the
 /// Atomic Habits framework on.
-enum HabitsTab { habits, scorecard, review }
+enum HabitsTab { habits, growth, scorecard, review }
 
 class _HabitsPageState extends State<HabitsPage>
     with SingleTickerProviderStateMixin {
@@ -86,10 +87,12 @@ class _HabitsPageState extends State<HabitsPage>
                             tabAlignment: wide
                                 ? TabAlignment.center
                                 : TabAlignment.fill,
-                            tabs: const [
-                              Tab(text: 'My habits'),
-                              Tab(text: 'Scorecard'),
-                              Tab(text: 'Weekly review'),
+                            tabs: [
+                              const Tab(text: 'My habits'),
+                              const Tab(text: 'Progress'),
+                              const Tab(text: 'Scorecard'),
+                              // Four tabs share a phone's width: keep it short.
+                              Tab(text: wide ? 'Weekly review' : 'Review'),
                             ],
                           ),
                         if (overviewToggle)
@@ -126,6 +129,7 @@ class _HabitsPageState extends State<HabitsPage>
               : null,
           body: switch (tab) {
             HabitsTab.habits => habitsBody(),
+            HabitsTab.growth => const GrowthView(),
             HabitsTab.scorecard => const ScorecardView(),
             HabitsTab.review => WeeklyReviewView(
               key: ValueKey(reviewDay),
@@ -265,7 +269,7 @@ class _HabitCard extends StatelessWidget {
       final clean = repo.daysClean(habit);
       stat = _Stat(
         icon: Icons.shield_outlined,
-        color: Colors.green,
+        color: clean > 0 ? Colors.green : theme.colorScheme.outline,
         text: '$clean day${clean == 1 ? '' : 's'} clean',
       );
     } else {
@@ -295,7 +299,17 @@ class _HabitCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(habit.name, style: theme.textTheme.titleMedium),
+                        Wrap(
+                          spacing: 8,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              habit.name,
+                              style: theme.textTheme.titleMedium,
+                            ),
+                            StrengthBadge(habit: habit),
+                          ],
+                        ),
                         if (plan.identity.isNotEmpty)
                           Text(
                             plan.identity,
@@ -303,12 +317,7 @@ class _HabitCard extends StatelessWidget {
                           ),
                         if (cue.isNotEmpty) Text(cue, style: small),
                         if (plan.twoMinute.isNotEmpty && !habit.isQuit)
-                          Text(
-                            plan.goal.isEmpty
-                                ? 'Right now: ${plan.twoMinute}'
-                                : 'Right now: ${plan.twoMinute}  →  Goal: ${plan.goal}',
-                            style: small,
-                          ),
+                          Text(_versionLine(plan), style: small),
                       ],
                     ),
                   ),
@@ -329,9 +338,7 @@ class _HabitCard extends StatelessWidget {
                   ),
                 ],
               ),
-              if (!habit.isQuit &&
-                  repo.atomicHabits &&
-                  repo.missedLastTime(habit))
+              if (repo.atomicHabits && repo.missedLastTime(habit))
                 Padding(
                   padding: const EdgeInsets.only(top: 8, right: 10),
                   child: Container(
@@ -345,7 +352,10 @@ class _HabitCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      plan.twoMinute.isNotEmpty
+                      habit.isQuit
+                          ? "Yesterday wasn't marked as a clear day. "
+                                'Try to stay clear today, so it doesn\'t happen two days in a row.'
+                          : plan.twoMinute.isNotEmpty
                           ? 'You missed this last time, so try not to miss it two days in a row. '
                                 'Even the small version counts: "${plan.twoMinute}".'
                           : 'You missed this last time, so try not to miss it two days in a row. '
@@ -354,7 +364,7 @@ class _HabitCard extends StatelessWidget {
                     ),
                   ),
                 ),
-              if (repo.readyToStepUp(habit))
+              if (repo.sizeSuggestion(habit) case final suggestion?)
                 Padding(
                   padding: const EdgeInsets.only(top: 8, right: 10),
                   child: Container(
@@ -368,17 +378,25 @@ class _HabitCard extends StatelessWidget {
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.trending_up, size: 18),
+                        Icon(
+                          suggestion == SizeSuggestion.grow
+                              ? Icons.trending_up
+                              : Icons.trending_down,
+                          size: 18,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            "You've been showing up consistently. Ready to make it a little bigger?",
+                            suggestion == SizeSuggestion.grow
+                                ? "This one's sticking. Is it starting to feel too easy?"
+                                : 'This seems hard to fit in right now. Want to make it smaller for a while?',
                             style: theme.textTheme.bodySmall,
                           ),
                         ),
                         TextButton(
-                          onPressed: () => _stepUp(context, habit),
-                          child: const Text('Step up'),
+                          onPressed: () =>
+                              _sizeCheckIn(context, habit, suggestion),
+                          child: const Text("Let's see"),
                         ),
                       ],
                     ),
@@ -400,7 +418,6 @@ class _HabitCard extends StatelessWidget {
                           const SizedBox(height: 4),
                           _DayToggle(
                             checked: repo.isHabitDone(habit.id, day),
-                            quit: habit.isQuit,
                             scheduled: habit.isScheduled(day),
                             color: color,
                             onTap: () => repo.setHabitDone(
@@ -430,22 +447,14 @@ class _HabitCard extends StatelessWidget {
                     else
                       const Spacer(),
                     if (habit.isScheduled(today) && !checkedToday)
-                      habit.isQuit
-                          ? TextButton.icon(
-                              icon: const Icon(Icons.undo),
-                              label: const Text('I slipped today'),
-                              style: TextButton.styleFrom(
-                                foregroundColor: theme.colorScheme.error,
-                              ),
-                              onPressed: () =>
-                                  repo.setHabitDone(habit.id, today, true),
-                            )
-                          : FilledButton.tonalIcon(
-                              icon: const Icon(Icons.check),
-                              label: const Text('Done today'),
-                              onPressed: () =>
-                                  repo.setHabitDone(habit.id, today, true),
-                            ),
+                      FilledButton.tonalIcon(
+                        icon: const Icon(Icons.check),
+                        label: Text(
+                          habit.isQuit ? 'Stayed clear today' : 'Done today',
+                        ),
+                        onPressed: () =>
+                            repo.setHabitDone(habit.id, today, true),
+                      ),
                     if (!habit.isQuit && checkedToday && plan.reward.isNotEmpty)
                       Text(
                         'Reward: ${plan.reward}',
@@ -481,13 +490,11 @@ class _Stat extends StatelessWidget {
 
 class _DayToggle extends StatelessWidget {
   final bool checked;
-  final bool quit;
   final bool scheduled;
   final Color color;
   final VoidCallback onTap;
   const _DayToggle({
     required this.checked,
-    required this.quit,
     required this.scheduled,
     required this.color,
     required this.onTap,
@@ -497,8 +504,9 @@ class _DayToggle extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final outline = theme.colorScheme.outlineVariant;
-    // For quit habits a check-in is a slip, shown in red.
-    final fill = quit ? theme.colorScheme.error : color;
+    // A check-in is always good news: done, or for a habit being broken,
+    // a day you stayed clear.
+    final fill = color;
     return InkResponse(
       onTap: onTap,
       radius: 22,
@@ -516,11 +524,7 @@ class _DayToggle extends StatelessWidget {
           ),
         ),
         child: checked
-            ? Icon(
-                quit ? Icons.close : Icons.check,
-                size: 18,
-                color: Colors.white,
-              )
+            ? Icon(Icons.check, size: 18, color: Colors.white)
             : null,
       ),
     );
@@ -647,10 +651,6 @@ class _HabitOverviewState extends State<HabitOverview> {
     final Color? fill;
     if (future || before || !scheduled) {
       fill = null;
-    } else if (h.isQuit) {
-      fill = hit
-          ? theme.colorScheme.error
-          : Colors.green.withValues(alpha: 0.55);
     } else {
       fill = hit ? Color(h.color) : null;
     }
@@ -735,51 +735,103 @@ class _HabitOverviewState extends State<HabitOverview> {
   }
 }
 
-/// Asks for the habit's next, slightly bigger version.
-Future<void> _stepUp(BuildContext context, Habit habit) async {
+/// "Read one page → Read 5 pages → Read 10 pages": how the habit has grown,
+/// ending with the version for now (the last three, to keep it short).
+String _versionLine(HabitPlan plan) {
+  final versions = [for (final v in plan.sizeHistory) v.text];
+  if (versions.length < 2) return 'Your version for now: ${plan.twoMinute}';
+  final shown = versions.length > 3
+      ? ['…', ...versions.sublist(versions.length - 3)]
+      : versions;
+  return 'Grown from: ${shown.join('  →  ')}';
+}
+
+/// The two-weekly size check-in (the Goldilocks rule): grow it, shrink it,
+/// keep it as it is, or say the size feels right and stop asking.
+Future<void> _sizeCheckIn(
+  BuildContext context,
+  Habit habit,
+  SizeSuggestion suggestion,
+) async {
   final repo = AppScope.of(context).repo;
-  final controller = TextEditingController(text: habit.plan.twoMinute);
-  final next = await showDialog<String>(
+  final plan = habit.plan;
+  final (:done, :scheduled) = repo.record(habit, repo.clock(), 14);
+  final grow = suggestion == SizeSuggestion.grow;
+  final controller = TextEditingController(text: plan.twoMinute);
+  final choice = await showDialog<_SizeChoice>(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('Step it up'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Right now: ${habit.plan.twoMinute}'),
-          if (habit.plan.goal.isNotEmpty) Text('Goal: ${habit.plan.goal}'),
-          const SizedBox(height: 16),
-          TextField(
-            controller: controller,
-            autofocus: true,
-            textCapitalization: TextCapitalization.sentences,
-            decoration: const InputDecoration(
-              labelText: "What's the next small step?",
-              helperText: 'Make it just a little bigger. For example, one page could become five.',
-              border: OutlineInputBorder(),
+      title: Text(
+        grow ? 'Is it starting to feel too easy?' : 'Make it a little smaller?',
+      ),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 440),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              grow
+                  ? "Over the last two weeks, you did this on $done of the $scheduled days it was scheduled, "
+                        "so it's sticking. Nice going.\n\n"
+                        "If it's starting to feel too easy, you could make it a little bigger. "
+                        'If it still takes some effort, keeping it as it is works just as well.'
+                  : "Over the last two weeks, you did this on $done of the $scheduled days it was scheduled. "
+                        "That's completely normal. A smaller version that you actually do beats a bigger one you skip.",
             ),
-            onSubmitted: (v) => Navigator.pop(context, v),
-          ),
-        ],
+            const SizedBox(height: 12),
+            Text('Your version for now: ${plan.twoMinute}'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: InputDecoration(
+                labelText: 'Your new version',
+                helperText: grow
+                    ? 'Just a little bigger. For example, one page could become five.'
+                    : 'Something easy enough to do even on a busy day.',
+                helperMaxLines: 2,
+                border: const OutlineInputBorder(),
+              ),
+              onSubmitted: (_) => Navigator.pop(context, _SizeChoice.change),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              "If you keep it as it is, we'll check in again in two weeks.",
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Not yet'),
+          onPressed: () => Navigator.pop(context, _SizeChoice.settle),
+          child: const Text('This feels right, stop asking'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context, _SizeChoice.keep),
+          child: const Text('Keep it as it is'),
         ),
         FilledButton(
-          onPressed: () => Navigator.pop(context, controller.text),
-          child: const Text('Step up'),
+          onPressed: () => Navigator.pop(context, _SizeChoice.change),
+          child: Text(grow ? 'Make it bigger' : 'Make it smaller'),
         ),
       ],
     ),
   );
-  final value = next?.trim() ?? '';
-  if (value.isNotEmpty && value != habit.plan.twoMinute) {
-    repo.stepUp(habit, value);
-  } else {
-    // "Not yet": ask again in two weeks.
-    repo.stepUp(habit, habit.plan.twoMinute);
+  switch (choice) {
+    case _SizeChoice.change
+        when controller.text.trim().isNotEmpty &&
+            controller.text.trim() != plan.twoMinute:
+      repo.resize(habit, controller.text);
+    case _SizeChoice.settle:
+      repo.settleSize(habit);
+    case _SizeChoice.keep || _SizeChoice.change:
+      repo.keepSize(habit);
+    case null:
+      break; // closed without choosing: ask again next time
   }
 }
+
+enum _SizeChoice { change, keep, settle }
