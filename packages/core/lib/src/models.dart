@@ -203,8 +203,7 @@ class HabitPlan {
 
   /// True when none of the Atomic Habits fields are filled in. The time
   /// doesn't count: any habit can have one, framework or not.
-  bool get isEmpty =>
-      fieldNames.every((n) => n == 'time' || _value(n).isEmpty);
+  bool get isEmpty => fieldNames.every((n) => n == 'time' || _value(n).isEmpty);
 
   String _value(String name) => switch (name) {
     'identity' => identity,
@@ -368,7 +367,8 @@ class WeeklyReview {
     'wentWell': 'What went well this week?',
     'didntGoWell': "What didn't go so well?",
     'improve': 'What will you change next week?',
-    'identity': 'Which votes did you cast for the person you want to be?',
+    'identity':
+        'What did you do this week that fits the person you want to be?',
   };
 }
 

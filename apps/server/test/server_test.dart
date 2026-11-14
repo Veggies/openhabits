@@ -123,14 +123,14 @@ void main() {
           body: {'username': 'ryan', 'password': 'wrong'},
         );
         expect(status, 400);
-        expect(b['error'], 'Wrong username or password.');
+        expect(b['error'], "That username or password isn't right.");
       }
       final (_, b) = await api.call(
         'POST',
         '/auth/login',
         body: {'username': 'ryan', 'password': 'correct horse'},
       );
-      expect(b['error'], startsWith('Too many attempts'));
+      expect(b['error'], startsWith("That's too many tries"));
     });
 
     test('logging out ends the session', () async {
@@ -457,7 +457,7 @@ void main() {
       expect(callback.statusCode, 400);
       expect(
         await callback.readAsString(),
-        contains('No account for who@example.com'),
+        contains('no account here for who@example.com'),
       );
     });
 

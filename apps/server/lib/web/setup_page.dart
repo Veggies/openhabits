@@ -168,7 +168,7 @@ const setupPageHtml = r'''<!doctype html>
           <p style="margin:0">On your phone: open Tasks and scan the code.</p>
           <p style="margin:12px 0 0">On a computer: enter <code id="pairServer"></code> and this code:</p>
           <div class="code mono" id="pairCode"></div>
-          <p class="muted">Works once, for 10 minutes.</p>
+          <p class="muted">This code works once and expires in 10 minutes.</p>
         </div>
       </div>
       <div class="error" id="pairError"></div>
@@ -217,7 +217,7 @@ const setupPageHtml = r'''<!doctype html>
               <div><label for="c-username">Account email</label><input id="c-username"></div>
               <div><label for="c-password">App-specific password</label><input id="c-password" type="password"></div>
             </div>
-            <label for="c-user">Show in whose account</label>
+            <label for="c-user">Whose account should it show in?</label>
             <select id="c-user"></select>
             <div class="row"><button class="primary" type="submit">Add calendar</button></div>
           </form>
@@ -229,7 +229,7 @@ const setupPageHtml = r'''<!doctype html>
       <!-- Single sign-on -->
       <section class="card">
         <h2>Single sign-on <span class="pill off" id="ssoPill">Off</span></h2>
-        <p class="sub">Optional: let people sign in with Google or another OpenID Connect provider.</p>
+        <p class="sub">If you like, people can sign in with Google or another provider that supports OpenID Connect, instead of using a password.</p>
         <div id="ssoNeedsDomain" class="note warn" hidden>
           Single sign-on needs a public address with a real domain name. Set one under
           <em>Remote access → Advanced → Custom public address</em> first (for example a Tailscale Funnel address).
@@ -242,7 +242,7 @@ const setupPageHtml = r'''<!doctype html>
             <div><label for="s-client">Client ID</label><input id="s-client"></div>
             <div><label for="s-secret">Client secret</label><input id="s-secret" type="password" placeholder="Unchanged"></div>
           </div>
-          <p class="muted">People sign in when their account email matches the one their provider reports.</p>
+          <p class="muted">Someone can sign in this way when the email on their account here matches the one their provider has for them.</p>
           <div class="row"><button class="primary" type="submit">Save</button><button type="button" id="ssoOff">Turn off</button></div>
         </form>
         <div class="error" id="ssoError"></div>
@@ -271,7 +271,7 @@ async function api(method, path, body) {
   let data = {};
   try { data = text ? JSON.parse(text) : {}; } catch (_) {}
   if (res.status === 401 && token) { saveToken(null); start(); throw new Error("Please sign in again."); }
-  if (!res.ok) throw new Error(data.error || ("Request failed (" + res.status + ")"));
+  if (!res.ok) throw new Error(data.error || ("Something went wrong (error " + res.status + "). Please try again."));
   return data;
 }
 
@@ -455,7 +455,7 @@ async function loadCalendars() {
   calendars = (await api("GET", "/admin/calendars")).calendars;
   const list = $("calendars");
   list.replaceChildren();
-  if (!calendars.length) list.append(el("li", "No calendars yet.", "muted"));
+  if (!calendars.length) list.append(el("li", "You haven't added any calendars yet.", "muted"));
   calendars.forEach((c, i) => {
     const li = el("li");
     const text = el("div", null, "grow");
@@ -499,7 +499,7 @@ $("calRefresh").addEventListener("click", guard("calError", async () => {
   $("calStatus").textContent = "Refreshing…";
   const res = await api("POST", "/calendars/refresh");
   const errors = Object.entries(res.errors || {});
-  $("calStatus").textContent = errors.length ? "" : (res.sources ? "Up to date." : "");
+  $("calStatus").textContent = errors.length ? "" : (res.sources ? "All up to date." : "");
   if (errors.length) throw new Error(errors.map(([k, v]) => k + ": " + v).join("\n"));
 }));
 

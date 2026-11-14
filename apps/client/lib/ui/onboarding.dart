@@ -239,7 +239,7 @@ class _Framework extends StatelessWidget {
         law(
           '4',
           'Make it satisfying',
-          'Reward yourself, track it, and never miss twice.',
+          'Reward yourself, keep track, and try never to miss two days in a row.',
         ),
         const SizedBox(height: 8),
         Text(
@@ -332,7 +332,7 @@ class _GuidedHabitState extends State<_GuidedHabit> {
         const _Title(
           icon: Icons.person_outline,
           title: 'Who do you want to become?',
-          body: 'Start with identity, not outcomes. Every time you do the habit is a vote for this person.',
+          body: "Think about the kind of person you want to be, not just a result you want. Each time you do the habit, it's a vote for becoming that person.",
         ),
         PlanField(
           controller: _plan['identity']!,
@@ -345,8 +345,8 @@ class _GuidedHabitState extends State<_GuidedHabit> {
           icon: Icons.bolt_outlined,
           title: 'What small habit proves it?',
           body:
-              'Then make it easy: start with a tiny version you can do even on a bad day. '
-              'Once that sticks, you grow it step by step.',
+              'Now make it easy. Start with a version so small you could do it even on a bad day. '
+              'Once that sticks, you can grow it step by step.',
         ),
         Row(
           children: [
@@ -514,7 +514,7 @@ class _Done extends StatelessWidget {
       const _Title(
         icon: Icons.celebration_outlined,
         title: "You're all set",
-        body: 'Add tasks with natural language, like "Call mom tomorrow 5pm #family".',
+        body: "To add a task, just type it the way you'd say it, like \"Call mom tomorrow 5pm #family\".",
       ),
       FilledButton(
         onPressed: onFinish,

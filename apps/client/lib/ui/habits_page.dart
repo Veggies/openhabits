@@ -157,7 +157,7 @@ class _Empty extends StatelessWidget {
           Text('No habits yet', style: theme.textTheme.titleMedium),
           const SizedBox(height: 4),
           Text(
-            'Tap "New habit" to build one up, or break one down.',
+            'Click "New habit" to start one you want to build, or one you want to break.',
             style: TextStyle(color: theme.colorScheme.outline),
           ),
         ],
@@ -205,7 +205,7 @@ class _HabitList extends StatelessWidget {
               leading: const Icon(Icons.rate_review_outlined),
               title: const Text('Time for your weekly review'),
               subtitle: const Text(
-                'Reflect on last week to keep your habits on track.',
+                'Take a minute to look back on last week and see how your habits went.',
               ),
               trailing: const Icon(Icons.chevron_right),
               onTap: () =>
@@ -225,7 +225,7 @@ class _HabitList extends StatelessWidget {
             leading: const Icon(Icons.fact_check_outlined),
             title: const Text('Not sure what to work on?'),
             subtitle: const Text(
-              'Rate your daily routine in the Scorecard to see which habits help and which hurt.',
+              'Try the Scorecard. You list what you already do each day and see which habits help you and which hold you back.',
             ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => onOpen(HabitsTab.scorecard),
@@ -305,8 +305,8 @@ class _HabitCard extends StatelessWidget {
                         if (plan.twoMinute.isNotEmpty && !habit.isQuit)
                           Text(
                             plan.goal.isEmpty
-                                ? 'Now: ${plan.twoMinute}'
-                                : 'Now: ${plan.twoMinute}  →  Goal: ${plan.goal}',
+                                ? 'Right now: ${plan.twoMinute}'
+                                : 'Right now: ${plan.twoMinute}  →  Goal: ${plan.goal}',
                             style: small,
                           ),
                       ],
@@ -345,8 +345,11 @@ class _HabitCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      'Missed last time. Never miss twice: '
-                      '${plan.twoMinute.isNotEmpty ? plan.twoMinute.toLowerCase() : 'even a tiny version counts'}.',
+                      plan.twoMinute.isNotEmpty
+                          ? 'You missed this last time, so try not to miss it two days in a row. '
+                                'Even the small version counts: "${plan.twoMinute}".'
+                          : 'You missed this last time, so try not to miss it two days in a row. '
+                                'Even doing a tiny bit counts.',
                       style: theme.textTheme.bodySmall,
                     ),
                   ),
@@ -744,7 +747,7 @@ Future<void> _stepUp(BuildContext context, Habit habit) async {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Now: ${habit.plan.twoMinute}'),
+          Text('Right now: ${habit.plan.twoMinute}'),
           if (habit.plan.goal.isNotEmpty) Text('Goal: ${habit.plan.goal}'),
           const SizedBox(height: 16),
           TextField(
@@ -752,8 +755,8 @@ Future<void> _stepUp(BuildContext context, Habit habit) async {
             autofocus: true,
             textCapitalization: TextCapitalization.sentences,
             decoration: const InputDecoration(
-              labelText: 'Next small step',
-              helperText: 'Grow it a little, e.g. one page becomes five.',
+              labelText: "What's the next small step?",
+              helperText: 'Make it just a little bigger. For example, one page could become five.',
               border: OutlineInputBorder(),
             ),
             onSubmitted: (v) => Navigator.pop(context, v),

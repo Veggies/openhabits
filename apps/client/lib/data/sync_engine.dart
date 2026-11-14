@@ -380,8 +380,12 @@ class SyncEngine extends ChangeNotifier {
       }
     }
     throw lastError is _Unreachable && lastError.timedOut
-        ? const SyncException('The server took too long to respond.')
-        : const SyncException("Couldn't reach the server.");
+        ? const SyncException(
+            "The server's taking too long to answer. Make sure it's running, then try again.",
+          )
+        : const SyncException(
+            "Couldn't reach your server. Check that it's running and that you're online.",
+          );
   }
 
   Future<Map<String, Object?>> _sendTo(
@@ -423,7 +427,7 @@ class SyncEngine extends ChangeNotifier {
     if (response.statusCode != 200) {
       throw SyncException(
         decoded?['error'] as String? ??
-            'Server returned HTTP ${response.statusCode}.',
+            'Something went wrong on the server (error ${response.statusCode}). Try again in a little while.',
       );
     }
     return decoded ?? const {};
@@ -493,12 +497,14 @@ class SyncEngine extends ChangeNotifier {
 
   /// Asks the server to re-import external calendars now.
   Future<String> refreshCalendars() async {
-    if (!isConfigured) return 'Connect to a server first.';
+    if (!isConfigured) return "You'll need to connect to your server first.";
     try {
       final body = await _post('/calendars/refresh', const {});
       final errors = (body['errors'] as Map).cast<String, String>();
       await syncNow();
-      if (body['sources'] == 0) return 'No calendars set up on the server yet.';
+      if (body['sources'] == 0) {
+        return "There aren't any calendars set up on your server yet.";
+      }
       if (errors.isEmpty) return 'Calendars refreshed.';
       return errors.entries.map((e) => '${e.key}: ${e.value}').join('\n');
     } catch (e) {

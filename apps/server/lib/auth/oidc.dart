@@ -147,7 +147,7 @@ class OidcProvider {
     final pending = _pending.remove(state);
     if (pending == null || pending.expires.isBefore(_clock())) {
       throw const OidcException(
-        'This sign-in link has expired. Please try again.',
+        'This sign-in link has expired. Please try signing in again.',
       );
     }
     final metadata = await _metadata();
@@ -164,12 +164,14 @@ class OidcProvider {
     );
     if (response.statusCode != 200) {
       throw OidcException(
-        'The sign-in provider rejected the request (HTTP ${response.statusCode}).',
+        'The sign-in provider turned down the request (error ${response.statusCode}).',
       );
     }
     final idToken = (jsonDecode(response.body) as Map)['id_token'] as String?;
     if (idToken == null) {
-      throw const OidcException('The provider did not return an ID token.');
+      throw const OidcException(
+        "The sign-in provider didn't send back everything we needed. Please try again.",
+      );
     }
 
     // The token came straight from the provider over TLS, so the signature
@@ -183,11 +185,15 @@ class OidcProvider {
         !audiences.contains(config.clientId) ||
         exp * 1000 < _clock().millisecondsSinceEpoch ||
         claims['nonce'] != pending.nonce) {
-      throw const OidcException('The sign-in response could not be verified.');
+      throw const OidcException(
+        "We couldn't confirm that sign-in was really from your provider. Please try again.",
+      );
     }
     final email = claims['email'] as String?;
     if (email == null || claims['email_verified'] == false) {
-      throw const OidcException('Your account has no verified email address.');
+      throw const OidcException(
+        "Your account with that provider doesn't have a verified email address.",
+      );
     }
     return (email: email, appRedirect: pending.appRedirect);
   }
@@ -195,7 +201,11 @@ class OidcProvider {
 
 Map<String, Object?> decodeJwtPayload(String jwt) {
   final parts = jwt.split('.');
-  if (parts.length < 2) throw const OidcException('Malformed ID token.');
+  if (parts.length < 2) {
+    throw const OidcException(
+      "The sign-in provider sent back something we couldn't read. Please try again.",
+    );
+  }
   return jsonDecode(
     utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
   ) as Map<String, Object?>;

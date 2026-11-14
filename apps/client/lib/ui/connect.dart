@@ -453,7 +453,7 @@ Future<void> showAddDevice(BuildContext context) async {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Works once, for 10 minutes.',
+                        'This code works once and expires in 10 minutes.',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.outline,
                         ),

@@ -46,8 +46,8 @@ class _ShellState extends State<Shell> {
     super.didChangeDependencies();
     AppScope.of(context).focus.onPhaseComplete = (next) {
       final message = next == FocusPhase.focus
-          ? 'Break over. Ready to focus?'
-          : 'Focus session complete. Time for a break!';
+          ? "Break's over. Ready to get back to it?"
+          : "Nice work, that focus session's done. Time for a break.";
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(message)));
     };
@@ -135,7 +135,7 @@ class _SyncIndicator extends StatelessWidget {
           SyncStatus.signedOut => (
             Icons.cloud_off,
             scheme.error,
-            'Signed out. Sign in again in Settings.',
+            "You've been signed out. Sign back in from Settings to keep syncing.",
           ),
         };
         return IconButton(

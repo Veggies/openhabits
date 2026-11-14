@@ -156,7 +156,7 @@ void main() {
             isA<SyncException>().having(
               (e) => e.message,
               'message',
-              'Wrong username or password.',
+              "That username or password isn't right.",
             ),
           ),
         );

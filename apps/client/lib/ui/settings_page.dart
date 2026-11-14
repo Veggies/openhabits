@@ -133,7 +133,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         Text(
                           sync.status == SyncStatus.signedOut
                               ? 'You were signed out. Sign in again to keep syncing.'
-                              : 'Everything works on this device. Connect to your server to sync with your other devices.',
+                              : "Everything works on this device as it is. If you'd like your other devices to stay in sync, connect to your server.",
                         ),
                         const SizedBox(height: 16),
                         ConnectForm(onSignedIn: (_) {}),
@@ -152,8 +152,8 @@ class _SettingsPageState extends State<SettingsPage> {
                     SwitchListTile(
                       title: const Text('Use the Atomic Habits framework'),
                       subtitle: const Text(
-                        'Identity, cues, two-minute versions, rewards, "never miss twice" streaks, '
-                        'quit habits, a scorecard and a weekly review.',
+                        'Adds ideas from the book Atomic Habits: tiny starter versions, rewards, '
+                        'streaks that forgive one missed day, a scorecard and a weekly review.',
                       ),
                       value: repo.atomicHabits,
                       onChanged: (v) => repo.setPrefs({'atomicHabits': v}),
@@ -162,7 +162,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       leading: const Icon(Icons.replay),
                       title: const Text('Run setup again'),
                       subtitle: const Text(
-                        'Walk through the first-run wizard, including building a habit step by step.',
+                        'Go through the welcome steps again, including building a habit step by step.',
                       ),
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
@@ -372,7 +372,7 @@ class _PeopleState extends State<_People> {
                               builder: (context) => AlertDialog(
                                 title: Text('Remove ${p.username}?'),
                                 content: const Text(
-                                  'Their account and all their data on this server will be deleted.',
+                                  "This deletes their account and everything they've saved on this server.",
                                 ),
                                 actions: [
                                   TextButton(

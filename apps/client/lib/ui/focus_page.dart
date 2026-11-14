@@ -350,7 +350,7 @@ class _Stats extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 12),
             child: Text(
-              'Completed focus sessions appear here.',
+              'Your finished focus sessions will show up here.',
               style: TextStyle(color: theme.colorScheme.outline),
             ),
           ),

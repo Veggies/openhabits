@@ -145,7 +145,9 @@ Handler buildHandler(
     ..get('/auth/oidc/start', (Request r) async {
       final oidc = sso();
       if (oidc == null) {
-        return Response.notFound('Single sign-on is not configured.');
+        return Response.notFound(
+          "Single sign-on hasn't been set up on this server yet.",
+        );
       }
       final redirect = Uri.tryParse(
         r.url.queryParameters['redirect_uri'] ?? '',
@@ -158,7 +160,9 @@ Handler buildHandler(
     ..get('/auth/oidc/callback', (Request r) async {
       final oidc = sso();
       if (oidc == null) {
-        return Response.notFound('Single sign-on is not configured.');
+        return Response.notFound(
+          "Single sign-on hasn't been set up on this server yet.",
+        );
       }
       final q = r.url.queryParameters;
       if (q['error'] != null) {
@@ -172,7 +176,7 @@ Handler buildHandler(
         final user = auth.userByEmail(result.email);
         if (user == null) {
           return _htmlError(
-            'No account for ${result.email}',
+            "There's no account here for ${result.email}.",
             'Ask the server owner to add this email to your account in Settings → People.',
           );
         }
@@ -232,7 +236,7 @@ Handler buildHandler(
       if (auth.hasUsers) {
         return _jsonError(
           409,
-          'This server is already set up. Sign in instead.',
+          "This server's already set up, so just sign in.",
         );
       }
       final b = await body(r);
@@ -293,7 +297,10 @@ Handler buildHandler(
         final port = b['port'] as int?;
         if (port != null) {
           if (port < 1 || port > 65535) {
-            return _jsonError(400, 'Ports are between 1 and 65535.');
+            return _jsonError(
+              400,
+              'Port numbers need to be between 1 and 65535.',
+            );
           }
           settings.remotePort = port;
         }
@@ -525,7 +532,7 @@ Middleware _errors() =>
       } on FormatException catch (e) {
         return _jsonError(400, 'Invalid request: ${e.message}');
       } on TypeError catch (_) {
-        return _jsonError(400, 'Invalid request.');
+        return _jsonError(400, "That request didn't look right.");
       }
     };
 

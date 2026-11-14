@@ -107,7 +107,7 @@ class AuthStore {
     final name = username.trim();
     if (!RegExp(r'^[A-Za-z0-9._@-]{2,64}$').hasMatch(name)) {
       throw const AuthException(
-        'Usernames are 2–64 letters, numbers, dots, dashes or underscores.',
+        'Usernames can be 2 to 64 characters long, using letters, numbers, dots, dashes or underscores.',
       );
     }
     if (password != null && password.length < 8) {
@@ -168,7 +168,9 @@ class AuthStore {
         failures.count >= 5 &&
         now.isBefore(failures.until)) {
       final wait = failures.until.difference(now).inSeconds + 1;
-      throw AuthException('Too many attempts. Try again in $wait seconds.');
+      throw AuthException(
+        "That's too many tries for now. Wait $wait seconds and try again.",
+      );
     }
     final rows = _db.select('SELECT * FROM users WHERE username = ?', [
       username.trim(),
@@ -182,7 +184,7 @@ class AuthStore {
         seconds: count < 5 ? 0 : 30 * (1 << min(count - 5, 6)),
       );
       _failures[client] = (count: count, until: now.add(lockout));
-      throw const AuthException('Wrong username or password.');
+      throw const AuthException("That username or password isn't right.");
     }
     _failures.remove(client);
     return _toUser(rows.first);
@@ -260,10 +262,12 @@ class AuthStore {
   User redeemCode(String code) {
     final entry = _codes.remove(_sha(_normalizeCode(code)));
     if (entry == null || entry.expires.isBefore(_clock())) {
-      throw const AuthException('That code is invalid or has expired.');
+      throw const AuthException(
+        "That code doesn't work. It may have expired, so try getting a new one.",
+      );
     }
     return userById(entry.userId) ??
-        (throw const AuthException('That account no longer exists.'));
+        (throw const AuthException("That account doesn't exist anymore."));
   }
 
   static String _normalizeCode(String code) =>

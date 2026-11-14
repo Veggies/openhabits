@@ -147,7 +147,7 @@ class RemoteAccess {
     if (override != null) {
       return RemoteStatus(
         RemoteState.on,
-        'Devices away from home use your custom address.',
+        'Devices away from home will use your custom address.',
         url: override,
       );
     }

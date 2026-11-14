@@ -155,7 +155,7 @@ class _HabitEditorState extends State<HabitEditor> {
             const SizedBox(height: 28),
             Text('Atomic Habits', style: theme.textTheme.titleMedium),
             Text(
-              'All optional. Fill in what helps.',
+              'Everything here is optional. Just fill in what helps you.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.outline,
               ),
@@ -165,7 +165,7 @@ class _HabitEditorState extends State<HabitEditor> {
               'identity',
               'Who do you want to become?',
               'I am a person who…',
-              help: 'Every check-in is a vote for this identity.',
+              help: "Each time you do the habit, it's a vote for becoming this person.",
             ),
             if (kind == HabitKind.build)
               ...buildPlanFields(context, _plan)
@@ -323,7 +323,7 @@ List<Widget> buildPlanFields(
     controller: plan['stackAfter']!,
     label: 'After I…',
     hint: 'e.g. pour my morning coffee',
-    help: 'Habit stacking: tie it to something you already do.',
+    help: 'Tie it to something you already do every day, like making your morning coffee.',
   ),
   const LawHeader('2', 'Make it attractive'),
   PlanField(
@@ -336,13 +336,13 @@ List<Widget> buildPlanFields(
     controller: plan['twoMinute']!,
     label: 'Start with',
     hint: 'e.g. Read one page',
-    help: 'A version so small it takes two minutes or less. The first goal is just to show up every day.',
+    help: 'Make it so small it takes two minutes or less. To start with, the only goal is to show up every day.',
   ),
   PlanField(
     controller: plan['goal']!,
     label: 'Build up to',
     hint: 'e.g. Read 20 pages a day',
-    help: 'Once showing up is automatic, the app suggests stepping up a little at a time until you get here.',
+    help: "Once it's become automatic, the app will suggest making it a bit bigger, one small step at a time, until you get here.",
   ),
   const LawHeader('4', 'Make it satisfying'),
   PlanField(
@@ -382,7 +382,7 @@ List<Widget> quitPlanFields(Map<String, TextEditingController> plan) => [
     controller: plan['contract']!,
     label: 'Habit contract',
     hint: "e.g. If I slip, I'll do the dishes for a week",
-    help: 'A real cost for breaking your promise makes it stick.',
+    help: 'Make a promise to someone, with a real cost if you break it. It helps the change stick.',
   ),
 ];
 
