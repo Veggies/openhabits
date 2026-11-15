@@ -96,6 +96,8 @@ struct SettingsView: View {
                 Text("Habits")
             }
 
+            RemindersSection()
+
             Section {
                 AccentPicker()
             } header: {
@@ -531,5 +533,35 @@ struct AccentPicker: View {
             }
         }
         .padding(.vertical, 4)
+    }
+}
+
+/// Which reminders this device sends.
+struct RemindersSection: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        @Bindable var reminders = app.reminders
+        Section {
+            Toggle(isOn: $reminders.habitTimes) {
+                Text("At each habit's time")
+                Text("For habits with a set time. You can mark it done right from the reminder.")
+            }
+            Toggle(isOn: $reminders.checkIn.animation()) {
+                Text("Daily check-in")
+                Text("Lists what's left to do that day. Stays quiet once everything's done.")
+            }
+            if reminders.checkIn {
+                DatePicker("Check-in time", selection: $reminders.checkInTime, displayedComponents: .hourAndMinute)
+            }
+            if reminders.denied {
+                Text("Notifications are turned off for OpenHabits. To get reminders, turn them on in your device's Settings → Notifications → OpenHabits.")
+                    .foregroundStyle(.orange)
+            }
+        } header: {
+            Text("Reminders")
+        } footer: {
+            Text("Reminders are set on this device only, so you can have them on your phone but not your computer.")
+        }
     }
 }

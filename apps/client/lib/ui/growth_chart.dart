@@ -202,11 +202,19 @@ class _GrowthViewState extends State<GrowthView> {
 }
 
 /// The version a habit changed to during the week starting [week], if any.
-String? _changeIn(Habit h, DateTime week) {
-  for (final v in h.plan.sizeHistory.skip(1)) {
-    final since = parseDateKey(v.since);
+String? _changeIn(Habit h, DateTime week) => _changeDetails(h, week)?.to;
+
+/// How a habit's version changed during the week starting [week], if it
+/// did: from what, to what, and on which day.
+({String from, String to, DateTime on})? _changeDetails(
+  Habit h,
+  DateTime week,
+) {
+  final history = h.plan.sizeHistory;
+  for (var i = 1; i < history.length; i++) {
+    final since = parseDateKey(history[i].since);
     if (!since.isBefore(week) && since.isBefore(addDays(week, 7))) {
-      return v.text;
+      return (from: history[i - 1].text, to: history[i].text, on: since);
     }
   }
   return null;
@@ -230,9 +238,10 @@ String _describe(Habit h, DateTime week, _Week w, DateTime today) {
       ? 'not due'
       : '${_days(h, w.done, w.scheduled)}'
             '${_isThisWeek(week, today) ? ' so far' : ''}';
-  final change = _changeIn(h, week);
+  final change = _changeDetails(h, week);
   return '${h.name}\n$name: $days'
-      '${change == null ? '' : '\nYou changed your version to "$change"'}';
+      '${change == null ? '' : '\n\nYou changed your version on ${fullDate(change.on)}\n'
+                'From: ${change.from}\nTo: ${change.to}'}';
 }
 
 /// How well a habit is going over the last four weeks.
@@ -329,8 +338,8 @@ class _WeekGridState extends State<_WeekGrid> {
     final weeks = widget.weeks;
     final today = widget.today;
     final narrow = MediaQuery.sizeOf(context).width < 600;
-    final names = narrow ? 128.0 : 240.0;
-    final row = narrow ? 64.0 : 50.0;
+    final names = narrow ? 150.0 : 260.0;
+    final row = narrow ? 76.0 : 60.0;
     final small = theme.textTheme.labelSmall?.copyWith(
       color: theme.colorScheme.outline,
     );
@@ -351,13 +360,7 @@ class _WeekGridState extends State<_WeekGrid> {
     final left = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(
-          height: header,
-          child: Align(
-            alignment: Alignment.bottomLeft,
-            child: Text('Last 4 weeks', style: small),
-          ),
-        ),
+        const SizedBox(height: header),
         for (final (title, list) in sections) ...[
           SizedBox(
             height: section,
@@ -390,59 +393,73 @@ class _WeekGridState extends State<_WeekGrid> {
           ? Colors.black87
           : Colors.white;
       // A dark ring, with a gap so it shows on any color, marks the week
-      // you changed your version of the habit.
+      // you changed your version of the habit. The inner square's corners
+      // follow the ring's (10 minus the 4 inset), so the gap is even.
       final changed = _changeIn(h, weeks[i]) != null;
+      // Hover with a mouse, or tap, to see the week's details.
       return Tooltip(
         message: _describe(h, weeks[i], w, today),
         waitDuration: const Duration(milliseconds: 150),
+        triggerMode: TooltipTriggerMode.tap,
+        showDuration: const Duration(seconds: 6),
         child: Container(
           width: cell,
           height: cell,
           margin: const EdgeInsets.only(right: gap),
-          padding: EdgeInsets.all(changed ? 3 : 0),
-          decoration: changed
-              ? BoxDecoration(
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: theme.colorScheme.onSurface,
-                    width: 2,
-                  ),
-                )
-              : null,
-          child: Container(
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: w.scheduled == 0 || w.done == 0
-                  ? null
-                  : perfect
-                  ? color
-                  : color.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(changed ? 5 : 8),
-              border: w.scheduled == 0 || w.done == 0
-                  ? Border.all(
-                      color: theme.colorScheme.outlineVariant.withValues(
-                        alpha: w.scheduled == 0 ? 0.4 : 1,
+          // The ring sits outside the square, in the space between squares,
+          // so a changed week's square and number stay the same size.
+          child: Stack(
+            clipBehavior: Clip.none,
+            fit: StackFit.expand,
+            children: [
+              Container(
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: w.scheduled == 0 || w.done == 0
+                      ? null
+                      : perfect
+                      ? color
+                      : color.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(8),
+                  border: w.scheduled == 0 || w.done == 0
+                      ? Border.all(
+                          color: theme.colorScheme.outlineVariant.withValues(
+                            alpha: w.scheduled == 0 ? 0.4 : 1,
+                          ),
+                        )
+                      : null,
+                ),
+                child: w.scheduled == 0
+                    ? null
+                    : Text(
+                        '${w.done}',
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: perfect
+                              ? onColor
+                              : w.done == 0
+                              ? theme.colorScheme.outline
+                              : null,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    )
-                  : null,
-            ),
-            child: w.scheduled == 0
-                ? null
-                : Text(
-                    '${w.done}',
-                    style:
-                        (changed
-                                ? theme.textTheme.labelMedium
-                                : theme.textTheme.labelLarge)
-                            ?.copyWith(
-                              color: perfect
-                                  ? onColor
-                                  : w.done == 0
-                                  ? theme.colorScheme.outline
-                                  : null,
-                              fontWeight: FontWeight.w600,
-                            ),
+              ),
+              if (changed)
+                Positioned(
+                  left: -3,
+                  top: -3,
+                  right: -3,
+                  bottom: -3,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(11),
+                      border: Border.all(
+                        color: theme.colorScheme.onSurface,
+                        width: 1.5,
+                      ),
+                    ),
                   ),
+                ),
+            ],
           ),
         ),
       );
@@ -537,49 +554,70 @@ class _WeekGridState extends State<_WeekGrid> {
     );
   }
 
+  /// The habit's icon and name, how it's going, and over what period:
+  /// "Going strong", then "27 of the last 28 days".
   Widget _nameCell(BuildContext context, Repo repo, Habit h, bool narrow) {
     final theme = Theme.of(context);
     final strength = habitStrength(repo, h);
-    final count = _strengthCount(h, strength);
-    final verdict = strength.level.label;
-    final verdictStyle = theme.textTheme.bodySmall?.copyWith(
-      color: strength.level.color(theme),
-      fontWeight: FontWeight.w600,
-    );
-    final countStyle = theme.textTheme.bodySmall?.copyWith(
-      color: theme.colorScheme.outline,
-    );
+    final recent = recentLabel(h, strength);
     return Padding(
       padding: const EdgeInsets.only(right: 12),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(
-            h.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodyMedium,
+          SizedBox(
+            width: 24,
+            child: HabitGlyph(icon: h.icon, color: h.color, size: 17),
           ),
-          if (narrow) ...[
-            if (count.isNotEmpty) Text(count, style: countStyle),
-            Text(verdict, style: verdictStyle),
-          ] else
-            Text.rich(
-              TextSpan(
-                children: [
-                  if (count.isNotEmpty)
-                    TextSpan(text: '$count · ', style: countStyle),
-                  TextSpan(text: verdict, style: verdictStyle),
-                ],
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  h.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium,
+                ),
+                Text(
+                  strength.level.label,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: strength.level.color(theme),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (recent.isNotEmpty)
+                  Text(
+                    recent,
+                    maxLines: narrow ? 2 : 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.outline,
+                    ),
+                  ),
+              ],
             ),
+          ),
         ],
       ),
     );
   }
+}
+
+/// "27 of the last 28 days" for a daily habit; "10 of 12 days in the last 4
+/// weeks" for one that isn't every day ("clear" for habits being broken).
+/// Empty while it's too soon to say.
+String recentLabel(
+  Habit h,
+  ({int done, int scheduled, StrengthLevel level}) s,
+) {
+  if (s.level == StrengthLevel.justStarted) return '';
+  final clear = h.isQuit ? ' clear' : '';
+  return s.scheduled == 28
+      ? '${s.done} of the last 28 days$clear'
+      : '${s.done} of ${s.scheduled} days$clear in the last 4 weeks';
 }
 
 /// A key to the squares: plain samples (the numbers live in the grid).

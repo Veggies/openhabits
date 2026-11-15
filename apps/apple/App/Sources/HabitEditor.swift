@@ -16,6 +16,7 @@ struct HabitEditor: View {
     @State private var hasTime = false
     @State private var time = TimeOfDay(hour: 7, minute: 0).date()
     @State private var duration = 15
+    @State private var remind = true
     @State private var plan: [String: String] = [:]
     @State private var startSmall = false
     @State private var choosingIcon = false
@@ -64,6 +65,7 @@ struct HabitEditor: View {
                     Toggle("At a set time", isOn: $hasTime.animation())
                     if hasTime {
                         DatePicker("Time", selection: $time, displayedComponents: .hourAndMinute)
+                        Toggle("Remind me", isOn: $remind)
                         Picker("How long", selection: $duration) {
                             ForEach(Array(Set([5, 10, 15, 30, 45, 60, 90, 120, duration])).sorted(), id: \.self) {
                                 Text(durationLabel($0)).tag($0)
@@ -71,7 +73,9 @@ struct HabitEditor: View {
                         }
                     }
                 } footer: {
-                    Text("Give it a time to see it in your calendar app. You can set that up in Settings.")
+                    Text(hasTime
+                        ? "Reminders need to be on in Settings → Reminders. It can also show up in your calendar app, from Settings → Show Habits in Your Calendar App (once you're connected to your server)."
+                        : "Give it a time to get a reminder, and to see it in your calendar app.")
                 }
 
                 if framework {
@@ -197,6 +201,7 @@ struct HabitEditor: View {
         icon = h.icon
         weekdays = h.weekdays
         duration = h.duration
+        remind = h.remind
         if let t = TimeOfDay(h.plan.time) {
             hasTime = true
             time = t.date()
@@ -216,6 +221,7 @@ struct HabitEditor: View {
             "kind": .string(kind.rawValue),
             "weekdays": .array(weekdays.sorted().map { .int($0) }),
             "duration": .int(duration),
+            "remind": .bool(remind),
         ]
         for f in HabitPlan.fieldNames where f != "time" {
             fields[f] = .string((plan[f] ?? "").trimmingCharacters(in: .whitespacesAndNewlines))

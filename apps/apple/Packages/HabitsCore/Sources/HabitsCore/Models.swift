@@ -131,6 +131,8 @@ public struct Habit: Identifiable, Sendable, Hashable {
     public let plan: HabitPlan
     /// Minutes: its length in a calendar app when it has a time.
     public let duration: Int
+    /// Send a reminder at the habit's time (when it has one).
+    public let remind: Bool
     public let order: Double
     public let createdAt: Date
     public let archived: Bool
@@ -145,6 +147,7 @@ public struct Habit: Identifiable, Sendable, Hashable {
         weekdays = Set((f["weekdays"]?.array ?? [1, 2, 3, 4, 5, 6, 7]).compactMap(\.int))
         plan = HabitPlan(f)
         duration = f["duration"]?.int ?? 15
+        remind = f["remind"]?.bool ?? true
         order = f["order"]?.number ?? 0
         createdAt = f["createdAt"]?.string.flatMap(Timestamp.parse)
             ?? Days.calendar.date(from: DateComponents(year: 2000, month: 1, day: 1))!

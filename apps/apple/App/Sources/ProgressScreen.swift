@@ -61,6 +61,16 @@ struct ProgressScreen: View {
                     datePicker
                     if habits.count > 1 { habitFilter(habits) }
                 }
+                #else
+                // Two separate, labelled buttons, so it's clear each does
+                // its own thing.
+                if !habits.isEmpty {
+                    HStack(spacing: 10) {
+                        datePicker
+                        if habits.count > 1 { habitFilter(habits) }
+                        Spacer(minLength: 0)
+                    }
+                }
                 #endif
                 Text("Here's how each habit has gone, week by week. The number in each square is how many days you did it that week. For habits you're trying to break, it's how many days you went without it.")
                     .font(.subheadline)
@@ -82,14 +92,6 @@ struct ProgressScreen: View {
         }
         .navigationTitle("Progress")
         .largeTitle()
-        #if os(iOS)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) { datePicker }
-            if habits.count > 1 {
-                ToolbarItem(placement: .primaryAction) { habitFilter(habits) }
-            }
-        }
-        #endif
         .sheet(isPresented: $choosingDates) {
             NavigationStack {
                 Form {
@@ -112,15 +114,32 @@ struct ProgressScreen: View {
         }
     }
 
+    private var rangeTitle: String {
+        range == .custom ? "\(shortDate(customFrom)) – \(shortDate(customTo))" : range.rawValue
+    }
+
+    /// Which weeks to show, as a labelled menu button.
     private var datePicker: some View {
-        Picker("Dates", selection: Binding(get: { range }, set: { pick($0) })) {
-            ForEach(ProgressRange.allCases) { r in
-                Text(r == .custom && range == .custom
-                    ? "\(shortDate(customFrom)) – \(shortDate(customTo))" : r.rawValue)
-                    .tag(r)
+        Menu {
+            Picker("Dates", selection: Binding(get: { range }, set: { pick($0) })) {
+                ForEach(ProgressRange.allCases) { r in
+                    Text(r.rawValue).tag(r)
+                }
+            }
+        } label: {
+            Label {
+                HStack(spacing: 4) {
+                    Text(rangeTitle)
+                    Image(systemName: "chevron.down").font(.caption.weight(.semibold))
+                }
+            } icon: {
+                Image(systemName: "calendar")
             }
         }
-        .pickerStyle(.menu)
+        .menuStyle(.button)
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.capsule)
+        .menuIndicator(.hidden)
         .fixedSize()
     }
 
@@ -132,10 +151,20 @@ struct ProgressScreen: View {
                     set: { on in if on { hidden.remove(h.id) } else { hidden.insert(h.id) } }))
             }
         } label: {
-            Label(hidden.isEmpty ? "All habits" : "\(habits.count - hidden.count) of \(habits.count) habits",
-                systemImage: hidden.isEmpty
+            Label {
+                HStack(spacing: 4) {
+                    Text(hidden.isEmpty ? "All Habits" : "\(habits.count - hidden.count) of \(habits.count) Habits")
+                    Image(systemName: "chevron.down").font(.caption.weight(.semibold))
+                }
+            } icon: {
+                Image(systemName: hidden.isEmpty
                     ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
+            }
         }
+        .menuStyle(.button)
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.capsule)
+        .menuIndicator(.hidden)
         .fixedSize()
     }
 
@@ -162,8 +191,11 @@ struct Legend: View {
                 VStack(alignment: .leading, spacing: 6) { samples }
             }
             item(
-                RoundedRectangle(cornerRadius: 5).strokeBorder(.primary, lineWidth: 1.5)
-                    .overlay(RoundedRectangle(cornerRadius: 3).fill(color).padding(3)),
+                RoundedRectangle(cornerRadius: 4, style: .continuous).fill(color)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6.5, style: .continuous)
+                            .strokeBorder(.primary, lineWidth: 1.2)
+                            .padding(-2.5)),
                 "A ring means you changed your version of the habit that week")
         }
         .font(.caption)
@@ -183,24 +215,29 @@ struct WeekGrid: View {
     let weeks: [Date]
     let today: Date
     @Environment(AppModel.self) private var app
+    /// The square whose details are showing ("habit id|week").
+    @State private var showing: String?
     @Environment(\.horizontalSizeClass) private var sizeClass
+
+    /// The ring around a week where the version changed: its width and the
+    /// gap between it and the square. Its corners follow the square's.
+    private let squareRadius: CGFloat = 8
+    private let ringWidth: CGFloat = 1.5, ringGap: CGFloat = 1.5
+    private var ringInset: CGFloat { ringWidth + ringGap }
 
     private let cell: CGFloat = 34, gap: CGFloat = 6, header: CGFloat = 40, section: CGFloat = 34
 
     var body: some View {
         let narrow = sizeClass == .compact
-        let names: CGFloat = narrow ? 120 : 230
-        let row: CGFloat = narrow ? 60 : 50
+        let names: CGFloat = narrow ? 140 : 250
+        let row: CGFloat = narrow ? 72 : 58
         let sections = [("BUILDING", habits.filter { !$0.isQuit }), ("BREAKING", habits.filter(\.isQuit))]
             .filter { !$0.1.isEmpty }
 
         HStack(alignment: .top, spacing: 0) {
             // Names and how each habit is going. Stays put.
             VStack(alignment: .leading, spacing: 0) {
-                Text("Last 4 weeks")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .frame(height: header, alignment: .bottomLeading)
+                Color.clear.frame(height: header)
                 ForEach(sections, id: \.0) { title, list in
                     Text(title)
                         .font(.caption.weight(.semibold))
@@ -235,7 +272,7 @@ struct WeekGrid: View {
                             }
                         }
                     }
-                    .padding(.trailing, 4)
+                    .padding(.horizontal, 4)
                 }
                 .onAppear { proxy.scrollTo(weeks.count - 1, anchor: .trailing) }
                 .onChange(of: weeks.count) { _, n in proxy.scrollTo(n - 1, anchor: .trailing) }
@@ -243,21 +280,39 @@ struct WeekGrid: View {
         }
     }
 
+    /// The habit's icon and name, how it's going, and over what period:
+    /// "Going strong", then "27 of the last 28 days".
     private func nameCell(_ h: Habit, narrow: Bool) -> some View {
         let s = app.repo.strength(h)
-        let count = s.level == .justStarted ? "" : daysLabel(h, s.done, s.scheduled)
-        return VStack(alignment: .leading, spacing: 1) {
-            Text(h.name).font(.subheadline).lineLimit(1)
-            if narrow {
-                if !count.isEmpty { Text(count).font(.caption).foregroundStyle(.secondary) }
-                Text(s.level.label).font(.caption.weight(.semibold)).foregroundStyle(s.level.color)
-            } else {
-                Text("\(Text(count.isEmpty ? "" : "\(count) · ").foregroundStyle(.secondary))\(Text(s.level.label).fontWeight(.semibold).foregroundStyle(s.level.color))")
-                    .font(.caption)
-                    .lineLimit(1)
+        let count = s.level == .justStarted ? "" : recentLabel(h, s)
+        return HStack(alignment: .top, spacing: 8) {
+            HabitGlyph(icon: h.icon, color: h.color, size: 15)
+                .frame(width: 20)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(h.name).font(.subheadline).lineLimit(1)
+                Text(s.level.label)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(s.level.color)
+                if !count.isEmpty {
+                    Text(count)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(narrow ? 2 : 1)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
         .padding(.trailing, 8)
+    }
+
+    /// "27 of the last 28 days" for a daily habit; "10 of 12 days in the
+    /// last 4 weeks" for one that isn't every day. Says "clear" for habits
+    /// being broken.
+    private func recentLabel(_ h: Habit, _ s: Strength) -> String {
+        let clear = h.isQuit ? " clear" : ""
+        return s.scheduled == 28
+            ? "\(s.done) of the last 28 days\(clear)"
+            : "\(s.done) of \(s.scheduled) days\(clear) in the last 4 weeks"
     }
 
     /// The month's name where a new month starts, then the day each week
@@ -282,12 +337,14 @@ struct WeekGrid: View {
     private func square(_ h: Habit, _ week: Date) -> some View {
         let w = app.repo.weekRecord(h, weekStart: week)
         let perfect = w.scheduled > 0 && w.done == w.scheduled
-        let changed = changeIn(h, week)
+        let change = changeIn(h, week)
+        let changed = change?.to
+        let key = "\(h.id)|\(Days.key(week))"
         let thisWeek = week <= today && today < Days.add(week, 7)
         let fill: AnyShapeStyle =
             w.scheduled == 0 || w.done == 0 ? AnyShapeStyle(.clear)
             : perfect ? AnyShapeStyle(h.tint) : AnyShapeStyle(h.tint.opacity(0.2))
-        let inner = RoundedRectangle(cornerRadius: changed == nil ? 8 : 5)
+        let inner = RoundedRectangle(cornerRadius: squareRadius, style: .continuous)
         let description = w.scheduled == 0
             ? "not due"
             : daysLabel(h, w.done, w.scheduled) + (thisWeek ? " so far" : "")
@@ -299,30 +356,89 @@ struct WeekGrid: View {
             }
             if w.scheduled > 0 {
                 Text("\(w.done)")
-                    .font((changed == nil ? Font.subheadline : .caption).weight(.semibold))
+                    .font(.subheadline.weight(.semibold))
                     .monospacedDigit()
                     .foregroundStyle(perfect ? AnyShapeStyle(.white) : w.done == 0 ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
             }
         }
-        .padding(changed == nil ? 0 : 3)
+        .frame(width: cell, height: cell)
+        // The ring sits outside the square, in the space between squares,
+        // so a changed week's square and number stay the same size.
         .overlay {
             if changed != nil {
-                RoundedRectangle(cornerRadius: 10).strokeBorder(.primary, lineWidth: 2)
+                RoundedRectangle(cornerRadius: squareRadius + ringInset, style: .continuous)
+                    .strokeBorder(.primary, lineWidth: ringWidth)
+                    .padding(-ringInset)
             }
         }
-        .frame(width: cell, height: cell)
-        .help("\(h.name)\n\(thisWeek ? "This week" : "Week of \(shortDate(week))"): \(description)"
-            + (changed.map { "\nYou changed your version to \"\($0)\"" } ?? ""))
+        .contentShape(.rect)
+        .onTapGesture { showing = key }
+        .popover(isPresented: Binding(get: { showing == key }, set: { if !$0 { showing = nil } })) {
+            WeekDetails(habit: h, title: thisWeek ? "This week" : "Week of \(shortDate(week))",
+                description: description, change: change)
+                .presentationCompactAdaptation(.popover)
+        }
         .accessibilityElement()
         .accessibilityLabel("\(h.name), \(thisWeek ? "this week" : "week of \(shortDate(week))")")
-        .accessibilityValue(description + (changed.map { ". You changed your version to \($0)" } ?? ""))
+        .accessibilityValue(description
+            + (change.map { ". You changed your version from \($0.from) to \($0.to)" } ?? ""))
+        .accessibilityAddTraits(.isButton)
     }
 
-    /// The version a habit changed to during a week, if any.
-    private func changeIn(_ h: Habit, _ week: Date) -> String? {
-        for v in h.plan.sizeHistory.dropFirst() {
-            if let since = Days.parse(v.since), since >= week, since < Days.add(week, 7) { return v.text }
+    /// How a habit's version changed during a week, if it did: from what,
+    /// to what, and on which day.
+    private func changeIn(_ h: Habit, _ week: Date) -> VersionChange? {
+        let history = h.plan.sizeHistory
+        for i in history.indices.dropFirst() {
+            if let since = Days.parse(history[i].since), since >= week, since < Days.add(week, 7) {
+                return VersionChange(from: history[i - 1].text, to: history[i].text, on: since)
+            }
         }
         return nil
+    }
+}
+
+struct VersionChange {
+    let from: String
+    let to: String
+    let on: Date
+}
+
+/// What a square in the Progress grid shows when tapped.
+private struct WeekDetails: View {
+    let habit: Habit
+    let title: String
+    let description: String
+    let change: VersionChange?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label {
+                Text(habit.name).font(.headline)
+            } icon: {
+                HabitGlyph(icon: habit.icon, color: habit.color)
+            }
+            Text("\(title): \(description)")
+                .foregroundStyle(.secondary)
+            if let change {
+                Divider()
+                Text("You changed your version on \(change.on.formatted(.dateTime.weekday(.wide).month(.wide).day()))")
+                    .font(.subheadline.weight(.semibold))
+                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 6) {
+                    GridRow {
+                        Text("From").foregroundStyle(.secondary)
+                        Text(change.from)
+                    }
+                    GridRow {
+                        Text("To").foregroundStyle(.secondary)
+                        Text(change.to).fontWeight(.semibold)
+                    }
+                }
+                .font(.subheadline)
+            }
+        }
+        .padding(16)
+        .frame(minWidth: 220, maxWidth: 320, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
     }
 }

@@ -56,6 +56,7 @@ final class AppModel {
     let repo: Repo
     let sync: SyncEngine
     let focus: FocusTimer
+    let reminders: Reminders
 
     var tab: AppTab = .habits
     #if os(macOS)
@@ -98,6 +99,9 @@ final class AppModel {
         repo = Repo(store: store)
         sync = SyncEngine(store: store, deviceName: Self.deviceName)
         focus = FocusTimer(repo: repo)
+        reminders = Reminders(repo: repo)
+        store.onChange = { [weak reminders] in reminders?.refreshSoon() }
+        reminders.refreshSoon()
         #if DEBUG
         applyDebugLaunchOptions()
         #endif

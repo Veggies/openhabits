@@ -5,6 +5,7 @@ import SwiftUI
 /// app.
 struct RootView: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.scenePhase) private var phase
 
     var body: some View {
         @Bindable var app = app
@@ -27,6 +28,10 @@ struct RootView: View {
         }
         .sheet(item: $app.pendingPairing) { pairing in
             PairingLinkView(pairing: pairing)
+        }
+        // A new day may have started while the app was away.
+        .onChange(of: phase) { _, now in
+            if now == .active { app.reminders.refreshSoon() }
         }
     }
 }

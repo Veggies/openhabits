@@ -188,7 +188,7 @@ extension StrengthLevel {
 /// ("Read one page · After I pour coffee · 9:00 PM"). After today's
 /// check-in, the reward takes its place.
 @MainActor
-func detailLine(_ h: Habit, repo: Repo) -> String {
+func detailLine(_ h: Habit, repo: Repo, includeTime: Bool = true) -> String {
     let plan = h.plan
     if !h.isQuit && !plan.reward.isEmpty && repo.isDone(h.id, repo.today) {
         return "Reward: \(plan.reward)"
@@ -196,7 +196,7 @@ func detailLine(_ h: Habit, repo: Repo) -> String {
     return [
         h.isQuit ? "" : plan.twoMinute,
         plan.stackAfter.isEmpty ? "" : "After I \(plan.stackAfter)",
-        plan.time.isEmpty ? "" : timeLabel(plan.time),
+        plan.time.isEmpty || !includeTime ? "" : timeLabel(plan.time),
         plan.location,
     ].filter { !$0.isEmpty }.joined(separator: " · ")
 }

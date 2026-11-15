@@ -21,6 +21,9 @@ public final class LocalStore {
     /// Called after every local edit, so sync can send it soon.
     @ObservationIgnored public var onLocalWrite: (() -> Void)?
 
+    /// Called after any change, local or synced (e.g. to update reminders).
+    @ObservationIgnored public var onChange: (() -> Void)?
+
     /// Bumped when device settings in `meta` change (signing in and out).
     public private(set) var metaRevision = 0
 
@@ -101,6 +104,7 @@ public final class LocalStore {
         }
         revision += 1
         onLocalWrite?()
+        onChange?()
     }
 
     /// Applies changes from the server and records the new cursor.
@@ -113,7 +117,10 @@ public final class LocalStore {
             }
             try db.run("INSERT OR REPLACE INTO meta (key, value) VALUES ('cursor', ?)", [String(cursor)])
         }
-        if !changes.isEmpty { revision += 1 }
+        if !changes.isEmpty {
+            revision += 1
+            onChange?()
+        }
     }
 
     @discardableResult

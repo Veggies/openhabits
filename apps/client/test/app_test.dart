@@ -179,22 +179,19 @@ void main() {
     // Each habit says how the last four weeks went, in words.
     expect(find.text('BUILDING'), findsOneWidget);
     expect(find.text('BREAKING'), findsOneWidget);
-    expect(
-      find.text('27 of 28 days clear · Going strong', findRichText: true),
-      findsOneWidget,
-    );
+    // The period is part of each line, so nothing needs a heading.
+    expect(find.text('Last 4 weeks'), findsNothing);
+    expect(find.text('27 of the last 28 days clear'), findsOneWidget);
     final read = repo.record(repo.habit(id)!, repo.clock(), 28);
     expect(
-      find.textContaining(
-        '${read.done} of ${read.scheduled} days · ',
-        findRichText: true,
-      ),
+      find.text('${read.done} of the last ${read.scheduled} days'),
       findsOneWidget,
     );
     expect(find.widgetWithText(FilterChip, 'Read'), findsOneWidget);
     expect(find.widgetWithText(FilterChip, 'Walk'), findsOneWidget);
 
-    // Hovering a square says how that week went.
+    // Hovering or tapping a square says how that week went, and what the
+    // version changed from and to.
     final week = repo.weekRecord(
       repo.habit(id)!,
       startOfWeek(today, repo.weekStart),
@@ -207,7 +204,9 @@ void main() {
       messages,
       contains(
         'Read\nThis week: ${week.done} of ${week.scheduled} '
-        'day${week.scheduled == 1 ? '' : 's'} so far\nYou changed your version to "Read five pages"',
+        'day${week.scheduled == 1 ? '' : 's'} so far\n\n'
+        'You changed your version on ${fullDate(today)}\n'
+        'From: Read one page\nTo: Read five pages',
       ),
     );
 

@@ -184,7 +184,9 @@ struct HabitsView: View {
                 }
             } header: {
                 #if os(iOS)
-                DayLabels(title: title, days: days)
+                // Each row labels its own days on iPhone, so the header is
+                // just the group's name.
+                if let title { Text(title) }
                 #endif
             }
         }
@@ -312,6 +314,67 @@ struct HabitRow: View {
     @Environment(AppModel.self) private var app
 
     var body: some View {
+        #if os(iOS)
+        if UIDevice.current.userInterfaceIdiom == .phone {
+            phoneRow
+        } else {
+            wideRow
+        }
+        #else
+        wideRow
+        #endif
+    }
+
+    /// iPhone: the name with its time beside it, the plan underneath
+    /// (wrapping rather than cut off), and the week spread across the row
+    /// with each day labelled under its circle.
+    private var phoneRow: some View {
+        let repo = app.repo
+        let missed = repo.atomicHabits && repo.missedLastTime(habit)
+        let detail = missed
+            ? (habit.isQuit ? "Yesterday wasn't a clear day" : "You missed this last time")
+            : detailLine(habit, repo: repo, includeTime: false)
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                HabitIcon(icon: habit.icon, color: habit.color, size: 36)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(habit.name)
+                            .font(.body.weight(.semibold))
+                            .lineLimit(1)
+                            .layoutPriority(1)
+                        if !habit.plan.time.isEmpty {
+                            Label(timeLabel(habit.plan.time), systemImage: "clock")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .labelStyle(.titleAndIcon)
+                                .lineLimit(1)
+                                .fixedSize()
+                        }
+                    }
+                    if !detail.isEmpty {
+                        Text(detail)
+                            .font(.footnote)
+                            .foregroundStyle(missed ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Spacer(minLength: 4)
+                StreakBadge(habit: habit)
+            }
+            HStack(spacing: 0) {
+                ForEach(days, id: \.self) { day in
+                    DayCircle(habit: habit, day: day, isToday: day == days.last, labelled: true)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+        }
+        .padding(.vertical, 6)
+        .accessibilityElement(children: .contain)
+    }
+
+    private var wideRow: some View {
         let repo = app.repo
         let missed = repo.atomicHabits && repo.missedLastTime(habit)
         let detail = missed
@@ -345,7 +408,7 @@ struct HabitRow: View {
 
         // Everything on one line when there's room; otherwise the week sits
         // underneath, still lined up on the right.
-        ViewThatFits(in: .horizontal) {
+        return ViewThatFits(in: .horizontal) {
             HStack(spacing: 12) {
                 name.frame(minWidth: 220)
                 week
@@ -386,6 +449,8 @@ struct DayCircle: View {
     let habit: Habit
     let day: Date
     let isToday: Bool
+    /// Shows the day's letter under the circle (iPhone).
+    var labelled = false
     @Environment(AppModel.self) private var app
 
     var body: some View {
@@ -409,7 +474,16 @@ struct DayCircle: View {
                 }
             }
             .frame(width: size, height: size)
-            .frame(width: daySlot, height: 36)
+            .frame(width: daySlot, height: labelled ? 32 : 36)
+            .overlay(alignment: .bottom) {
+                if labelled {
+                    Text(weekdayShort(Days.weekday(day)))
+                        .font(.caption2.weight(isToday ? .bold : .medium))
+                        .foregroundStyle(isToday ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                        .offset(y: 15)
+                }
+            }
+            .padding(.bottom, labelled ? 14 : 0)
             .contentShape(.rect)
         }
         .buttonStyle(.borderless)

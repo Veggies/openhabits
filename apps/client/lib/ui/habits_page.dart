@@ -336,11 +336,7 @@ class _Section extends StatelessWidget {
               SizedBox(
                 width: _daySlot,
                 child: Text(
-                  day == today
-                      ? 'Today'
-                      : wide
-                      ? weekdayShort(day.weekday)
-                      : weekdayShort(day.weekday).substring(0, 1),
+                  day == today ? 'Today' : weekdayShort(day.weekday),
                   textAlign: TextAlign.center,
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: day == today
