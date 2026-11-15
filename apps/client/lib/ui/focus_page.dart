@@ -480,7 +480,9 @@ class TomatoRow extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.all(8),
                   child: Text(
-                    earned >= goal ? 'Goal reached' : '$earned of $goal',
+                    earned >= goal
+                        ? "You reached today's goal"
+                        : '$earned of $goal',
                     style: theme.textTheme.labelLarge?.copyWith(
                       color: earned >= goal
                           ? Colors.green

@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'data/focus_controller.dart';
 import 'data/local_store.dart';
+import 'data/reminders.dart';
 import 'data/repo.dart';
 import 'data/sync_engine.dart';
 import 'ui/common.dart';
@@ -18,18 +19,28 @@ Future<void> main() async {
   final store = LocalStore.open('${dir.path}/data.sqlite');
   final repo = Repo(store);
   final sync = SyncEngine(store)..start();
-  runApp(App(repo: repo, sync: sync, focus: FocusController(repo)));
+  final reminders = Reminders.supported ? (Reminders(repo)..start()) : null;
+  runApp(
+    App(
+      repo: repo,
+      sync: sync,
+      focus: FocusController(repo),
+      reminders: reminders,
+    ),
+  );
 }
 
 class App extends StatefulWidget {
   final Repo repo;
   final SyncEngine sync;
   final FocusController focus;
+  final Reminders? reminders;
   const App({
     super.key,
     required this.repo,
     required this.sync,
     required this.focus,
+    this.reminders,
   });
 
   @override
@@ -80,6 +91,7 @@ class _AppState extends State<App> {
         sync: widget.sync,
         focus: widget.focus,
         nav: nav,
+        reminders: widget.reminders,
         child: MaterialApp(
           title: 'OpenHabits',
           debugShowCheckedModeBanner: false,

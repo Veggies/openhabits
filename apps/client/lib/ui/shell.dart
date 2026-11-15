@@ -241,7 +241,7 @@ class _SyncIndicator extends StatelessWidget {
           SyncStatus.error => (
             Icons.cloud_off,
             scheme.error,
-            sync.lastError ?? 'Sync failed',
+            sync.lastError ?? "Couldn't sync just now",
           ),
           SyncStatus.signedOut => (
             Icons.cloud_off,

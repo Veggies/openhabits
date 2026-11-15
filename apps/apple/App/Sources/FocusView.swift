@@ -121,7 +121,7 @@ final class FocusTimer {
     private func scheduleNotification(at date: Date) {
         let center = UNUserNotificationCenter.current()
         let content = UNMutableNotificationContent()
-        content.title = phase == .focus ? "Focus session done" : "Break's over"
+        content.title = phase == .focus ? "That's a focus session done" : "Your break's over"
         content.body = phase == .focus
             ? "Nice work. Take a short break before the next one."
             : "Ready to focus again?"
@@ -340,7 +340,7 @@ struct TomatoRow: View {
                         ForEach(1...12, id: \.self) { Text("\($0) a day").tag($0) }
                     }
                 } label: {
-                    Text(earned >= goal ? "Goal reached" : "\(earned) of \(goal)")
+                    Text(earned >= goal ? "You reached today's goal" : "\(earned) of \(goal)")
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(earned >= goal ? AnyShapeStyle(.green) : AnyShapeStyle(.secondary))
                 }

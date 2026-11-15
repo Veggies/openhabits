@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../data/focus_controller.dart';
 import '../data/local_store.dart';
+import '../data/reminders.dart';
 import '../data/repo.dart';
 import '../data/sync_engine.dart';
 
@@ -15,12 +16,16 @@ class AppScope extends InheritedWidget {
   final FocusController focus;
   final AppNav nav;
 
+  /// Null where reminders can't be scheduled (and in tests).
+  final Reminders? reminders;
+
   const AppScope({
     super.key,
     required this.repo,
     required this.sync,
     required this.focus,
     required this.nav,
+    this.reminders,
     required super.child,
   });
 

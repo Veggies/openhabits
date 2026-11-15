@@ -1,6 +1,7 @@
 import 'package:core/core.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../data/reminders.dart';
 import '../data/repo.dart';
 import 'common.dart';
 
@@ -29,6 +30,7 @@ class _HabitEditorState extends State<HabitEditor> {
   late HabitKind kind = widget.existing?.kind ?? HabitKind.build;
   late Set<int> weekdays = {...?widget.existing?.weekdays};
   late int duration = widget.existing?.duration ?? 15;
+  late bool remind = widget.existing?.remind ?? true;
   late final Map<String, TextEditingController> _plan = {
     for (final f in HabitPlan.fieldNames)
       f: TextEditingController(
@@ -64,6 +66,7 @@ class _HabitEditorState extends State<HabitEditor> {
       'kind': kind.name,
       'weekdays': weekdays.toList()..sort(),
       'duration': duration,
+      'remind': remind,
       for (final MapEntry(:key, :value) in _plan.entries)
         key: value.text.trim(),
     };
@@ -190,6 +193,32 @@ class _HabitEditorState extends State<HabitEditor> {
   Widget _timeRow() {
     final time = _plan['time']!;
     final hasTime = time.text.isNotEmpty;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _timeFields(time, hasTime),
+        if (hasTime) ...[
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Remind me'),
+            subtitle: Text(
+              Reminders.supported
+                  ? 'Reminders need to be on in Settings, under Reminders. It can also show up in '
+                        "your calendar app, from Settings (once you're connected to your server)."
+                  : "It can show up in your calendar app, from Settings (once you're connected "
+                        'to your server). Reminders at set times need a phone or Windows.',
+            ),
+            value: remind,
+            onChanged: Reminders.supported
+                ? (v) => setState(() => remind = v)
+                : null,
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _timeFields(TextEditingController time, bool hasTime) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -198,7 +227,7 @@ class _HabitEditorState extends State<HabitEditor> {
             controller: time,
             label: 'Time (optional)',
             hint: 'Pick a time',
-            help: hasTime ? null : 'Give it a time to see it in your calendar app. You can set that up in Settings.',
+            help: hasTime ? null : 'Give it a time to get a reminder, and to see it in your calendar app.',
             onTap: _pickTime,
             suffix: hasTime
                 ? IconButton(

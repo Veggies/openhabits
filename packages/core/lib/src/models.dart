@@ -165,6 +165,9 @@ class Habit {
   /// How long it takes, in minutes: its length on the calendar when it has
   /// a time ([HabitPlan.time]).
   final int duration;
+
+  /// Send a reminder at the habit's time (when it has one).
+  final bool remind;
   final double order;
   final DateTime createdAt;
   final bool archived;
@@ -181,6 +184,7 @@ class Habit {
       },
       plan = HabitPlan.fromFields(f),
       duration = f['duration'] as int? ?? 15,
+      remind = f['remind'] as bool? ?? true,
       order = (f['order'] as num?)?.toDouble() ?? 0,
       createdAt = _dateTime(f['createdAt']) ?? DateTime(2000),
       archived = f['archived'] == true,

@@ -79,7 +79,7 @@ struct ProgressScreen: View {
                     ContentUnavailableView("Nothing to show yet", systemImage: "square.grid.3x3",
                         description: Text("Once you've started a habit, you'll see how each week went here."))
                 } else if shown.isEmpty {
-                    ContentUnavailableView("No habits picked", systemImage: "line.3.horizontal.decrease.circle",
+                    ContentUnavailableView("No habits chosen", systemImage: "line.3.horizontal.decrease.circle",
                         description: Text("Choose which habits to show with the filter button."))
                 } else {
                     Legend()

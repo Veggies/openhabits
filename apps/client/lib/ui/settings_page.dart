@@ -1,3 +1,4 @@
+import 'package:core/core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
@@ -83,7 +84,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       ListTile(
                         leading: const Icon(Icons.alternate_email),
                         title: const Text('Email for single sign-on'),
-                        subtitle: Text(account.email ?? 'Not set'),
+                        subtitle: Text(account.email ?? 'None yet'),
                         onTap: () async {
                           final email = await promptText(
                             context,
@@ -145,6 +146,8 @@ class _SettingsPageState extends State<SettingsPage> {
                 section('People'),
                 const _People(),
               ],
+              section('Reminders'),
+              const _RemindersCard(),
               section('Habits'),
               Card(
                 child: Column(
@@ -292,7 +295,7 @@ class _StatusIcon extends StatelessWidget {
       SyncStatus.error => (
         Icons.cloud_off,
         scheme.error,
-        sync.lastError ?? 'Sync failed',
+        sync.lastError ?? "Couldn't sync just now",
       ),
       SyncStatus.notConfigured || SyncStatus.signedOut => (
         Icons.cloud_off,
@@ -702,6 +705,94 @@ class _AccentPicker extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Which reminders this device sends.
+class _RemindersCard extends StatelessWidget {
+  const _RemindersCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final reminders = AppScope.of(context).reminders;
+    final theme = Theme.of(context);
+    if (reminders == null) {
+      return Card(
+        child: ListTile(
+          leading: const Icon(Icons.notifications_off_outlined),
+          title: const Text("Reminders aren't available here"),
+          subtitle: const Text(
+            'Reminders at set times work on your phone and on Windows. '
+            'Habits with a time can still show up in your calendar app.',
+          ),
+        ),
+      );
+    }
+    return ListenableBuilder(
+      listenable: reminders,
+      builder: (context, _) => Card(
+        child: Column(
+          children: [
+            SwitchListTile(
+              secondary: const Icon(Icons.alarm),
+              title: const Text("At each habit's time"),
+              subtitle: const Text(
+                'For habits with a set time. You can mark it done right from the reminder.',
+              ),
+              value: reminders.habitTimes,
+              onChanged: reminders.setHabitTimes,
+            ),
+            SwitchListTile(
+              secondary: const Icon(Icons.notifications_outlined),
+              title: const Text('Daily check-in'),
+              subtitle: const Text(
+                "Lists the habits you haven't marked yet that day. It stays quiet once everything's done.",
+              ),
+              value: reminders.checkIn,
+              onChanged: reminders.setCheckIn,
+            ),
+            if (reminders.checkIn)
+              ListTile(
+                leading: const SizedBox(width: 24),
+                title: const Text('Check-in time'),
+                trailing: TextButton(
+                  child: Text(timeLabel(context, reminders.checkInTime)),
+                  onPressed: () async {
+                    final t = parseTime(reminders.checkInTime);
+                    final picked = await showTimePicker(
+                      context: context,
+                      initialTime: TimeOfDay(hour: t.hour, minute: t.minute),
+                    );
+                    if (picked != null) {
+                      reminders.setCheckInTime(
+                        formatTime(picked.hour, picked.minute),
+                      );
+                    }
+                  },
+                ),
+              ),
+            if (reminders.denied)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: Text(
+                  'Notifications are turned off for OpenHabits. To get reminders, '
+                  "turn them on in your phone's Settings, under Apps, OpenHabits, Notifications.",
+                  style: TextStyle(color: Colors.orange.shade800),
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Text(
+                'Reminders are set on this device only, so you can have them on your phone but not your computer.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.outline,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

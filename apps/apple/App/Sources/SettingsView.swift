@@ -40,7 +40,7 @@ struct SettingsView: View {
                         editingEmail = true
                     } label: {
                         LabeledContent {
-                            Text(account.email ?? "Not set")
+                            Text(account.email ?? "None yet")
                         } label: {
                             Label("Email for Single Sign-On", systemImage: "envelope")
                         }
@@ -161,7 +161,7 @@ struct SyncStatusRow: View {
                 Label("Syncing…", systemImage: "arrow.triangle.2.circlepath")
             case .error:
                 Label {
-                    Text("Couldn't sync")
+                    Text("Couldn't sync just now")
                     Text(sync.lastError ?? "")
                 } icon: {
                     Image(systemName: "exclamationmark.icloud").foregroundStyle(.red)
@@ -549,7 +549,7 @@ struct RemindersSection: View {
             }
             Toggle(isOn: $reminders.checkIn.animation()) {
                 Text("Daily check-in")
-                Text("Lists what's left to do that day. Stays quiet once everything's done.")
+                Text("Lists the habits you haven't marked yet that day. It stays quiet once everything's done.")
             }
             if reminders.checkIn {
                 DatePicker("Check-in time", selection: $reminders.checkInTime, displayedComponents: .hourAndMinute)

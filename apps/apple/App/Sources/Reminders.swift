@@ -120,10 +120,12 @@ final class Reminders: NSObject, UNUserNotificationCenterDelegate {
                 // Nothing left today: no need to remind.
                 if offset == 0 && left.isEmpty { continue }
                 let content = UNMutableNotificationContent()
-                content.title = "Time to check in"
-                content.body = offset == 0
-                    ? "\(left.count) left today: \(names(left))."
-                    : "Take a moment to tick off today's habits."
+                content.title = "Time to check in on your habits"
+                content.body = offset != 0
+                    ? "Take a minute to mark off what you did today."
+                    : left.count == 1
+                    ? "You haven't marked \(left[0].name) yet today."
+                    : "You haven't marked these yet today: \(names(left))."
                 content.sound = .default
                 content.threadIdentifier = "checkin"
                 requests.append(request("checkin-\(Days.key(day))", content, at))
