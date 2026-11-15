@@ -1,0 +1,62 @@
+# OpenHabits for Apple devices (iPhone, iPad and Mac). Generate the Xcode project with:
+#   cd apps/apple && xcodegen
+# The .xcodeproj is generated, so it isn't checked in.
+name: OpenHabits
+options:
+  bundleIdPrefix: dev.openhabits
+  deploymentTarget:
+    iOS: "26.0"
+    macOS: "26.0"
+  createIntermediateGroups: true
+packages:
+  HabitsCore:
+    path: Packages/HabitsCore
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  OpenHabits:
+    type: application
+    supportedDestinations: [iOS, macOS]
+    sources:
+      - App/Sources
+      - App/Resources
+    dependencies:
+      - package: HabitsCore
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: OpenHabits
+        LSApplicationCategoryType: public.app-category.healthcare-fitness
+        # Self-hosted servers are often plain http on the home network.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+        NSLocalNetworkUsageDescription: OpenHabits connects to your own server on your home network to keep your devices in sync.
+        NSCameraUsageDescription: OpenHabits uses the camera to scan the pairing code shown on your other device.
+        # tasks://pair?… pairing links (from QR codes) and the sign-in callback.
+        CFBundleURLTypes:
+          - CFBundleURLName: dev.openhabits.pairing
+            CFBundleURLSchemes: [tasks]
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+        UISupportedInterfaceOrientations~iphone:
+          - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.openhabits.app
+        PRODUCT_NAME: OpenHabits
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_PREVIEWS: true
+        CODE_SIGN_STYLE: Automatic
+        "CODE_SIGN_IDENTITY[sdk=macosx*]": "-"
+        "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": App/OpenHabits-macOS.entitlements
+        ENABLE_HARDENED_RUNTIME: true

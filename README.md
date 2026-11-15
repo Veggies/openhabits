@@ -32,6 +32,24 @@ needs a public address with a real domain.
 
 ## Run the app
 
+### iPhone, iPad and Mac
+
+The Apple app is native SwiftUI, in `apps/apple`. The Xcode project is
+generated from `project.yml` with [XcodeGen](https://github.com/yonaskolb/XcodeGen)
+(`brew install xcodegen`). It needs Xcode 26 or newer and runs on iOS 26 and
+macOS 26 or newer.
+
+```sh
+cd apps/apple
+xcodegen                         # makes OpenHabits.xcodeproj
+open OpenHabits.xcodeproj        # then run the OpenHabits scheme
+```
+
+In debug builds, launching with `-sampleData YES` fills an empty app with
+sample habits, and `-startTab progress` opens on a tab.
+
+### Android, Windows and Linux
+
 Flutter is pinned with [FVM](https://fvm.app) (`.fvmrc`).
 
 ```sh
@@ -86,7 +104,9 @@ packages/core   Shared by client and server: sync clock, merge rule, models,
                 habit logic
 apps/server     Server (Dart, SQLite): setup page, accounts, sync, remote
                 access
-apps/client     Flutter app
+apps/apple      iPhone, iPad and Mac app (SwiftUI); HabitsCore is the Swift
+                version of packages/core and the client's sync
+apps/client     Flutter app (Android, Windows, Linux)
 deploy/truenas  TrueNAS app config and catalog plan
 ```
 
@@ -96,4 +116,9 @@ deploy/truenas  TrueNAS app config and catalog plan
 (cd packages/core && fvm dart test)
 (cd apps/server && fvm dart test)
 (cd apps/client && fvm flutter test)
+(cd apps/apple/Packages/HabitsCore && swift test)
 ```
+
+The Swift tests can also sync with a real server: start one with
+`PORT=18080 DB_PATH=/tmp/test.sqlite OWNER_USERNAME=tester OWNER_PASSWORD=testpass123 fvm dart run bin/server.dart`
+in `apps/server`, then run `HABITS_TEST_SERVER=http://localhost:18080 swift test`.
