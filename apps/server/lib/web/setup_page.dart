@@ -10,7 +10,7 @@ const setupPageHtml = r'''<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tasks Server</title>
+<title>OpenHabits Server</title>
 <style>
   :root {
     --bg: #f6f7fb; --card: #fff; --text: #1d2130; --muted: #667085; --line: #e3e6ee;
@@ -76,7 +76,7 @@ const setupPageHtml = r'''<!doctype html>
 <main>
   <header>
     <div class="logo">✓</div>
-    <h1 id="title">Tasks Server</h1>
+    <h1 id="title">OpenHabits Server</h1>
     <span id="who" class="muted"></span>
     <button id="signOut" hidden>Sign out</button>
   </header>
@@ -106,7 +106,7 @@ const setupPageHtml = r'''<!doctype html>
   <!-- Sign in -->
   <section id="login" class="card" hidden>
     <h2>Sign in to this server</h2>
-    <p class="sub">Use your Tasks account.</p>
+    <p class="sub">Use your OpenHabits account.</p>
     <form id="loginForm">
       <label for="li-user">Username</label>
       <input id="li-user" autocomplete="username" required>
@@ -136,7 +136,7 @@ const setupPageHtml = r'''<!doctype html>
       </div>
       <div id="cgnatHelp" class="note bad" hidden>
         <strong>Use a free relay with Tailscale</strong>
-        <p class="muted" style="margin:6px 0 0">Only this server needs Tailscale. Your phones and computers just use the Tasks app.</p>
+        <p class="muted" style="margin:6px 0 0">Only this server needs Tailscale. Your phones and computers just use the OpenHabits app.</p>
         <ol>
           <li>On TrueNAS, open <em>Apps → Discover</em>, install <strong>Tailscale</strong>, and sign in with the link it shows (a free account works).</li>
           <li>In the Tailscale admin console, turn on <strong>HTTPS certificates</strong> (DNS page) and allow <strong>Funnel</strong> for this machine (Access controls).</li>
@@ -165,7 +165,7 @@ const setupPageHtml = r'''<!doctype html>
       <div id="pairBox" class="pair" hidden style="margin-top:16px">
         <img id="pairQr" class="qr" alt="QR code to sign in">
         <div>
-          <p style="margin:0">On your phone: open Tasks and scan the code.</p>
+          <p style="margin:0">On your phone: open OpenHabits and scan the code.</p>
           <p style="margin:12px 0 0">On a computer: enter <code id="pairServer"></code> and this code:</p>
           <div class="code mono" id="pairCode"></div>
           <p class="muted">This code works once and expires in 10 minutes.</p>

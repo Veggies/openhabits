@@ -175,7 +175,7 @@ class _ConnectFormState extends State<ConnectForm> {
         .push<String>(MaterialPageRoute(builder: (_) => const _ScannerPage()));
     final pairing = text == null ? null : parsePairingPayload(text);
     if (text != null && pairing == null) {
-      setState(() => error = "That QR code isn't a Tasks pairing code.");
+      setState(() => error = "That QR code isn't an OpenHabits pairing code.");
       return;
     }
     if (pairing == null) return;
@@ -419,7 +419,7 @@ Future<void> showAddDevice(BuildContext context) async {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const Text(
-                        'On your phone, open Tasks and scan this code:',
+                        'On your phone, open OpenHabits and scan this code:',
                       ),
                       const SizedBox(height: 12),
                       Container(

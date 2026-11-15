@@ -23,40 +23,37 @@ class Onboarding extends StatefulWidget {
   State<Onboarding> createState() => _OnboardingState();
 }
 
-enum _Step { welcome, connect, framework, habit, done }
+enum _Step { welcome, connect, tour, firstHabit, habit, done }
 
 class _OnboardingState extends State<Onboarding> {
   _Step step = _Step.welcome;
 
   Future<void> _afterConnect() async {
     final sync = AppScope.read(context).sync;
-    // Give the first sync a moment so preferences made on another device
-    // (like the Atomic Habits choice) arrive before deciding what to ask.
+    // Give the first sync a moment, so habits made on another device are
+    // there by the time the tour ends.
     final deadline = DateTime.now().add(const Duration(seconds: 8));
     while (sync.status == SyncStatus.syncing &&
         DateTime.now().isBefore(deadline)) {
       await Future<void>.delayed(const Duration(milliseconds: 150));
     }
-    if (mounted) _toFramework();
+    if (mounted) _toTour();
   }
 
   void _afterWelcome() {
     final sync = AppScope.read(context).sync;
-    if (widget.replay && sync.isConfigured && sync.account != null) {
-      _toFramework();
+    if (widget.replay || (sync.isConfigured && sync.account != null)) {
+      _toTour();
     } else {
       setState(() => step = _Step.connect);
     }
   }
 
-  void _toFramework() {
-    final answered =
-        !widget.replay &&
-        AppScope.read(context).repo.prefs.atomicHabits != null;
-    setState(() => step = answered ? _Step.done : _Step.framework);
-  }
+  void _toTour() => setState(() => step = _Step.tour);
 
   void _finish() {
+    // Older versions of the app still read this choice.
+    AppScope.read(context).repo.setPrefs({'atomicHabits': true});
     if (!widget.replay) {
       AppScope.read(context).repo.store.setMeta('onboarded', '1');
     }
@@ -67,15 +64,13 @@ class _OnboardingState extends State<Onboarding> {
   Widget build(BuildContext context) {
     final page = switch (step) {
       _Step.welcome => _Welcome(onNext: _afterWelcome),
-      _Step.connect => _Connect(
-        onConnected: _afterConnect,
-        onSkip: _toFramework,
+      _Step.connect => _Connect(onConnected: _afterConnect, onSkip: _toTour),
+      _Step.tour => _Tour(
+        onFinish: () => setState(() => step = _Step.firstHabit),
       ),
-      _Step.framework => _Framework(
-        onChoice: (yes) {
-          AppScope.read(context).repo.setPrefs({'atomicHabits': yes});
-          setState(() => step = yes ? _Step.habit : _Step.done);
-        },
+      _Step.firstHabit => _FirstHabit(
+        onChoice: (yes) =>
+            setState(() => step = yes ? _Step.habit : _Step.done),
       ),
       _Step.habit => _GuidedHabit(
         onDone: () => setState(() => step = _Step.done),
@@ -149,9 +144,11 @@ class _Welcome extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       const _Title(
-        icon: Icons.check_box,
-        title: 'Welcome to Tasks',
-        body: 'Build habits that stick, with focus sessions to help, all kept on your own server.',
+        icon: Icons.check_circle_outline,
+        title: 'Welcome to OpenHabits',
+        body:
+            "Build habits that stick, one small step at a time. It's built around the ideas "
+            "in James Clear's book Atomic Habits, and everything is kept on your own server.",
       ),
       FilledButton(
         onPressed: onNext,
@@ -186,84 +183,401 @@ class _Connect extends StatelessWidget {
   );
 }
 
-class _Framework extends StatelessWidget {
+class _FirstHabit extends StatelessWidget {
   final ValueChanged<bool> onChoice;
-  const _Framework({required this.onChoice});
+  const _FirstHabit({required this.onChoice});
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      const _Title(
+        icon: Icons.add_circle_outline,
+        title: 'Build your first habit?',
+        body:
+            "We'll go through it one step at a time: who you want to become, a small "
+            "version to start with, and when and where you'll do it. It takes about a minute.",
+      ),
+      FilledButton(
+        onPressed: () => onChoice(true),
+        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+        child: const Text("Let's build one"),
+      ),
+      const SizedBox(height: 8),
+      OutlinedButton(
+        onPressed: () => onChoice(false),
+        style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+        child: const Text("I'll do it later"),
+      ),
+    ],
+  );
+}
+
+/// A quick tour of what the app does, one idea per page, each with a
+/// small picture of what you'll see. Matches the Apple app's tour.
+class _Tour extends StatefulWidget {
+  final VoidCallback onFinish;
+  const _Tour({required this.onFinish});
+
+  @override
+  State<_Tour> createState() => _TourState();
+}
+
+class _TourState extends State<_Tour> {
+  int page = 0;
+
+  static const _stops = [
+    (
+      'Check in each day',
+      "Each habit shows your last seven days. When you've done it, tap today's circle, "
+          'the bigger one on the right. Forgot to tick one off? Tap an earlier day, or open '
+          'the habit to change any day this month.',
+    ),
+    (
+      'Miss once, but never twice',
+      "Life happens. Missing one day won't break your streak, but missing two in a row will. "
+          "If you missed a habit last time, it'll remind you, so you can get back on track today.",
+    ),
+    (
+      'Start small, then grow it',
+      "Begin with a version so small you can't say no, like reading one page. Every two weeks, "
+          "you'll get a quick check-in. If it's sticking, you'll be asked whether it feels too "
+          "easy. If you've been missing it, you'll get the option to make it smaller for a while.",
+    ),
+    (
+      'Break bad habits too',
+      'For a habit you want to quit, check in on the days you stayed clear of it. '
+          "You'll see your days clean add up, and you can plan ways to make the habit harder "
+          'to fall into.',
+    ),
+    (
+      'Give each habit a plan',
+      "Decide who you want to become, when and where you'll do it, what you'll do it "
+          'straight after, and a small reward. Habits with a time can show up in your '
+          'calendar app too.',
+    ),
+    (
+      "See how it's going",
+      'The Progress tab shows every habit week by week, and says plainly whether each one '
+          'is going strong, getting there, or struggling.',
+    ),
+    (
+      'Look back each week',
+      'In Reflect, the weekly review asks a few short questions about your week. The '
+          'scorecard helps you notice the habits you already have, and whether each one '
+          'helps or hurts.',
+    ),
+    (
+      'Focus, and earn your tomatoes',
+      'The Focus timer helps you work on one thing for 25 minutes. Each session you finish '
+          'earns a tomato toward your daily goal. You can start one straight from a habit.',
+    ),
+    (
+      'On all your devices',
+      'Your habits are kept on your own server and stay in sync on your phone and computer. '
+          'To add a device, go to Settings and show its QR code.',
+    ),
+  ];
+
+  void _next() {
+    if (page == _stops.length - 1) {
+      widget.onFinish();
+    } else {
+      setState(() => page++);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    Widget law(String n, String title, String body) => Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CircleAvatar(
-            radius: 12,
-            child: Text(n, style: theme.textTheme.labelSmall),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text.rich(
-              TextSpan(
-                children: [
-                  TextSpan(
-                    text: '$title. ',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  TextSpan(text: body),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+    final (title, message) = _stops[page];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const _Title(
-          icon: Icons.auto_graph,
-          title: 'Build habits with Atomic Habits?',
-          body:
-              "James Clear's framework: small habits, tied to who you want to become, "
-              'compound into big results. It rests on four laws:',
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton(
+            onPressed: widget.onFinish,
+            child: const Text('Skip tour'),
+          ),
         ),
-        law(
-          '1',
-          'Make it obvious',
-          'Decide when and where, and stack it onto something you already do.',
-        ),
-        law('2', 'Make it attractive', 'Pair it with something you enjoy.'),
-        law('3', 'Make it easy', 'Start with a two-minute version.'),
-        law(
-          '4',
-          'Make it satisfying',
-          'Reward yourself, keep track, and try never to miss two days in a row.',
-        ),
-        const SizedBox(height: 8),
-        Text(
-          "It's optional. You can turn it on or off any time in Settings.",
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.outline,
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 250),
+          transitionBuilder: (child, animation) => FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: Tween(
+                begin: const Offset(0.08, 0),
+                end: Offset.zero,
+              ).animate(animation),
+              child: child,
+            ),
+          ),
+          child: Column(
+            key: ValueKey(page),
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                height: 180,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Center(child: _picture(context, page)),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                title,
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                message,
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 20),
-        FilledButton(
-          onPressed: () => onChoice(true),
-          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-          child: const Text('Yes, walk me through my first habit'),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            for (var i = 0; i < _stops.length; i++)
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                width: i == page ? 18 : 7,
+                height: 7,
+                decoration: BoxDecoration(
+                  color: i == page
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+          ],
         ),
-        const SizedBox(height: 8),
-        OutlinedButton(
-          onPressed: () => onChoice(false),
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size.fromHeight(48),
-          ),
-          child: const Text('No thanks'),
+        const SizedBox(height: 20),
+        Row(
+          children: [
+            if (page > 0)
+              OutlinedButton(
+                onPressed: () => setState(() => page--),
+                child: const Text('Back'),
+              ),
+            const Spacer(),
+            FilledButton(
+              onPressed: _next,
+              child: Text(page == _stops.length - 1 ? 'Continue' : 'Next'),
+            ),
+          ],
         ),
       ],
     );
+  }
+
+  /// Small pictures made from the same pieces the app uses.
+  Widget _picture(BuildContext context, int page) {
+    final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
+    Widget circle(
+      bool done, {
+      bool today = false,
+      Color color = Colors.green,
+    }) => Container(
+      width: today ? 38 : 28,
+      height: today ? 38 : 28,
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: done ? color : null,
+        border: Border.all(color: today ? accent : color, width: today ? 3 : 2),
+      ),
+      child: done
+          ? const Icon(Icons.check, size: 16, color: Colors.white)
+          : null,
+    );
+    Widget pill(String text, Color color, {bool filled = true}) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: filled ? color : color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: filled ? Colors.white : color,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+    switch (page) {
+      case 0:
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < 6; i++) circle(i != 2),
+            circle(false, today: true),
+          ],
+        );
+      case 1:
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.local_fire_department,
+                  color: Colors.deepOrange,
+                  size: 32,
+                ),
+                Text(
+                  ' 12 days',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    color: Colors.deepOrange,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            pill('You missed this last time', Colors.orange, filled: false),
+          ],
+        );
+      case 2:
+        return Wrap(
+          alignment: WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          runSpacing: 8,
+          children: [
+            pill('Read one page', theme.colorScheme.outline, filled: false),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: Icon(Icons.arrow_forward),
+            ),
+            pill('Read five pages', accent),
+          ],
+        );
+      case 3:
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.shield, size: 52, color: Colors.green),
+            Text(
+              '8 days clean',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        );
+      case 4:
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 24),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Text(
+            'After I pour my coffee, I will read one page on the couch.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.titleMedium,
+          ),
+        );
+      case 5:
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final row in const [
+              [3, 5, 7, 7, 6, 7],
+              [2, 4, 3, 5, 4, 5],
+            ])
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final n in row)
+                    Container(
+                      width: 32,
+                      height: 32,
+                      margin: const EdgeInsets.all(3),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: n == 7 ? accent : accent.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '$n',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: n == 7 ? Colors.white : null,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+          ],
+        );
+      case 6:
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final (text, sign, color) in const [
+              ('Go for a walk', '+', Color(0xFF34C759)),
+              ('Make coffee', '=', Color(0xFF8E8E93)),
+              ('Check my phone', '−', Color(0xFFFF3B30)),
+            ])
+              Container(
+                width: 260,
+                margin: const EdgeInsets.symmetric(vertical: 3),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(child: Text(text)),
+                    pill(sign, color),
+                  ],
+                ),
+              ),
+          ],
+        );
+      case 7:
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '25:00',
+              style: theme.textTheme.displaySmall?.copyWith(
+                fontWeight: FontWeight.w300,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text('🍅 🍅 🍅', style: TextStyle(fontSize: 26)),
+          ],
+        );
+      default:
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.smartphone, size: 44, color: accent),
+            Icon(Icons.sync, size: 28, color: theme.colorScheme.outline),
+            Icon(Icons.dns, size: 44, color: accent),
+            Icon(Icons.sync, size: 28, color: theme.colorScheme.outline),
+            Icon(Icons.laptop, size: 44, color: accent),
+          ],
+        );
+    }
   }
 }
 
@@ -504,12 +818,14 @@ class _Done extends StatelessWidget {
       const _Title(
         icon: Icons.celebration_outlined,
         title: "You're all set",
-        body: 'Check in on the Habits page each day, and see how you\'re doing on the Progress tab.',
+        body:
+            "Check in on Today each day, and see how you're doing on the Progress tab. "
+            'You can take this tour again any time from Settings.',
       ),
       FilledButton(
         onPressed: onFinish,
         style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-        child: const Text('Start using Tasks'),
+        child: const Text('Start using OpenHabits'),
       ),
     ],
   );

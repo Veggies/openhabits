@@ -48,19 +48,10 @@ class _ScorecardViewState extends State<ScorecardView> {
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  SegmentedButton<String>(
-                    showSelectedIcon: false,
-                    style: const ButtonStyle(
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    segments: const [
-                      ButtonSegment(value: '+', label: Text('+')),
-                      ButtonSegment(value: '=', label: Text('=')),
-                      ButtonSegment(value: '-', label: Text('−')),
-                    ],
-                    selected: {item.rating},
-                    onSelectionChanged: (s) =>
-                        repo.updateScorecardItem(item.id, {'rating': s.first}),
+                  RatingPicker(
+                    rating: item.rating,
+                    onChanged: (r) =>
+                        repo.updateScorecardItem(item.id, {'rating': r}),
                   ),
                   IconButton(
                     tooltip: 'Remove',
@@ -84,11 +75,22 @@ class _ScorecardViewState extends State<ScorecardView> {
           ),
           if (repo.scorecard.isNotEmpty) ...[
             const SizedBox(height: 24),
-            Text(
-              '${repo.scorecard.where((s) => s.rating == '+').length} helping · '
-              '${repo.scorecard.where((s) => s.rating == '-').length} hurting · '
-              '${repo.scorecard.where((s) => s.rating == '=').length} neutral',
-              style: theme.textTheme.titleSmall,
+            Wrap(
+              spacing: 20,
+              children: [
+                for (final r in ratings)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(r.icon, size: 18, color: r.color),
+                      const SizedBox(width: 6),
+                      Text(
+                        '${repo.scorecard.where((s) => s.rating == r.value).length} ${r.total.toLowerCase()}',
+                        style: theme.textTheme.titleSmall,
+                      ),
+                    ],
+                  ),
+              ],
             ),
           ],
         ],
@@ -109,7 +111,12 @@ class WeeklyReviewView extends StatefulWidget {
 }
 
 class _WeeklyReviewViewState extends State<WeeklyReviewView> {
-  late DateTime day = widget.day ?? DateTime.now();
+  // Opens on last week while its review is still to do.
+  late DateTime day =
+      widget.day ??
+      (AppScope.read(context).repo.lastWeekReviewDue
+          ? addDays(DateTime.now(), -7)
+          : DateTime.now());
   final _controllers = <String, TextEditingController>{};
   Timer? _save;
 
@@ -197,7 +204,7 @@ class _WeeklyReviewViewState extends State<WeeklyReviewView> {
           ListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
-            leading: Icon(habitIcon(h.icon), color: Color(h.color)),
+            leading: HabitGlyph(icon: h.icon, color: h.color),
             title: Text(h.name),
             trailing: Text(
               '${(repo.completionRate(h, end.isAfter(today) ? today : end, end.isAfter(today) ? daysBetween(start, today) + 1 : 7) * 100).round()}%'
@@ -229,4 +236,92 @@ class _WeeklyReviewViewState extends State<WeeklyReviewView> {
       ],
     );
   }
+}
+
+/// The scorecard's ratings and their colours: green for habits that help,
+/// red for ones that need to go, grey for neutral. The + = − signs stay,
+/// so the meaning never relies on colour alone.
+typedef Rating = ({
+  String value,
+  String sign,
+  String name,
+  String total,
+  IconData icon,
+  Color color,
+});
+
+const List<Rating> ratings = [
+  (
+    value: '+',
+    sign: '+',
+    name: 'Helps',
+    total: 'Helping',
+    icon: Icons.add_circle,
+    color: Color(0xFF34C759),
+  ),
+  (
+    value: '=',
+    sign: '=',
+    name: 'Neutral',
+    total: 'Neutral',
+    icon: Icons.drag_handle,
+    color: Color(0xFF8E8E93),
+  ),
+  (
+    value: '-',
+    sign: '−',
+    name: 'Hurts',
+    total: 'Hurting',
+    icon: Icons.remove_circle,
+    color: Color(0xFFFF3B30),
+  ),
+];
+
+/// + = − as three pills. The chosen one fills with its colour.
+class RatingPicker extends StatelessWidget {
+  final String rating;
+  final ValueChanged<String> onChanged;
+  const RatingPicker({
+    super.key,
+    required this.rating,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      for (final r in ratings)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 3),
+          child: Tooltip(
+            message: r.name,
+            child: Material(
+              color: rating == r.value
+                  ? r.color
+                  : r.color.withValues(alpha: 0.12),
+              shape: const StadiumBorder(),
+              child: InkWell(
+                customBorder: const StadiumBorder(),
+                onTap: () => onChanged(r.value),
+                child: SizedBox(
+                  width: 38,
+                  height: 28,
+                  child: Center(
+                    child: Text(
+                      r.sign,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: rating == r.value ? Colors.white : r.color,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+    ],
+  );
 }

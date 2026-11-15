@@ -31,7 +31,7 @@ class ServerCertificate {
     final pair = CryptoUtils.generateEcKeyPair();
     final privateKey = pair.privateKey as ECPrivateKey;
     final csr = X509Utils.generateEccCsrPem(
-      {'CN': 'Tasks server'},
+      {'CN': 'OpenHabits server'},
       privateKey,
       pair.publicKey as ECPublicKey,
     );

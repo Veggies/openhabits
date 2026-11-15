@@ -24,7 +24,7 @@ Handler buildHandler(
   SyncStore store,
   AuthStore auth, {
   OidcProvider? oidc,
-  String serverName = 'Tasks',
+  String serverName = 'OpenHabits',
 
   /// Trust X-Forwarded-For / CF-Connecting-IP for the client address. Only
   /// safe behind a proxy or tunnel that sets them.

@@ -394,15 +394,15 @@ void main() {
       return id;
     }
 
-    test('streaks are strict unless Atomic Habits is on', () {
+    test('one missed day is forgiven, two in a row are not', () {
       final id = habit();
       for (final d in [10, 12, 13]) {
         repo.setHabitDone(id, DateTime(2026, 11, d), true);
       }
-      expect(repo.streak(repo.habit(id)!), 2);
-      repo.setPrefs({'atomicHabits': true});
       expect(repo.streak(repo.habit(id)!), 3); // one miss forgiven
       expect(repo.votes(id), 3);
+      repo.setHabitDone(id, DateTime(2026, 11, 12), false);
+      expect(repo.streak(repo.habit(id)!), 1); // the 11th and 12th: two misses
     });
 
     test('size check-ins: grow, keep, shrink, and "feels right"', () {

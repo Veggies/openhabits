@@ -22,7 +22,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final scope = AppScope.of(context);
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: isWide(context) ? null : AppBar(title: const Text('Settings')),
       body: ListenableBuilder(
         listenable: Listenable.merge([scope.sync, scope.repo.store]),
         builder: (context, _) {
@@ -149,15 +149,6 @@ class _SettingsPageState extends State<SettingsPage> {
               Card(
                 child: Column(
                   children: [
-                    SwitchListTile(
-                      title: const Text('Use the Atomic Habits framework'),
-                      subtitle: const Text(
-                        'Adds ideas from the book Atomic Habits: tiny starter versions, rewards, '
-                        'streaks that forgive one missed day, a scorecard and a weekly review.',
-                      ),
-                      value: repo.atomicHabits,
-                      onChanged: (v) => repo.setPrefs({'atomicHabits': v}),
-                    ),
                     ListTile(
                       title: const Text('Week starts on'),
                       trailing: SegmentedButton<int>(
@@ -191,11 +182,12 @@ class _SettingsPageState extends State<SettingsPage> {
                         builder: (_) => const _CalendarLinkDialog(),
                       ),
                     ),
+                    const _AccentPicker(),
                     ListTile(
-                      leading: const Icon(Icons.replay),
-                      title: const Text('Run setup again'),
+                      leading: const Icon(Icons.auto_awesome_outlined),
+                      title: const Text('Show the tour again'),
                       subtitle: const Text(
-                        'Go through the welcome steps again, including building a habit step by step.',
+                        'A quick look at everything OpenHabits can do, with the option to build a habit step by step.',
                       ),
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
@@ -633,6 +625,83 @@ class _CalendarLinkDialogState extends State<_CalendarLinkDialog> {
           child: const Text('Done'),
         ),
       ],
+    );
+  }
+}
+
+/// Choose the accent colour. "System" follows the device: the wallpaper
+/// colours on Android, the accent colour on Windows.
+class _AccentPicker extends StatelessWidget {
+  const _AccentPicker();
+
+  @override
+  Widget build(BuildContext context) {
+    final nav = AppScope.of(context).nav;
+    final theme = Theme.of(context);
+    return ValueListenableBuilder(
+      valueListenable: nav.accent,
+      builder: (context, accent, _) {
+        Widget swatch(String name, String label, Decoration fill) {
+          final on = accent == name;
+          return Tooltip(
+            message: label,
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: () => nav.accent.value = name,
+              child: Container(
+                width: 34,
+                height: 34,
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: on
+                      ? Border.all(color: theme.colorScheme.onSurface, width: 2)
+                      : null,
+                ),
+                child: DecoratedBox(decoration: fill),
+              ),
+            ),
+          );
+        }
+
+        return ListTile(
+          leading: const Icon(Icons.palette_outlined),
+          title: const Text('Accent colour'),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                swatch(
+                  'system',
+                  'System',
+                  const BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: SweepGradient(
+                      colors: [
+                        Colors.red,
+                        Colors.orange,
+                        Colors.yellow,
+                        Colors.green,
+                        Colors.blue,
+                        Colors.purple,
+                        Colors.red,
+                      ],
+                    ),
+                  ),
+                ),
+                for (final (name, label, color) in accentChoices)
+                  swatch(
+                    name,
+                    label,
+                    BoxDecoration(shape: BoxShape.circle, color: color),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

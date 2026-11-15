@@ -11,42 +11,46 @@ class FocusPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scope = AppScope.of(context);
+    final lengths = IconButton(
+      tooltip: 'Timer lengths',
+      icon: const Icon(Icons.tune),
+      onPressed: () => _editDurations(context, scope.focus),
+    );
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Focus'),
-        actions: [
-          IconButton(
-            tooltip: 'Timer lengths',
-            icon: const Icon(Icons.tune),
-            onPressed: () => _editDurations(context, scope.focus),
-          ),
-        ],
-      ),
-      body: ListenableBuilder(
-        listenable: Listenable.merge([scope.focus, scope.repo.store]),
-        builder: (context, _) => LayoutBuilder(
-          builder: (context, constraints) {
-            final timer = _TimerPanel(focus: scope.focus);
-            const stats = _Stats();
-            if (constraints.maxWidth >= 840) {
-              return Row(
-                children: [
-                  Expanded(child: Center(child: timer)),
-                  const VerticalDivider(width: 1),
-                  const SizedBox(width: 360, child: stats),
-                ],
-              );
-            }
-            return ListView(
-              padding: const EdgeInsets.symmetric(vertical: 16),
+      appBar: isWide(context)
+          ? null
+          : AppBar(title: const Text('Focus'), actions: [lengths]),
+      floatingActionButton: isWide(context) ? lengths : null,
+      floatingActionButtonLocation: FloatingActionButtonLocation.endTop,
+      body: _body(scope),
+    );
+  }
+
+  Widget _body(AppScope scope) {
+    return ListenableBuilder(
+      listenable: Listenable.merge([scope.focus, scope.repo.store]),
+      builder: (context, _) => LayoutBuilder(
+        builder: (context, constraints) {
+          final timer = _TimerPanel(focus: scope.focus);
+          const stats = _Stats();
+          if (constraints.maxWidth >= 840) {
+            return Row(
               children: [
-                timer,
-                const SizedBox(height: 24),
-                const SizedBox(height: 420, child: stats),
+                Expanded(child: Center(child: timer)),
+                const VerticalDivider(width: 1),
+                const SizedBox(width: 360, child: stats),
               ],
             );
-          },
-        ),
+          }
+          return ListView(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            children: [
+              timer,
+              const SizedBox(height: 24),
+              const SizedBox(height: 520, child: stats),
+            ],
+          );
+        },
       ),
     );
   }
@@ -327,11 +331,13 @@ class _Stats extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        const TomatoRow(),
+        const SizedBox(height: 24),
         Text('Overview', style: theme.textTheme.titleMedium),
         const SizedBox(height: 12),
         Row(
           children: [
-            stat("Today's pomos", '${todays.length}'),
+            stat('Sessions today', '${todays.length}'),
             stat(
               'Today',
               minutesLabel(todays.fold(0, (a, s) => a + s.minutes)),
@@ -438,5 +444,77 @@ class _MinutesFieldState extends State<_MinutesField> {
       ),
       onSubmitted: (_) => _commit(),
     ),
+  );
+}
+
+/// Today's earned pomodoros against the daily goal: a tomato for each
+/// focus session finished, and an empty slot for each one still to go.
+class TomatoRow extends StatelessWidget {
+  const TomatoRow({super.key});
+
+  @override
+  Widget build(BuildContext context) => DataBuilder(
+    builder: (context, repo) {
+      final theme = Theme.of(context);
+      final earned = repo.pomodorosToday;
+      final goal = repo.focusGoal;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  "Today's pomodoros",
+                  style: theme.textTheme.titleMedium,
+                ),
+              ),
+              PopupMenuButton<int>(
+                tooltip: 'Change your daily goal',
+                initialValue: goal,
+                onSelected: (g) => repo.setPrefs({'focusGoal': g}),
+                itemBuilder: (_) => [
+                  for (var g = 1; g <= 12; g++)
+                    PopupMenuItem(value: g, child: Text('$g a day')),
+                ],
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Text(
+                    earned >= goal ? 'Goal reached' : '$earned of $goal',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: earned >= goal
+                          ? Colors.green
+                          : theme.colorScheme.outline,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (var i = 0; i < (earned > goal ? earned : goal); i++)
+                i < earned
+                    ? const Text('🍅', style: TextStyle(fontSize: 24))
+                    : Container(
+                        width: 28,
+                        height: 28,
+                        margin: const EdgeInsets.all(1),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: theme.colorScheme.outlineVariant,
+                            width: 1.5,
+                          ),
+                        ),
+                      ),
+            ],
+          ),
+        ],
+      );
+    },
   );
 }

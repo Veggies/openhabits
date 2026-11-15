@@ -199,7 +199,7 @@ class UpnpClient {
     UpnpGateway gw, {
     required int externalPort,
     required int internalPort,
-    String description = 'Tasks server',
+    String description = 'OpenHabits server',
     int leaseSeconds = 3600,
   }) async {
     Map<String, Object> args(int lease) => {

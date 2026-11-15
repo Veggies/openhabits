@@ -64,5 +64,5 @@ class SettingsStore {
   String? get lastRemoteUrl => get('lastRemoteUrl') as String?;
   set lastRemoteUrl(String? v) => set('lastRemoteUrl', v);
 
-  String get serverName => get('serverName') as String? ?? 'Tasks';
+  String get serverName => get('serverName') as String? ?? 'OpenHabits';
 }

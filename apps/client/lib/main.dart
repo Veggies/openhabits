@@ -1,3 +1,4 @@
+import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:path_provider/path_provider.dart';
@@ -20,7 +21,7 @@ Future<void> main() async {
   runApp(App(repo: repo, sync: sync, focus: FocusController(repo)));
 }
 
-class App extends StatelessWidget {
+class App extends StatefulWidget {
   final Repo repo;
   final SyncEngine sync;
   final FocusController focus;
@@ -32,21 +33,63 @@ class App extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    const seed = Color(0xFF4772FA);
-    return AppScope(
-      repo: repo,
-      sync: sync,
-      focus: focus,
-      child: MaterialApp(
-        title: 'Tasks',
-        debugShowCheckedModeBanner: false,
-        theme: _theme(seed, Brightness.light),
-        darkTheme: _theme(seed, Brightness.dark),
-        home: _Root(store: repo.store),
-      ),
-    );
+  State<App> createState() => _AppState();
+}
+
+class _AppState extends State<App> {
+  late final nav = AppNav(widget.repo.store);
+
+  /// The device's own colour, for the "System" accent: the wallpaper
+  /// colours on Android 12 and later, the accent colour on Windows.
+  Color? systemColor;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSystemColor();
   }
+
+  Future<void> _loadSystemColor() async {
+    try {
+      final palette = await DynamicColorPlugin.getCorePalette();
+      final accent = palette != null
+          ? Color(palette.primary.get(40))
+          : await DynamicColorPlugin.getAccentColor();
+      if (accent != null && mounted) setState(() => systemColor = accent);
+    } catch (_) {
+      // Not available here (tests, older systems): use the default.
+    }
+  }
+
+  @override
+  void dispose() {
+    nav.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: nav.accent,
+    builder: (context, _) {
+      final chosen = accentChoices.where((c) => c.$1 == nav.accent.value);
+      final seed = chosen.isNotEmpty
+          ? chosen.first.$3
+          : systemColor ?? const Color(0xFF4772FA);
+      return AppScope(
+        repo: widget.repo,
+        sync: widget.sync,
+        focus: widget.focus,
+        nav: nav,
+        child: MaterialApp(
+          title: 'OpenHabits',
+          debugShowCheckedModeBanner: false,
+          theme: _theme(seed, Brightness.light),
+          darkTheme: _theme(seed, Brightness.dark),
+          home: _Root(store: widget.repo.store),
+        ),
+      );
+    },
+  );
 }
 
 ThemeData _theme(Color seed, Brightness brightness) => ThemeData(

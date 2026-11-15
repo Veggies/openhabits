@@ -85,8 +85,7 @@ class _HabitEditorState extends State<HabitEditor> {
   @override
   Widget build(BuildContext context) {
     final repo = AppScope.of(context).repo;
-    final framework =
-        repo.atomicHabits || !(widget.existing?.plan.isEmpty ?? true);
+    final framework = true;
     final theme = Theme.of(context);
 
     return Scaffold(
@@ -267,11 +266,11 @@ class _HabitEditorState extends State<HabitEditor> {
 /// [Repo.growDaysNeeded] and [Repo.sizeSuggestion].
 const buildUpExplanation =
     "Start with a version so small you can't say no, like reading one page. "
-    'Every two weeks, the app will check in. '
-    "If you've been doing it most days, it'll ask whether it's starting to feel too easy, "
+    "Every two weeks, you'll get a quick check-in. "
+    "If you've been doing it most days, you'll be asked whether it's starting to feel too easy, "
     'and you can make it a bit bigger if you like. '
-    "If you've been missing it a lot, it'll offer to make it smaller for a while. "
-    'You can always keep it as it is, or tell it the size feels right.\n\n'
+    "If you've been missing it a lot, you'll get the option to make it smaller for a while. "
+    'You can always keep it as it is, or say the size feels right.\n\n'
     'For a daily habit, "most days" means 12 out of 14. For one you do 3 times a week, it\'s 5 out of 6.';
 
 /// The optional "start small and grow it" part of a habit: a switch, and
@@ -339,7 +338,7 @@ class _BuildUpFieldsState extends State<BuildUpFields> {
                 children: [
                   Expanded(
                     child: Text(
-                      "You said this size feels right, so the app won't suggest changing it.",
+                      "You said this size feels right, so you won't be asked about changing it.",
                       style: muted,
                     ),
                   ),
@@ -367,32 +366,127 @@ String durationLabel(int minutes) {
 }
 
 /// A grid of habit icons. Returns the chosen icon's name.
+/// A few emoji to start with; any emoji can be typed or pasted.
+const _emojiSuggestions = [
+  '📚',
+  '🏃',
+  '🚶',
+  '🧘',
+  '💧',
+  '😴',
+  '🥗',
+  '🍎',
+  '💪',
+  '🚴',
+  '✍️',
+  '🎸',
+  '🎨',
+  '🧹',
+  '🌱',
+  '🐶',
+  '🙏',
+  '💊',
+  '🦷',
+  '☀️',
+  '📵',
+  '🚭',
+  '💰',
+  '🧠',
+];
+
+/// Emoji first, then the built-in symbols. Returns the chosen icon: a
+/// symbol's key, or the emoji itself.
 Future<String?> pickHabitIcon(
   BuildContext context, {
   required String selected,
   required int color,
 }) => showDialog<String>(
   context: context,
-  builder: (context) => AlertDialog(
-    title: const Text('Choose an icon'),
-    content: SizedBox(
-      width: 360,
-      child: GridView.count(
-        shrinkWrap: true,
-        crossAxisCount: 6,
-        children: [
-          for (final MapEntry(:key, :value) in habitIcons.entries)
-            IconButton(
-              tooltip: key,
-              isSelected: key == selected,
-              icon: Icon(value),
-              color: key == selected ? Color(color) : null,
-              onPressed: () => Navigator.pop(context, key),
+  builder: (context) {
+    final theme = Theme.of(context);
+    Widget tile(bool on, Widget child, VoidCallback onTap, String tip) =>
+        Tooltip(
+          message: tip,
+          child: Material(
+            color: on ? Color(color) : Color(color).withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(12),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: onTap,
+              child: SizedBox(
+                width: 48,
+                height: 48,
+                child: Center(child: child),
+              ),
             ),
-        ],
+          ),
+        );
+    return AlertDialog(
+      title: const Text('Choose an icon'),
+      content: SizedBox(
+        width: 380,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Emoji', style: theme.textTheme.titleSmall),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final e in _emojiSuggestions)
+                    tile(
+                      e == selected,
+                      Text(e, style: const TextStyle(fontSize: 24)),
+                      () => Navigator.pop(context, e),
+                      e,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                decoration: const InputDecoration(
+                  hintText: 'Or type any emoji',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                onChanged: (text) {
+                  final emoji = lastEmoji(text);
+                  if (emoji != null) Navigator.pop(context, emoji);
+                },
+              ),
+              const SizedBox(height: 16),
+              Text('Symbols', style: theme.textTheme.titleSmall),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final MapEntry(:key, :value) in habitIcons.entries)
+                    tile(
+                      key == selected,
+                      Icon(
+                        value,
+                        color: key == selected ? Colors.white : Color(color),
+                      ),
+                      () => Navigator.pop(context, key),
+                      key,
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
-    ),
-  ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+      ],
+    );
+  },
 );
 
 String _planValue(HabitPlan p, String name) => switch (name) {
@@ -649,6 +743,7 @@ class HabitAvatar extends StatelessWidget {
       color: Color(color).withValues(alpha: 0.18),
       shape: BoxShape.circle,
     ),
-    child: Icon(habitIcon(icon), color: Color(color), size: size * 0.55),
+    alignment: Alignment.center,
+    child: HabitGlyph(icon: icon, color: color, size: size * 0.55),
   );
 }

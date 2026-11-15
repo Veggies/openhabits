@@ -23,7 +23,7 @@ class ServerInfo {
   final String? oidcLabel;
 
   ServerInfo(this.url, Map<String, Object?> json)
-    : name = json['name'] as String? ?? 'Tasks',
+    : name = json['name'] as String? ?? 'OpenHabits',
       oidcLabel = (json['oidc'] as Map?)?['label'] as String?;
 }
 
@@ -181,13 +181,13 @@ class SyncEngine extends ChangeNotifier {
     }
     if (response.statusCode != 200) {
       throw SyncException(
-        "$url doesn't look like a Tasks server (HTTP ${response.statusCode}).",
+        "$url doesn't look like an OpenHabits server (HTTP ${response.statusCode}).",
       );
     }
     try {
       return ServerInfo(url, jsonDecode(response.body) as Map<String, Object?>);
     } on FormatException {
-      throw SyncException("$url doesn't look like a Tasks server.");
+      throw SyncException("$url doesn't look like an OpenHabits server.");
     }
   }
 

@@ -2,151 +2,116 @@ import 'package:core/core.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../data/repo.dart';
-import 'atomic_pages.dart';
 import 'common.dart';
-import 'growth_chart.dart';
+import 'habit_detail.dart';
 import 'habit_editor.dart';
 
-class HabitsPage extends StatefulWidget {
+/// Today's habits. On phones, opening a habit shows its page; on
+/// computers it slides in over the list (see [HabitPreview]).
+class HabitsPage extends StatelessWidget {
   const HabitsPage({super.key});
-
-  @override
-  State<HabitsPage> createState() => _HabitsPageState();
-}
-
-/// The Habits page's tabs. My habits and Progress are always there; Scorecard
-/// and Weekly review only exist with the
-/// Atomic Habits framework on.
-enum HabitsTab { habits, growth, scorecard, review }
-
-class _HabitsPageState extends State<HabitsPage> with TickerProviderStateMixin {
-  /// On phones the overview is a second view instead of a side pane.
-  bool showOverview = false;
-
-  /// The week the Weekly review tab opens on (null = this week).
-  DateTime? reviewDay;
-
-  /// One controller with every tab, one with just the two that are always
-  /// there; which one is in use follows the Atomic Habits setting.
-  late final _all = TabController(length: HabitsTab.values.length, vsync: this)
-    ..addListener(() => setState(() {}));
-  late final _basic = TabController(length: 2, vsync: this)
-    ..addListener(() => setState(() {}));
-
-  List<HabitsTab> _visible(bool framework) =>
-      framework ? HabitsTab.values : const [HabitsTab.habits, HabitsTab.growth];
-
-  TabController _tabs(bool framework) => framework ? _all : _basic;
-
-  @override
-  void dispose() {
-    _all.dispose();
-    _basic.dispose();
-    super.dispose();
-  }
-
-  void _open(HabitsTab tab, {DateTime? day}) {
-    if (tab == HabitsTab.review) reviewDay = day;
-    final framework = AppScope.read(context).repo.atomicHabits;
-    final i = _visible(framework).indexOf(tab);
-    if (i >= 0) _tabs(framework).animateTo(i);
-    setState(() {});
-  }
 
   @override
   Widget build(BuildContext context) {
     final wide = isWide(context);
     return DataBuilder(
       builder: (context, repo) {
-        final framework = repo.atomicHabits;
-        final visible = _visible(framework);
-        final tab = visible[_tabs(framework).index];
-        final overviewToggle =
-            !wide && tab == HabitsTab.habits && repo.habits.isNotEmpty;
-
-        Widget habitsBody() => repo.habits.isEmpty
+        final Widget list = repo.habits.isEmpty
             ? const _Empty()
-            : wide
-            ? Row(
-                children: [
-                  Expanded(child: _HabitList(onOpen: _open)),
-                  const VerticalDivider(width: 1),
-                  const SizedBox(width: 420, child: HabitOverview()),
-                ],
-              )
-            : showOverview
-            ? const HabitOverview()
-            : _HabitList(onOpen: _open);
-
+            : const _HabitList();
         return Scaffold(
-          appBar: AppBar(
-            title: const Text('Habits'),
-            bottom: PreferredSize(
-              preferredSize: Size.fromHeight(48 + (overviewToggle ? 52 : 0)),
-              child: Column(
-                children: [
-                  TabBar(
-                    controller: _tabs(framework),
-                    // Centered on wide screens; on phones the three
-                    // share the width so none scroll out of view.
-                    isScrollable: wide,
-                    tabAlignment: wide
-                        ? TabAlignment.center
-                        : TabAlignment.fill,
-                    tabs: [
-                      for (final t in visible)
-                        Tab(
-                          text: switch (t) {
-                            HabitsTab.habits => 'My habits',
-                            HabitsTab.growth => 'Progress',
-                            HabitsTab.scorecard => 'Scorecard',
-                            // Four tabs share a phone's width: keep it short.
-                            HabitsTab.review =>
-                              wide ? 'Weekly review' : 'Review',
-                          },
-                        ),
-                    ],
-                  ),
-                  if (overviewToggle)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4, bottom: 8),
-                      child: SegmentedButton<bool>(
-                        segments: const [
-                          ButtonSegment(value: false, label: Text('Today')),
-                          ButtonSegment(value: true, label: Text('Overview')),
-                        ],
-                        selected: {showOverview},
-                        onSelectionChanged: (s) =>
-                            setState(() => showOverview = s.first),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          floatingActionButton: tab == HabitsTab.habits
-              ? FloatingActionButton.extended(
+          appBar: wide ? null : AppBar(title: const Text('Habits')),
+          floatingActionButton: wide
+              ? null
+              : FloatingActionButton.extended(
                   // Every page lives in one IndexedStack, so FAB hero tags would clash.
                   heroTag: null,
                   icon: const Icon(Icons.add),
                   label: const Text('New habit'),
                   onPressed: () => editHabit(context),
-                )
-              : null,
-          body: switch (tab) {
-            HabitsTab.habits => habitsBody(),
-            HabitsTab.growth => const GrowthView(),
-            HabitsTab.scorecard => const ScorecardView(),
-            HabitsTab.review => WeeklyReviewView(
-              key: ValueKey(reviewDay),
-              day: reviewDay,
-            ),
-          },
+                ),
+          body: wide ? HabitPreview(child: list) : list,
         );
       },
     );
   }
 }
+
+/// Opens a habit's page: over the list on computers, as its own page on
+/// phones.
+void openHabit(BuildContext context, Habit habit) {
+  if (isWide(context)) {
+    AppScope.read(context).nav.openPreview(habit.id);
+  } else {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => HabitDetailPage(habitId: habit.id)),
+    );
+  }
+}
+
+/// Edit, Focus on this, Archive and Delete for a habit, shown on a long
+/// press or right-click.
+Future<void> showHabitMenu(
+  BuildContext context,
+  Habit habit,
+  Offset position,
+) async {
+  final scope = AppScope.read(context);
+  final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+  final choice = await showMenu<String>(
+    context: context,
+    position: RelativeRect.fromRect(
+      position & const Size(1, 1),
+      Offset.zero & overlay.size,
+    ),
+    items: [
+      const PopupMenuItem(value: 'edit', child: Text('Edit')),
+      if (!habit.isQuit)
+        const PopupMenuItem(value: 'focus', child: Text('Focus on this')),
+      const PopupMenuItem(value: 'archive', child: Text('Archive')),
+      const PopupMenuItem(value: 'delete', child: Text('Delete…')),
+    ],
+  );
+  if (!context.mounted) return;
+  switch (choice) {
+    case 'edit':
+      await editHabit(context, existing: habit);
+    case 'focus':
+      scope.nav.focusOn(habit, scope.focus);
+    case 'archive':
+      scope.repo.updateHabit(habit.id, {'archived': true});
+    case 'delete':
+      if (await confirmDeleteHabit(context, habit)) {
+        scope.repo.deleteHabit(habit.id);
+      }
+  }
+}
+
+/// Asks before deleting, since it removes the habit everywhere.
+Future<bool> confirmDeleteHabit(BuildContext context, Habit habit) async =>
+    await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete ${habit.name}?'),
+        content: const Text(
+          'This removes it and its check-ins from all your devices.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete habit'),
+          ),
+        ],
+      ),
+    ) ??
+    false;
 
 class _Empty extends StatelessWidget {
   const _Empty();
@@ -167,9 +132,17 @@ class _Empty extends StatelessWidget {
           Text('No habits yet', style: theme.textTheme.titleMedium),
           const SizedBox(height: 4),
           Text(
-            'Click "New habit" to start one you want to build, or one you want to break.',
+            'Start one you want to build, or one you want to break.',
             style: TextStyle(color: theme.colorScheme.outline),
           ),
+          if (isWide(context)) ...[
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              icon: const Icon(Icons.add),
+              label: const Text('New habit'),
+              onPressed: () => editHabit(context),
+            ),
+          ],
         ],
       ),
     );
@@ -177,9 +150,7 @@ class _Empty extends StatelessWidget {
 }
 
 class _HabitList extends StatelessWidget {
-  /// Switches the Habits page to another tab.
-  final void Function(HabitsTab tab, {DateTime? day}) onOpen;
-  const _HabitList({required this.onOpen});
+  const _HabitList();
 
   // Rebuilds on every data change; a const instance would otherwise
   // never refresh.
@@ -203,6 +174,39 @@ class _HabitList extends StatelessWidget {
       maxWidth: 760,
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
       children: [
+        // On computers there's no title bar, so the page names itself and
+        // holds the New habit button.
+        if (isWide(context))
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 12, 4, 16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Today',
+                        style: theme.textTheme.headlineMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        fullDate(repo.clock()),
+                        style: TextStyle(color: theme.colorScheme.outline),
+                      ),
+                    ],
+                  ),
+                ),
+                FilledButton.icon(
+                  icon: const Icon(Icons.add),
+                  label: const Text('New habit'),
+                  onPressed: () => editHabit(context),
+                ),
+              ],
+            ),
+          ),
         if (repo.lastWeekReviewDue)
           Card(
             color: theme.colorScheme.tertiaryContainer,
@@ -213,8 +217,11 @@ class _HabitList extends StatelessWidget {
                 'Take a minute to look back on last week and see how your habits went.',
               ),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () =>
-                  onOpen(HabitsTab.review, day: addDays(repo.clock(), -7)),
+              onTap: () {
+                AppScope.read(context).nav
+                  ..showScorecard(false)
+                  ..go(AppTab.reflect);
+              },
             ),
           ),
         if (due.isNotEmpty)
@@ -240,7 +247,7 @@ class _HabitList extends StatelessWidget {
                       ? null
                       : repo.sizeSuggestion(current);
                   if (s == null) continue;
-                  final answered = await _sizeCheckIn(
+                  final answered = await sizeCheckIn(
                     context,
                     current!,
                     s,
@@ -270,7 +277,11 @@ class _HabitList extends StatelessWidget {
               'Try the Scorecard. You list what you already do each day and see which habits help you and which hold you back.',
             ),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => onOpen(HabitsTab.scorecard),
+            onTap: () {
+              AppScope.read(context).nav
+                ..showScorecard(true)
+                ..go(AppTab.reflect);
+            },
           ),
         ],
       ],
@@ -466,7 +477,7 @@ class _HabitRow extends StatelessWidget {
           : 'You missed this last time, so try not to miss it two days in a row. Even doing a tiny bit counts.';
     } else {
       line = details;
-      hover = plan.sizeHistory.length > 1 ? _versionLine(plan) : details;
+      hover = plan.sizeHistory.length > 1 ? versionLine(plan) : details;
     }
 
     final nameColumn = Column(
@@ -516,20 +527,6 @@ class _HabitRow extends StatelessWidget {
       ],
     );
 
-    final menu = PopupMenuButton<String>(
-      tooltip: 'More',
-      onSelected: (v) {
-        if (v == 'edit') editHabit(context, existing: habit);
-        if (v == 'archive') repo.updateHabit(habit.id, {'archived': true});
-        if (v == 'delete') repo.deleteHabit(habit.id);
-      },
-      itemBuilder: (_) => const [
-        PopupMenuItem(value: 'edit', child: Text('Edit')),
-        PopupMenuItem(value: 'archive', child: Text('Archive')),
-        PopupMenuItem(value: 'delete', child: Text('Delete')),
-      ],
-    );
-
     final avatar = Padding(
       padding: const EdgeInsets.only(left: 12, right: 10),
       child: HabitAvatar(icon: habit.icon, color: habit.color, size: 32),
@@ -542,7 +539,17 @@ class _HabitRow extends StatelessWidget {
           ? theme.colorScheme.onSurface.withValues(alpha: 0.035)
           : Colors.transparent,
       child: InkWell(
-        onTap: () => editHabit(context, existing: habit),
+        onTap: () => openHabit(context, habit),
+        onLongPress: () {
+          final box = context.findRenderObject() as RenderBox;
+          showHabitMenu(
+            context,
+            habit,
+            box.localToGlobal(box.size.center(Offset.zero)),
+          );
+        },
+        onSecondaryTapDown: (d) =>
+            showHabitMenu(context, habit, d.globalPosition),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
           child: wide
@@ -554,7 +561,6 @@ class _HabitRow extends StatelessWidget {
                     const SizedBox(width: 12),
                     stat,
                     const Spacer(),
-                    menu,
                   ],
                 )
               : Column(
@@ -564,7 +570,7 @@ class _HabitRow extends StatelessWidget {
                         avatar,
                         Expanded(child: nameColumn),
                         stat,
-                        menu,
+                        const SizedBox(width: 12),
                       ],
                     ),
                     Padding(
@@ -673,213 +679,9 @@ class _DayToggle extends StatelessWidget {
   }
 }
 
-/// Every habit at a glance for a week or a month.
-class HabitOverview extends StatefulWidget {
-  const HabitOverview({super.key});
-
-  @override
-  State<HabitOverview> createState() => _HabitOverviewState();
-}
-
-class _HabitOverviewState extends State<HabitOverview> {
-  bool month = false;
-  DateTime anchor = DateTime.now();
-
-  // Rebuilds on every data change; a const instance would otherwise
-  // never refresh.
-  @override
-  Widget build(BuildContext context) =>
-      DataBuilder(builder: (context, _) => _build(context));
-
-  Widget _build(BuildContext context) {
-    final repo = AppScope.of(context).repo;
-    final theme = Theme.of(context);
-    final habits = repo.habits;
-    final today = dateOnly(repo.clock());
-
-    final List<DateTime> days;
-    final String title;
-    if (month) {
-      final first = DateTime(anchor.year, anchor.month);
-      days = [
-        for (var d = 0; d < daysInMonth(first.year, first.month); d++)
-          addDays(first, d),
-      ];
-      title = '${monthNamesLong[first.month - 1]} ${first.year}';
-    } else {
-      final start = startOfWeek(anchor, repo.weekStart);
-      days = [for (var d = 0; d < 7; d++) addDays(start, d)];
-      title = '${shortDate(days.first)} – ${shortDate(days.last)}';
-    }
-
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Row(
-          children: [
-            Expanded(child: Text(title, style: theme.textTheme.titleMedium)),
-            IconButton(
-              tooltip: 'Previous',
-              icon: const Icon(Icons.chevron_left),
-              onPressed: () => setState(
-                () => anchor = month
-                    ? addMonths(anchor, -1)
-                    : addDays(anchor, -7),
-              ),
-            ),
-            IconButton(
-              tooltip: 'Next',
-              icon: const Icon(Icons.chevron_right),
-              onPressed: () => setState(
-                () =>
-                    anchor = month ? addMonths(anchor, 1) : addDays(anchor, 7),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        SegmentedButton<bool>(
-          segments: const [
-            ButtonSegment(value: false, label: Text('Week')),
-            ButtonSegment(value: true, label: Text('Month')),
-          ],
-          selected: {month},
-          onSelectionChanged: (s) => setState(() => month = s.first),
-        ),
-        const SizedBox(height: 16),
-        if (!month)
-          Row(
-            children: [
-              const SizedBox(width: 120),
-              for (final d in days)
-                Expanded(
-                  child: Text(
-                    weekdayShort(d.weekday),
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: d == today
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.outline,
-                      fontWeight: d == today ? FontWeight.bold : null,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        for (final h in habits)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: month
-                ? _monthRow(context, repo, h, days, today)
-                : _weekRow(context, repo, h, days, today),
-          ),
-      ],
-    );
-  }
-
-  Widget _cell(
-    BuildContext context,
-    Repo repo,
-    Habit h,
-    DateTime day,
-    DateTime today,
-    double size,
-  ) {
-    final theme = Theme.of(context);
-    final future = day.isAfter(today);
-    final before = day.isBefore(dateOnly(h.createdAt.toLocal()));
-    final hit = repo.isHabitDone(h.id, day);
-    final scheduled = h.isScheduled(day);
-    final Color? fill;
-    if (future || before || !scheduled) {
-      fill = null;
-    } else {
-      fill = hit ? Color(h.color) : null;
-    }
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: fill,
-        borderRadius: BorderRadius.circular(size / 4),
-        border: fill == null
-            ? Border.all(
-                color: theme.colorScheme.outlineVariant.withValues(
-                  alpha: scheduled && !future ? 1 : 0.3,
-                ),
-              )
-            : null,
-      ),
-    );
-  }
-
-  Widget _weekRow(
-    BuildContext context,
-    Repo repo,
-    Habit h,
-    List<DateTime> days,
-    DateTime today,
-  ) => Row(
-    children: [
-      SizedBox(
-        width: 120,
-        child: Row(
-          children: [
-            Icon(habitIcon(h.icon), size: 18, color: Color(h.color)),
-            const SizedBox(width: 6),
-            Expanded(child: Text(h.name, overflow: TextOverflow.ellipsis)),
-          ],
-        ),
-      ),
-      for (final d in days)
-        Expanded(child: Center(child: _cell(context, repo, h, d, today, 20))),
-    ],
-  );
-
-  Widget _monthRow(
-    BuildContext context,
-    Repo repo,
-    Habit h,
-    List<DateTime> days,
-    DateTime today,
-  ) {
-    final theme = Theme.of(context);
-    final end = days.last.isAfter(today) ? today : days.last;
-    final rate = end.isBefore(days.first)
-        ? 0.0
-        : repo.completionRate(h, end, daysBetween(days.first, end) + 1);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(habitIcon(h.icon), size: 18, color: Color(h.color)),
-            const SizedBox(width: 6),
-            Expanded(child: Text(h.name)),
-            Text(
-              '${(rate * 100).round()}% ${h.isQuit ? 'clean' : 'done'}',
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: theme.colorScheme.outline,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Wrap(
-          spacing: 3,
-          runSpacing: 3,
-          children: [
-            for (final d in days) _cell(context, repo, h, d, today, 11),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
 /// "Read one page → Read 5 pages → Read 10 pages": how the habit has grown,
 /// ending with the version for now (the last three, to keep it short).
-String _versionLine(HabitPlan plan) {
+String versionLine(HabitPlan plan) {
   final versions = [for (final v in plan.sizeHistory) v.text];
   if (versions.length < 2) return 'Your version for now: ${plan.twoMinute}';
   final shown = versions.length > 3
@@ -892,7 +694,7 @@ String _versionLine(HabitPlan plan) {
 /// keep it as it is, or say the size feels right and stop asking.
 /// Returns false if it was closed without choosing, so a run of check-ins
 /// can stop there. [step] is "1 of 2" style progress through that run.
-Future<bool> _sizeCheckIn(
+Future<bool> sizeCheckIn(
   BuildContext context,
   Habit habit,
   SizeSuggestion suggestion, {

@@ -26,9 +26,13 @@ class Prefs {
   /// [DateTime.sunday] or [DateTime.monday].
   final int weekStart;
 
+  /// How many pomodoros (focus sessions) to aim for each day.
+  final int focusGoal;
+
   Prefs.fromFields(Fields? f)
     : atomicHabits = f?['atomicHabits'] as bool?,
-      weekStart = f?['weekStart'] as int? ?? DateTime.sunday;
+      weekStart = f?['weekStart'] as int? ?? DateTime.sunday,
+      focusGoal = f?['focusGoal'] as int? ?? 4;
 }
 
 bool _deleted(Fields f) => f[deletedField] == true;

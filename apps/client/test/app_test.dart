@@ -4,7 +4,9 @@ import 'package:client/data/local_store.dart';
 import 'package:client/data/repo.dart';
 import 'package:client/data/sync_engine.dart';
 import 'package:client/main.dart';
+import 'package:client/ui/common.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -25,11 +27,21 @@ Future<Repo> pumpApp(
   return repo;
 }
 
-/// A destination in the app's navigation (rail or bottom bar).
+/// A destination in the app's navigation: the bottom bar on phones, the
+/// tabs across the top on computers.
 Finder nav(String label) => find.descendant(
-  of: find.byWidgetPredicate((w) => w is NavigationRail || w is NavigationBar),
+  of: find.byWidgetPredicate(
+    (w) => w is NavigationBar || w is SegmentedButton<AppTab>,
+  ),
   matching: find.text(label),
 );
+
+/// Goes to a screen. On computers, Settings is a button, not a tab.
+Future<void> go(WidgetTester tester, String label) async {
+  final tab = nav(label);
+  await tester.tap(tab.evaluate().isNotEmpty ? tab : find.byTooltip(label));
+  await tester.pumpAndSettle();
+}
 
 void main() {
   for (final (name, size) in [
@@ -41,9 +53,9 @@ void main() {
       repo.createHabit({'name': 'Read'});
       expect(find.text('Tasks'), findsNothing);
       expect(find.text('Calendar'), findsNothing);
-      for (final tab in ['Focus', 'Settings', 'Habits']) {
-        await tester.tap(nav(tab));
-        await tester.pumpAndSettle();
+      final first = name == 'phone' ? 'Habits' : 'Today';
+      for (final tab in ['Progress', 'Reflect', 'Focus', 'Settings', first]) {
+        await go(tester, tab);
         expect(tester.takeException(), isNull, reason: tab);
       }
       expect(find.text('Read'), findsWidgets);
@@ -74,38 +86,29 @@ void main() {
     ('desktop', const Size(1400, 900)),
     ('phone', const Size(400, 860)),
   ]) {
-    testWidgets('$name: scorecard and weekly review are tabs on Habits', (
+    testWidgets('$name: Reflect has the weekly review and the scorecard', (
       tester,
     ) async {
       final repo = await pumpApp(tester, size);
       repo.createHabit({'name': 'Read'});
-      expect(find.text('Scorecard'), findsNothing); // framework off: no tabs
-
-      repo.setPrefs({'atomicHabits': true});
       await tester.pumpAndSettle();
-      expect(find.text('My habits'), findsOneWidget);
-      expect(
-        find.text(name == 'phone' ? 'Review' : 'Weekly review'),
-        findsOneWidget,
-      );
 
-      // With few habits, the list suggests the scorecard.
+      // With few habits, the list suggests the scorecard, in Reflect.
       await tester.tap(find.text('Not sure what to work on?'));
       await tester.pumpAndSettle();
-      expect(find.byType(FloatingActionButton), findsNothing);
+      expect(find.text('Scorecard'), findsOneWidget);
       await tester.enterText(find.byType(TextField), 'Check phone in bed');
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
       expect(repo.scorecard.single.text, 'Check phone in bed');
+      // Rated with coloured pills.
+      await tester.tap(find.byTooltip('Hurts'));
+      await tester.pumpAndSettle();
+      expect(repo.scorecard.single.rating, '-');
 
-      await tester.tap(find.text(name == 'phone' ? 'Review' : 'Weekly review'));
+      await tester.tap(find.text('Weekly review'));
       await tester.pumpAndSettle();
       expect(find.text('How the week went'), findsOneWidget);
-
-      await tester.tap(find.text('My habits'));
-      await tester.pumpAndSettle();
-      expect(find.byType(FloatingActionButton), findsOneWidget);
-      expect(find.text('Not sure what to work on?'), findsNothing);
     });
   }
 
@@ -230,8 +233,6 @@ void main() {
     final repo = await pumpApp(tester, const Size(1400, 900));
     await tester.tap(find.text('New habit'));
     await tester.pumpAndSettle();
-    // The framework is off, so only the basics are shown.
-    expect(find.text('Atomic Habits'), findsNothing);
     // Days are one row, starting on Sunday.
     final sun = tester.getCenter(find.text('Sun'));
     final sat = tester.getCenter(find.text('Sat'));
@@ -248,115 +249,131 @@ void main() {
     expect(find.byTooltip('A streak of 1 day'), findsOneWidget);
   });
 
-  testWidgets('setup wizard can be run again from Settings', (tester) async {
-    final repo = await pumpApp(tester, const Size(1400, 900));
-    repo.setPrefs({'atomicHabits': false});
-    await tester.tap(find.text('Settings'));
-    await tester.pumpAndSettle();
+  testWidgets('the tour can be taken again from Settings', (tester) async {
+    await pumpApp(tester, const Size(1400, 900));
+    await go(tester, 'Settings');
     await tester.scrollUntilVisible(
-      find.text('Run setup again'),
+      find.text('Show the tour again'),
       200,
       scrollable: find.byType(Scrollable).last,
     );
-    await tester.tap(find.text('Run setup again'));
+    await tester.tap(find.text('Show the tour again'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Get started'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Skip — use on this device only'));
+    // Straight to the tour: no need to connect again.
+    expect(find.text('Check in each day'), findsOneWidget);
+    await tester.tap(find.text('Next'));
     await tester.pumpAndSettle();
-    // Asked again, even though it was answered before.
-    expect(find.text('Build habits with Atomic Habits?'), findsOneWidget);
-    await tester.tap(find.text('Yes, walk me through my first habit'));
+    expect(find.text('Miss once, but never twice'), findsOneWidget);
+    await tester.tap(find.text('Skip tour'));
     await tester.pumpAndSettle();
-    expect(repo.atomicHabits, isTrue);
-    await tester.tap(find.text('Skip'));
+    await tester.tap(find.text("I'll do it later"));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Start using Tasks'));
+    await tester.tap(find.text('Start using OpenHabits'));
     await tester.pumpAndSettle();
-    expect(find.text('Run setup again'), findsOneWidget); // back in Settings
+    expect(
+      find.text('Show the tour again'),
+      findsOneWidget,
+    ); // back in Settings
   });
 
-  testWidgets(
-    'setup wizard: skip the server, build a habit with Atomic Habits',
-    (tester) async {
-      final repo = await pumpApp(
-        tester,
-        const Size(500, 900),
-        onboarded: false,
-      );
-      await tester.tap(find.text('Get started'));
-      await tester.pumpAndSettle();
-      expect(find.text('Connect to your server'), findsOneWidget);
-      await tester.tap(find.text('Skip — use on this device only'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Build habits with Atomic Habits?'), findsOneWidget);
-      await tester.tap(find.text('Yes, walk me through my first habit'));
-      await tester.pumpAndSettle();
-      expect(repo.atomicHabits, isTrue);
-
-      Future<void> fill(String label, String text) async {
-        await tester.enterText(find.widgetWithText(TextField, label), text);
-        await tester.pump();
-      }
-
-      Future<void> next() async {
-        await tester.ensureVisible(find.text('Next'));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Next'));
-        await tester.pumpAndSettle();
-      }
-
-      await fill('I am…', 'a reader');
-      await next();
-      await fill('Habit', 'Read');
-      // Starting small is optional: the boxes appear once it's switched on.
-      expect(find.text('Your version for now'), findsNothing);
-      await tester.tap(find.text('Start small and grow it'));
-      await tester.pumpAndSettle();
-      expect(
-        find.textContaining(
-          'For a daily habit, "most days" means 12 out of 14.',
-        ),
-        findsOneWidget,
-      );
-      await fill('Your version for now', 'Read one page');
-      await next();
-      // Clicking the "When" box itself opens the time picker.
-      await tester.tap(find.widgetWithText(TextField, 'When'));
-      await tester.pumpAndSettle();
-      expect(find.byType(TimePickerDialog), findsOneWidget);
-      await tester.tap(find.text('OK'));
-      await tester.pumpAndSettle();
-      expect(find.text('07:00'), findsOneWidget);
-      await fill('After I…', 'pour my morning coffee');
-      await fill('Where', 'on the couch');
-      await next();
-      await fill('Reward', 'A square of chocolate');
-      await next();
-      expect(
-        find.textContaining(
-          'After I pour my morning coffee, I will read one page at 7:00 AM on the couch.',
-        ),
-        findsOneWidget,
-      );
-      await tester.tap(find.text('Create habit'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Start using Tasks'));
-      await tester.pumpAndSettle();
-
-      final habit = repo.habits.single;
-      expect(habit.name, 'Read');
-      expect(habit.plan.identity, 'a reader');
-      expect(habit.plan.reward, 'A square of chocolate');
-      expect(find.text('Today'), findsWidgets); // now in the app
-    },
-  );
-
-  testWidgets('with Atomic Habits on, the editor shows the four laws', (
+  testWidgets('setup wizard: skip the server, take the tour, build a habit', (
     tester,
   ) async {
+    final repo = await pumpApp(tester, const Size(500, 900), onboarded: false);
+    await tester.tap(find.text('Get started'));
+    await tester.pumpAndSettle();
+    expect(find.text('Connect to your server'), findsOneWidget);
+    await tester.tap(find.text('Skip — use on this device only'));
+    await tester.pumpAndSettle();
+
+    // The tour, one page at a time.
+    for (final title in [
+      'Check in each day',
+      'Miss once, but never twice',
+      'Start small, then grow it',
+      'Break bad habits too',
+      'Give each habit a plan',
+      "See how it's going",
+      'Look back each week',
+      'Focus, and earn your tomatoes',
+      'On all your devices',
+    ]) {
+      expect(find.text(title), findsOneWidget);
+      await tester.ensureVisible(
+        find.text('Next').evaluate().isEmpty
+            ? find.text('Continue')
+            : find.text('Next'),
+      );
+      await tester.tap(
+        find.text('Next').evaluate().isEmpty
+            ? find.text('Continue')
+            : find.text('Next'),
+      );
+      await tester.pumpAndSettle();
+    }
+    expect(find.text('Build your first habit?'), findsOneWidget);
+    await tester.tap(find.text("Let's build one"));
+    await tester.pumpAndSettle();
+
+    Future<void> fill(String label, String text) async {
+      await tester.enterText(find.widgetWithText(TextField, label), text);
+      await tester.pump();
+    }
+
+    Future<void> next() async {
+      await tester.ensureVisible(find.text('Next'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Next'));
+      await tester.pumpAndSettle();
+    }
+
+    await fill('I am…', 'a reader');
+    await next();
+    await fill('Habit', 'Read');
+    // Starting small is optional: the boxes appear once it's switched on.
+    expect(find.text('Your version for now'), findsNothing);
+    await tester.tap(find.text('Start small and grow it'));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('For a daily habit, "most days" means 12 out of 14.'),
+      findsOneWidget,
+    );
+    await fill('Your version for now', 'Read one page');
+    await next();
+    // Clicking the "When" box itself opens the time picker.
+    await tester.tap(find.widgetWithText(TextField, 'When'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TimePickerDialog), findsOneWidget);
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    expect(find.text('07:00'), findsOneWidget);
+    await fill('After I…', 'pour my morning coffee');
+    await fill('Where', 'on the couch');
+    await next();
+    await fill('Reward', 'A square of chocolate');
+    await next();
+    expect(
+      find.textContaining(
+        'After I pour my morning coffee, I will read one page at 7:00 AM on the couch.',
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Create habit'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Start using OpenHabits'));
+    await tester.pumpAndSettle();
+
+    final habit = repo.habits.single;
+    expect(habit.name, 'Read');
+    expect(habit.plan.identity, 'a reader');
+    expect(habit.plan.reward, 'A square of chocolate');
+    expect(find.text('Today'), findsWidgets); // now in the app
+  });
+
+  testWidgets('the editor shows the four laws', (tester) async {
     // Tall enough that the whole editor is laid out without scrolling.
     final repo = await pumpApp(tester, const Size(1400, 2400));
     repo.setPrefs({'atomicHabits': true});
@@ -386,8 +403,7 @@ void main() {
     "focus: lengths are adjustable and switching phases doesn't move the timer",
     (tester) async {
       await pumpApp(tester, const Size(1400, 900));
-      await tester.tap(find.text('Focus'));
-      await tester.pumpAndSettle();
+      await go(tester, 'Focus');
       expect(find.text('25:00'), findsOneWidget);
       await tester.tap(find.byTooltip('5 minutes more'));
       await tester.pump();
@@ -408,4 +424,59 @@ void main() {
       expect(tester.getCenter(find.text('Start')), startButton);
     },
   );
+
+  testWidgets('phone: a habit opens as its own page', (tester) async {
+    final repo = await pumpApp(tester, const Size(400, 860));
+    final id = repo.createHabit({'name': 'Read', 'twoMinute': 'Read one page'});
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Read'));
+    await tester.pumpAndSettle();
+    expect(find.text('Edit'), findsOneWidget);
+    expect(find.text('Your plan'), findsOneWidget);
+    // Archive is in the ⋯ menu, and takes you back to the list.
+    await tester.tap(find.byTooltip('More'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Archive'));
+    await tester.pumpAndSettle();
+    expect(repo.habit(id)!.archived, isTrue);
+    expect(find.text('Your plan'), findsNothing);
+  });
+
+  testWidgets('desktop: a habit slides in over the list, Esc closes it', (
+    tester,
+  ) async {
+    final repo = await pumpApp(tester, const Size(1400, 900));
+    repo.createHabit({'name': 'Read'});
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Read'));
+    await tester.pumpAndSettle();
+    expect(find.text('Edit'), findsOneWidget);
+    expect(find.byTooltip('Close (Esc)'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Close (Esc)'), findsNothing);
+  });
+
+  testWidgets('finished focus sessions earn tomatoes toward the goal', (
+    tester,
+  ) async {
+    final repo = await pumpApp(tester, const Size(1400, 900));
+    await go(tester, 'Focus');
+    expect(find.text('0 of 4'), findsOneWidget);
+    repo.recordFocus(start: DateTime.now(), minutes: 25);
+    await tester.pumpAndSettle();
+    expect(find.text('1 of 4'), findsOneWidget);
+    expect(find.text('🍅'), findsOneWidget);
+  });
+
+  test('any single emoji can be a habit icon', () {
+    for (final e in ['📚', '✍️', '☀️', '👩‍💻', '🇯🇵', '👍🏽']) {
+      expect(isEmojiIcon(e), isTrue, reason: e);
+    }
+    for (final t in ['book', 'check', 'a', '1', '', 'ab']) {
+      expect(isEmojiIcon(t), isFalse, reason: t);
+    }
+    expect(lastEmoji('hello 🎸'), '🎸');
+    expect(lastEmoji('abc'), isNull);
+  });
 }

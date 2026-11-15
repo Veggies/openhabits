@@ -112,7 +112,7 @@ void main() {
       expect(status, 200);
       expect(info['hasUsers'], isTrue);
       expect(info['oidc'], isNull);
-      expect((await api.call('GET', '/')).$2['body'], contains('Tasks Server'));
+      expect((await api.call('GET', '/')).$2['body'], contains('OpenHabits Server'));
     });
 
     test('wrong passwords are rejected, then rate limited', () async {

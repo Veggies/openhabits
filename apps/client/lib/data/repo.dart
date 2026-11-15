@@ -50,7 +50,19 @@ class Repo {
   void setPrefs(Fields fields) =>
       store.write(Tables.prefs, Prefs.rowId, fields);
 
-  bool get atomicHabits => prefs.atomicHabits ?? false;
+  /// The app is built around Atomic Habits, so its ideas (one missed day
+  /// forgiven, size check-ins, the weekly review) are always on. The synced
+  /// preference is kept for older versions of the app.
+  bool get atomicHabits => true;
+
+  /// How many pomodoros to aim for each day.
+  int get focusGoal => prefs.focusGoal;
+
+  /// Focus sessions finished today: each one earns a tomato.
+  int get pomodorosToday {
+    final today = dateOnly(clock());
+    return focusSessions.where((s) => dateOnly(s.start) == today).length;
+  }
 
   /// First day of the week for calendars and habit grids.
   int get weekStart => prefs.weekStart;

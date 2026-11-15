@@ -611,7 +611,8 @@ class _Legend extends StatelessWidget {
       children: [
         sample,
         const SizedBox(width: 6),
-        Text(text, style: label),
+        // Wraps on narrow screens instead of running off the edge.
+        Flexible(child: Text(text, style: label)),
       ],
     );
     return Column(

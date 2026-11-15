@@ -1,10 +1,10 @@
-# Tasks
+# OpenHabits
 
 A self-hostable habit tracker. Build habits or break them, start small and grow them over time, see how each week went, and use a focus timer to help. The Atomic Habits method is built in, and it's optional. Your data lives on your own server. One Flutter codebase builds for iOS, Android, macOS, Windows and Linux, and a small Dart server keeps your devices in sync.
 
 ## Set up the server
 
-**TrueNAS:** until Tasks is in the catalog, go to *Apps → Discover Apps → ⋮ →
+**TrueNAS:** until OpenHabits is in the catalog, go to *Apps → Discover Apps → ⋮ →
 Install via YAML* and paste [`deploy/truenas/tasks.yaml`](deploy/truenas/tasks.yaml)
 (set the dataset path first).
 **Anywhere else with Docker:** `docker compose up -d`.

@@ -4,6 +4,7 @@ import 'package:core/core.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../data/focus_controller.dart';
+import '../data/local_store.dart';
 import '../data/repo.dart';
 import '../data/sync_engine.dart';
 
@@ -12,12 +13,14 @@ class AppScope extends InheritedWidget {
   final Repo repo;
   final SyncEngine sync;
   final FocusController focus;
+  final AppNav nav;
 
   const AppScope({
     super.key,
     required this.repo,
     required this.sync,
     required this.focus,
+    required this.nav,
     required super.child,
   });
 
@@ -31,6 +34,76 @@ class AppScope extends InheritedWidget {
   @override
   bool updateShouldNotify(AppScope oldWidget) => false;
 }
+
+/// The main screens.
+enum AppTab { habits, progress, reflect, focus, settings }
+
+/// Navigation state that menus and links anywhere can change: which tab is
+/// showing, which habit is open in the desktop preview, and the accent
+/// colour (kept per device).
+class AppNav extends ChangeNotifier {
+  final LocalStore store;
+  AppNav(this.store);
+
+  AppTab tab = AppTab.habits;
+
+  /// The habit whose page is open over the list (wide screens).
+  String? preview;
+
+  /// Reflect shows the scorecard instead of the weekly review.
+  bool scorecard = false;
+
+  void go(AppTab next) {
+    tab = next;
+    notifyListeners();
+  }
+
+  void openPreview(String? habitId) {
+    preview = habitId;
+    notifyListeners();
+  }
+
+  void showScorecard(bool value) {
+    scorecard = value;
+    notifyListeners();
+  }
+
+  /// "system", or one of [accentChoices]. Has its own notifier, since
+  /// changing it rebuilds the whole app.
+  late final ValueNotifier<String> accent = ValueNotifier(
+    store.meta('accent') ?? 'system',
+  )..addListener(() => store.setMeta('accent', accent.value));
+
+  /// Starts a pomodoro for [habit] and shows the timer.
+  void focusOn(Habit habit, FocusController focus) {
+    if (focus.running || focus.paused) {
+      focus.selectHabit(habit.id);
+    } else {
+      focus.selectPhase(FocusPhase.focus);
+      focus.selectHabit(habit.id);
+      focus.start();
+    }
+    preview = null;
+    go(AppTab.focus);
+  }
+}
+
+/// Accent colours to choose from. "System" follows the device: the
+/// wallpaper colours on Android (Material You), the accent colour on
+/// Windows, and blue elsewhere.
+const accentChoices = <(String, String, Color)>[
+  ('blue', 'Blue', Color(0xFF007AFF)),
+  ('purple', 'Purple', Color(0xFFAF52DE)),
+  ('pink', 'Pink', Color(0xFFFF2D55)),
+  ('red', 'Red', Color(0xFFFF3B30)),
+  ('orange', 'Orange', Color(0xFFFF9500)),
+  ('yellow', 'Yellow', Color(0xFFFFCC00)),
+  ('green', 'Green', Color(0xFF34C759)),
+  ('mint', 'Mint', Color(0xFF00C7BE)),
+  ('teal', 'Teal', Color(0xFF30B0C7)),
+  ('indigo', 'Indigo', Color(0xFF5856D6)),
+  ('graphite', 'Graphite', Color(0xFF8E8E93)),
+];
 
 /// Rebuilds whenever local data changes (local edits or synced changes).
 class DataBuilder extends StatelessWidget {
@@ -137,10 +210,58 @@ const habitIcons = <String, IconData>{
   'no-tv': Icons.tv_off_outlined,
 };
 
+/// A habit's icon is either one of [habitIcons] (stored by its key) or any
+/// single emoji, stored as itself. Matches the Apple app.
+bool isEmojiIcon(String icon) =>
+    icon.isNotEmpty &&
+    !habitIcons.containsKey(icon) &&
+    icon.characters.length == 1 &&
+    icon.runes.first >= 0x2000;
+
+/// The last emoji in some typed text, if any.
+String? lastEmoji(String text) {
+  for (final c in text.characters.toList().reversed) {
+    if (isEmojiIcon(c)) return c;
+  }
+  return null;
+}
+
+/// Just the icon: a symbol in the habit's colour, or the emoji itself.
+class HabitGlyph extends StatelessWidget {
+  final String icon;
+  final int color;
+  final double size;
+  const HabitGlyph({
+    super.key,
+    required this.icon,
+    required this.color,
+    this.size = 22,
+  });
+
+  @override
+  Widget build(BuildContext context) => isEmojiIcon(icon)
+      ? Text(icon, style: TextStyle(fontSize: size * 0.95, height: 1.1))
+      : Icon(habitIcon(icon), color: Color(color), size: size);
+}
+
 IconData habitIcon(String name) =>
     habitIcons[name] ?? Icons.check_circle_outline;
 
 String shortDate(DateTime d) => '${_monthNames[d.month - 1]} ${d.day}';
+
+const _weekdayNamesLong = [
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+  'Sunday',
+];
+
+/// "Sunday, November 15".
+String fullDate(DateTime d) =>
+    '${_weekdayNamesLong[d.weekday - 1]}, ${monthNamesLong[d.month - 1]} ${d.day}';
 
 /// "Today", "Tomorrow", "Yesterday", "Mon", or "Nov 20" (with the year if
 /// it isn't this year).
