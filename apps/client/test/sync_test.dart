@@ -90,52 +90,73 @@ void main() {
     serverStore.close();
   });
 
-  test('a task created on one device appears on the other', () async {
-    phone.repo.createTask(title: 'Buy milk');
+  test('a habit created on one device appears on the other', () async {
+    phone.repo.createHabit({'name': 'Read'});
     await phone.sync.syncNow();
     await laptop.sync.syncNow();
-    expect(
-      laptop.repo
-          .tasksFor(const SmartFilter(SmartList.inbox))
-          .map((t) => t.title),
-      ['Buy milk'],
-    );
+    expect(laptop.repo.habits.map((h) => h.name), ['Read']);
     expect(phone.store.pendingCount, 0);
   });
 
   test('concurrent edits to different fields both survive', () async {
-    final id = phone.repo.createTask(title: 'Buy milk');
+    final id = phone.repo.createHabit({'name': 'Read'});
     await phone.sync.syncNow();
     await laptop.sync.syncNow();
 
     // Both devices edit while "offline".
-    laptop.repo.updateTask(id, {'title': 'Buy oat milk'});
-    phone.repo.complete(phone.repo.task(id)!);
+    laptop.repo.updateHabit(id, {'name': 'Read before bed'});
+    phone.repo.updateHabit(id, {'color': 0xFF009688});
 
     await laptop.sync.syncNow();
     await phone.sync.syncNow();
     await laptop.sync.syncNow();
 
     for (final device in [phone, laptop]) {
-      final task = device.repo.task(id)!;
-      expect((task.title, task.done), ('Buy oat milk', true));
+      final habit = device.repo.habit(id)!;
+      expect((habit.name, habit.color), ('Read before bed', 0xFF009688));
     }
   });
 
   test('delete on one device, restore on another', () async {
-    final id = phone.repo.createTask(title: 'Call mom');
+    final id = phone.repo.createHabit({'name': 'Stretch'});
     await phone.sync.syncNow();
     await laptop.sync.syncNow();
 
-    phone.repo.deleteTask(id);
+    phone.repo.deleteHabit(id);
     await phone.sync.syncNow();
     await laptop.sync.syncNow();
-    expect(laptop.repo.task(id)!.deleted, isTrue);
+    expect(laptop.repo.habit(id)!.deleted, isTrue);
 
-    laptop.repo.restoreTask(id);
+    laptop.repo.updateHabit(id, {deletedField: false});
     await laptop.sync.syncNow();
     await phone.sync.syncNow();
-    expect(phone.repo.task(id)!.deleted, isFalse);
+    expect(phone.repo.habit(id)!.deleted, isFalse);
+  });
+
+  test('habits with a time can be shown in a calendar app', () async {
+    phone.repo.createHabit({
+      'name': 'Read',
+      'time': '21:00',
+      'duration': 30,
+      'weekdays': [1, 2, 3, 4, 5, 6, 7],
+    });
+    await phone.sync.syncNow();
+
+    final link = await laptop.sync.calendarLink();
+    expect(link.url, startsWith('$server/calendar/'));
+    expect(link.anywhere, isFalse); // the server has no public address
+
+    // A calendar app fetches the link without signing in.
+    final response = await handler(shelf.Request('GET', Uri.parse(link.url)));
+    final ics = await response.readAsString();
+    expect(response.statusCode, 200);
+    expect(ics, contains('SUMMARY:Read'));
+    expect(ics, contains('RRULE:FREQ=DAILY'));
+
+    // Both devices see the same link; a new one replaces it.
+    expect((await phone.sync.calendarLink()).url, link.url);
+    final replaced = await phone.sync.calendarLink(replace: true);
+    expect(replaced.url, isNot(link.url));
   });
 
   test('preferences such as the Atomic Habits choice follow you', () async {
@@ -195,7 +216,7 @@ void main() {
           s['token_hash'],
         ]);
       }
-      phone.repo.createTask(title: 'x');
+      phone.repo.createHabit({'name': 'x'});
       await phone.sync.syncNow();
       expect(phone.sync.status, SyncStatus.signedOut);
       expect(phone.sync.isConfigured, isFalse);
@@ -203,26 +224,23 @@ void main() {
     });
 
     test("a different person on the same device doesn't see the last person's data", () async {
-      phone.repo.createTask(title: "Ryan's secret");
+      phone.repo.createHabit({'name': "Ryan's secret habit"});
       await phone.sync.syncNow();
       await phone.sync.signOut();
 
       await phone.signIn('sam', 'sam password');
-      expect(phone.repo.allTasks, isEmpty);
+      expect(phone.repo.habits, isEmpty);
 
       await phone.signIn('ryan', 'correct horse');
-      expect(phone.repo.allTasks.map((t) => t.title), ["Ryan's secret"]);
+      expect(phone.repo.habits.map((h) => h.name), ["Ryan's secret habit"]);
     });
 
-    test('tasks made offline before the first sign-in are uploaded', () async {
+    test('habits made offline before the first sign-in are uploaded', () async {
       final device = Device(handler);
-      device.repo.createTask(title: 'Made offline');
+      device.repo.createHabit({'name': 'Made offline'});
       await device.signIn();
       await laptop.sync.syncNow();
-      expect(
-        laptop.repo.allTasks.map((t) => t.title),
-        contains('Made offline'),
-      );
+      expect(laptop.repo.habits.map((h) => h.name), contains('Made offline'));
       device.sync.dispose();
     });
 
@@ -294,7 +312,7 @@ void main() {
       // Leave home: the home address stops answering.
       phone.unreachable.add('server');
       phone.hostsUsed.clear();
-      phone.repo.createTask(title: 'Added on the train');
+      phone.repo.createHabit({'name': 'Added on the train'});
       await phone.sync.syncNow();
       expect(phone.sync.status, SyncStatus.idle);
       expect(phone.hostsUsed, everyElement('203.0.113.7'));
@@ -302,7 +320,7 @@ void main() {
 
       await owner.sync.syncNow();
       expect(
-        owner.repo.allTasks.map((t) => t.title),
+        owner.repo.habits.map((h) => h.name),
         contains('Added on the train'),
       );
       owner.sync.dispose();
@@ -338,20 +356,20 @@ void main() {
     final path = '${dir.path}/data.sqlite';
 
     final first = LocalStore.open(path);
-    final id = Repo(first).createTask(title: 'Persist me');
+    final id = Repo(first).createHabit({'name': 'Persist me'});
     final pending = first.pendingCount;
     final nodeId = first.nodeId;
     first.dispose();
 
     final reopened = LocalStore.open(path);
     addTearDown(reopened.dispose);
-    expect(Repo(reopened).task(id)!.title, 'Persist me');
+    expect(Repo(reopened).habit(id)!.name, 'Persist me');
     expect(reopened.pendingCount, pending);
     expect(reopened.nodeId, nodeId);
 
     // New edits must still win over ones made before the restart.
-    Repo(reopened).updateTask(id, {'title': 'Edited'});
-    expect(Repo(reopened).task(id)!.title, 'Edited');
+    Repo(reopened).updateHabit(id, {'name': 'Edited'});
+    expect(Repo(reopened).habit(id)!.name, 'Edited');
   });
 
   group('Repo', () {
@@ -362,42 +380,6 @@ void main() {
         clock: () => DateTime(2026, 11, 13, 10),
       ),
     );
-
-    test('quick add creates the named list and applies everything parsed', () {
-      final id = repo.quickAdd(
-        'Call mom tomorrow 5pm #family !high ^Personal',
-      )!;
-      final task = repo.task(id)!;
-      expect(repo.list(task.listId)!.name, 'Personal');
-      expect(task.dueAt, DateTime(2026, 11, 14, 17));
-      expect(task.priority, Priority.high);
-      expect(task.tags, ['family']);
-      expect(repo.tasksFor(const SmartFilter(SmartList.next7)).single.id, id);
-    });
-
-    test('quick add in Today defaults to today', () {
-      final id = repo.quickAdd(
-        'Water plants',
-        context: const SmartFilter(SmartList.today),
-      )!;
-      expect(repo.task(id)!.dueDate, DateTime(2026, 11, 13));
-    });
-
-    test('completing a repeating task moves it to the next occurrence', () {
-      final id = repo.quickAdd('Gym every mon wed fri')!;
-      final next = repo.complete(repo.task(id)!);
-      expect(next, DateTime(2026, 11, 16));
-      expect(repo.task(id)!.done, isFalse);
-      expect(repo.task(id)!.dueDate, DateTime(2026, 11, 16));
-    });
-
-    test('deleting a list moves its tasks to the Inbox', () {
-      final listId = repo.createList('Errands', 0xFF000000);
-      final id = repo.createTask(title: 'Post office', listId: listId);
-      repo.deleteList(listId);
-      expect(repo.task(id)!.listId, isNull);
-      expect(repo.tasksFor(const SmartFilter(SmartList.inbox)).single.id, id);
-    });
 
     String habit({String kind = 'build'}) {
       final id = repo.createHabit({

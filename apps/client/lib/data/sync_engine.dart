@@ -301,6 +301,19 @@ class SyncEngine extends ChangeNotifier {
     );
   }
 
+  /// The private link that shows this person's habits in a calendar app.
+  /// [anywhere] is false when the server has no public address: the link
+  /// then only works on the home network (and not in Google Calendar).
+  /// [replace] makes a new link and turns the old one off.
+  Future<({String url, bool anywhere})> calendarLink({
+    bool replace = false,
+  }) async {
+    final b = replace
+        ? await _post('/calendar-link/reset', const {})
+        : await _send('GET', '/calendar-link');
+    return (url: b['url'] as String, anywhere: b['anywhere'] == true);
+  }
+
   Future<List<Account>> people() async {
     final b = await _send('GET', '/users');
     return [
@@ -492,23 +505,6 @@ class SyncEngine extends ChangeNotifier {
       // Only forget it when remote access was really turned off; a missing
       // address can also mean the server is re-checking its router.
       store.setMeta('remoteUrl', null);
-    }
-  }
-
-  /// Asks the server to re-import external calendars now.
-  Future<String> refreshCalendars() async {
-    if (!isConfigured) return "You'll need to connect to your server first.";
-    try {
-      final body = await _post('/calendars/refresh', const {});
-      final errors = (body['errors'] as Map).cast<String, String>();
-      await syncNow();
-      if (body['sources'] == 0) {
-        return "There aren't any calendars set up on your server yet.";
-      }
-      if (errors.isEmpty) return 'Calendars refreshed.';
-      return errors.entries.map((e) => '${e.key}: ${e.value}').join('\n');
-    } catch (e) {
-      return '$e';
     }
   }
 

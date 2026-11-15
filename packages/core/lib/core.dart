@@ -7,5 +7,3 @@ export 'src/field_store.dart';
 export 'src/hlc.dart';
 export 'src/merge.dart';
 export 'src/models.dart';
-export 'src/quick_add.dart';
-export 'src/recurrence.dart';

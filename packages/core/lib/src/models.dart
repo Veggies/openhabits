@@ -1,11 +1,8 @@
 import 'change.dart';
 import 'dates.dart';
-import 'recurrence.dart';
 
 /// Table names shared by the client and server.
 abstract final class Tables {
-  static const lists = 'lists';
-  static const tasks = 'tasks';
   static const habits = 'habits';
   static const habitChecks = 'habit_checks';
   static const focusSessions = 'focus_sessions';
@@ -15,9 +12,6 @@ abstract final class Tables {
   /// Per-person preferences that follow you to every device. One row,
   /// [Prefs.rowId].
   static const prefs = 'prefs';
-
-  /// Events imported from external calendars. Written only by the server.
-  static const events = 'events';
 }
 
 /// Row data as stored: field name to JSON value, including [deletedField].
@@ -41,95 +35,6 @@ bool _deleted(Fields f) => f[deletedField] == true;
 
 DateTime? _dateTime(Object? v) => v is String ? DateTime.tryParse(v) : null;
 
-class TaskList {
-  final String id;
-  final String name;
-  final int color;
-  final double order;
-  final bool deleted;
-
-  TaskList.fromFields(this.id, Fields f)
-    : name = f['name'] as String? ?? 'Untitled',
-      color = f['color'] as int? ?? 0xFF4772FA,
-      order = (f['order'] as num?)?.toDouble() ?? 0,
-      deleted = _deleted(f);
-}
-
-enum Priority {
-  none,
-  low,
-  medium,
-  high;
-
-  static Priority of(Object? v) =>
-      v is int && v >= 0 && v < values.length ? values[v] : none;
-}
-
-class Task {
-  final String id;
-  final String title;
-  final String notes;
-
-  /// Null means the Inbox.
-  final String? listId;
-
-  /// Set on subtasks.
-  final String? parentId;
-  final Priority priority;
-
-  /// The due day, with no time-of-day component.
-  final DateTime? dueDate;
-
-  /// `HH:mm`, or null for an all-day task.
-  final String? dueTime;
-
-  /// Planned length in minutes, used to draw timed tasks on the calendar.
-  final int duration;
-  final List<String> tags;
-  final bool done;
-  final DateTime? completedAt;
-  final RepeatRule? repeat;
-  final double order;
-  final DateTime createdAt;
-  final bool deleted;
-
-  Task.fromFields(this.id, Fields f)
-    : title = f['title'] as String? ?? '',
-      notes = f['notes'] as String? ?? '',
-      listId = f['listId'] as String?,
-      parentId = f['parentId'] as String?,
-      priority = Priority.of(f['priority']),
-      dueDate = f['dueDate'] is String
-          ? parseDateKey(f['dueDate'] as String)
-          : null,
-      dueTime = f['dueTime'] as String?,
-      duration = f['duration'] as int? ?? 30,
-      tags = [for (final t in f['tags'] as List? ?? const []) t as String],
-      done = f['done'] == true,
-      completedAt = _dateTime(f['completedAt']),
-      repeat = RepeatRule.decode(f['repeat'] as String?),
-      order = (f['order'] as num?)?.toDouble() ?? 0,
-      createdAt = _dateTime(f['createdAt']) ?? DateTime(2000),
-      deleted = _deleted(f);
-
-  /// The due moment in local time, or null without a due date. All-day tasks
-  /// fall at midnight.
-  DateTime? get dueAt {
-    final date = dueDate;
-    if (date == null) return null;
-    if (dueTime == null) return date;
-    final t = parseTime(dueTime!);
-    return DateTime(date.year, date.month, date.day, t.hour, t.minute);
-  }
-
-  bool isOverdue(DateTime now) {
-    final at = dueAt;
-    if (done || at == null) return false;
-    return dueTime == null ? at.isBefore(dateOnly(now)) : at.isBefore(now);
-  }
-}
-
-/// A habit to build (check in when done) or to quit (log slips).
 enum HabitKind { build, quit }
 
 /// The optional Atomic Habits fields. Every field may be empty; the app only
@@ -385,52 +290,16 @@ class WeeklyReview {
 
 class FocusSession {
   final String id;
-  final String? taskId;
+
+  /// The habit the session was spent on, if one was picked.
+  final String? habitId;
   final DateTime start;
   final int minutes;
   final bool deleted;
 
   FocusSession.fromFields(this.id, Fields f)
-    : taskId = f['taskId'] as String?,
+    : habitId = f['habitId'] as String?,
       start = _dateTime(f['start'])?.toLocal() ?? DateTime(2000),
       minutes = f['minutes'] as int? ?? 0,
       deleted = _deleted(f);
-}
-
-class CalendarEvent {
-  final String id;
-  final String source;
-  final String calendar;
-  final String title;
-  final bool allDay;
-
-  /// Local start and end. For all-day events these are midnights, with
-  /// [end] exclusive.
-  final DateTime start;
-  final DateTime end;
-  final bool deleted;
-
-  CalendarEvent.fromFields(this.id, Fields f)
-    : source = f['source'] as String? ?? '',
-      calendar = f['calendar'] as String? ?? '',
-      title = f['title'] as String? ?? '(No title)',
-      allDay = f['allDay'] == true,
-      start = _eventTime(f['start'], f['allDay'] == true),
-      end = _eventTime(f['end'] ?? f['start'], f['allDay'] == true),
-      deleted = _deleted(f);
-
-  bool occursOn(DateTime day) {
-    final d = dateOnly(day);
-    final next = addDays(d, 1);
-    if (allDay) return !d.isBefore(start) && d.isBefore(end);
-    return start.isBefore(next) && end.isAfter(d) || start.isAtSameMomentAs(d);
-  }
-}
-
-/// All-day values are date keys. Timed values are ISO strings: UTC when they
-/// end in `Z`, otherwise "floating" local time.
-DateTime _eventTime(Object? v, bool allDay) {
-  if (v is! String) return DateTime(2000);
-  if (allDay) return parseDateKey(v);
-  return DateTime.parse(v).toLocal();
 }

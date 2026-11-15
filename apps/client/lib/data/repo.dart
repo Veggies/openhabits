@@ -2,284 +2,18 @@ import 'package:core/core.dart';
 
 import 'local_store.dart';
 
-/// Built-in task views.
-enum SmartList { inbox, today, next7, all, completed, trash }
-
-/// What the task list is currently showing.
-sealed class TaskFilter {
-  const TaskFilter();
-}
-
-class SmartFilter extends TaskFilter {
-  final SmartList list;
-  const SmartFilter(this.list);
-
-  @override
-  bool operator ==(Object other) => other is SmartFilter && other.list == list;
-
-  @override
-  int get hashCode => list.hashCode;
-}
-
-class ListFilter extends TaskFilter {
-  final String listId;
-  const ListFilter(this.listId);
-
-  @override
-  bool operator ==(Object other) =>
-      other is ListFilter && other.listId == listId;
-
-  @override
-  int get hashCode => listId.hashCode;
-}
-
-class TagFilter extends TaskFilter {
-  final String tag;
-  const TagFilter(this.tag);
-
-  @override
-  bool operator ==(Object other) => other is TagFilter && other.tag == tag;
-
-  @override
-  int get hashCode => tag.hashCode;
-}
-
-/// Typed reads and writes over the [LocalStore].
 /// What a size check-in offers: [grow] asks whether a habit that's sticking
 /// feels too easy (and could be a little bigger); [shrink] offers to make a
 /// habit that's often missed a little smaller for a while.
 enum SizeSuggestion { grow, shrink }
 
+/// Typed reads and writes over the [LocalStore].
 class Repo {
   final LocalStore store;
   final DateTime Function() clock;
 
   Repo(this.store, {DateTime Function()? clock})
     : clock = clock ?? DateTime.now;
-
-  // ---- Lists ----
-
-  List<TaskList> get lists =>
-      [
-        for (final MapEntry(:key, :value) in store.table(Tables.lists).entries)
-          TaskList.fromFields(key, value),
-      ].where((l) => !l.deleted).toList()..sort(
-        (a, b) => a.order.compareTo(b.order),
-      );
-
-  TaskList? list(String? id) => id == null
-      ? null
-      : switch (store.row(Tables.lists, id)) {
-          final f? when f[deletedField] != true => TaskList.fromFields(id, f),
-          _ => null,
-        };
-
-  String createList(String name, int color) {
-    final id = store.newId();
-    store.write(Tables.lists, id, {
-      'name': name,
-      'color': color,
-      'order': clock().millisecondsSinceEpoch.toDouble(),
-    });
-    return id;
-  }
-
-  void updateList(String id, Fields fields) =>
-      store.write(Tables.lists, id, fields);
-
-  /// Deletes a list; its tasks move to the Inbox.
-  void deleteList(String id) {
-    for (final t in allTasks.where((t) => t.listId == id)) {
-      store.write(Tables.tasks, t.id, {'listId': null});
-    }
-    store.write(Tables.lists, id, {deletedField: true});
-  }
-
-  // ---- Tasks ----
-
-  Iterable<Task> get allTasks => [
-    for (final MapEntry(:key, :value) in store.table(Tables.tasks).entries)
-      Task.fromFields(key, value),
-  ];
-
-  Task? task(String id) => switch (store.row(Tables.tasks, id)) {
-    final f? => Task.fromFields(id, f),
-    null => null,
-  };
-
-  List<String> get tags {
-    final all = <String>{
-      for (final t in allTasks)
-        if (!t.deleted) ...t.tags,
-    };
-    return all.toList()
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-  }
-
-  List<Task> subtasks(String parentId) =>
-      allTasks.where((t) => t.parentId == parentId && !t.deleted).toList()
-        ..sort((a, b) => a.order.compareTo(b.order));
-
-  /// Top-level tasks for [filter], sorted for display.
-  List<Task> tasksFor(TaskFilter filter) {
-    final today = dateOnly(clock());
-    final live = allTasks.where((t) => !t.deleted && t.parentId == null);
-    final validLists = {for (final l in lists) l.id};
-    bool inInbox(Task t) => t.listId == null || !validLists.contains(t.listId);
-
-    final Iterable<Task> result = switch (filter) {
-      SmartFilter(list: SmartList.inbox) => live.where(
-        (t) => !t.done && inInbox(t),
-      ),
-      SmartFilter(list: SmartList.today) => live.where(
-        (t) => !t.done && t.dueDate != null && !t.dueDate!.isAfter(today),
-      ),
-      SmartFilter(list: SmartList.next7) => live.where(
-        (t) =>
-            !t.done &&
-            t.dueDate != null &&
-            t.dueDate!.isBefore(addDays(today, 7)),
-      ),
-      SmartFilter(list: SmartList.all) => live.where((t) => !t.done),
-      SmartFilter(list: SmartList.completed) => live.where((t) => t.done),
-      SmartFilter(list: SmartList.trash) => allTasks.where(
-        (t) => t.deleted && t.parentId == null,
-      ),
-      ListFilter(:final listId) => live.where(
-        (t) => !t.done && t.listId == listId,
-      ),
-      TagFilter(:final tag) => live.where(
-        (t) => !t.done && t.tags.contains(tag),
-      ),
-    };
-
-    final list = result.toList();
-    if (filter == const SmartFilter(SmartList.completed)) {
-      list.sort(
-        (a, b) => (b.completedAt ?? b.createdAt).compareTo(
-          a.completedAt ?? a.createdAt,
-        ),
-      );
-    } else {
-      list.sort(compareTasks);
-    }
-    return list;
-  }
-
-  /// Dated tasks first by due time, then by priority, then newest first.
-  static int compareTasks(Task a, Task b) {
-    final ad = a.dueAt, bd = b.dueAt;
-    if (ad != null && bd != null && ad != bd) return ad.compareTo(bd);
-    if (ad != null && bd == null) return -1;
-    if (ad == null && bd != null) return 1;
-    if (a.priority != b.priority) {
-      return b.priority.index.compareTo(a.priority.index);
-    }
-    return b.createdAt.compareTo(a.createdAt);
-  }
-
-  /// Tasks due on [day] (not deleted), for the calendar.
-  List<Task> tasksOn(DateTime day) {
-    final d = dateOnly(day);
-    return allTasks.where((t) => !t.deleted && t.dueDate == d).toList()
-      ..sort(compareTasks);
-  }
-
-  /// Creates a task from quick-add text, defaulting to [defaults] for
-  /// anything the text doesn't specify. Returns the new id, or null if the
-  /// title is empty.
-  String? quickAdd(String text, {TaskFilter? context, DateTime? defaultDate}) {
-    final parsed = parseQuickAdd(text, clock());
-    if (parsed.title.trim().isEmpty) return null;
-    String? listId;
-    if (parsed.listName != null) {
-      final name = parsed.listName!.toLowerCase();
-      listId = lists.where((l) => l.name.toLowerCase() == name).firstOrNull?.id;
-      listId ??= createList(parsed.listName!, 0xFF4772FA);
-    } else if (context is ListFilter) {
-      listId = context.listId;
-    }
-    var dueDate = parsed.dueDate ?? defaultDate;
-    if (dueDate == null &&
-        (context == const SmartFilter(SmartList.today) ||
-            context == const SmartFilter(SmartList.next7))) {
-      dueDate = dateOnly(clock());
-    }
-    return createTask(
-      title: parsed.title,
-      listId: listId,
-      dueDate: dueDate,
-      dueTime: parsed.dueTime,
-      priority: parsed.priority ?? Priority.none,
-      tags: {...parsed.tags, if (context is TagFilter) context.tag}.toList(),
-      repeat: parsed.repeat,
-    );
-  }
-
-  String createTask({
-    required String title,
-    String? listId,
-    String? parentId,
-    DateTime? dueDate,
-    String? dueTime,
-    Priority priority = Priority.none,
-    List<String> tags = const [],
-    RepeatRule? repeat,
-  }) {
-    final id = store.newId();
-    final now = clock();
-    store.write(Tables.tasks, id, {
-      'title': title,
-      'listId': listId,
-      'parentId': ?parentId,
-      'dueDate': dueDate == null ? null : dateKey(dueDate),
-      'dueTime': dueTime,
-      'priority': priority.index,
-      'tags': tags,
-      'repeat': repeat?.encode(),
-      'done': false,
-      'order': now.millisecondsSinceEpoch.toDouble(),
-      'createdAt': now.toUtc().toIso8601String(),
-    });
-    return id;
-  }
-
-  void updateTask(String id, Fields fields) =>
-      store.write(Tables.tasks, id, fields);
-
-  /// Completes a task. A repeating task moves to its next occurrence instead
-  /// and its subtasks reset. Returns the next due date for repeating tasks.
-  DateTime? complete(Task task) {
-    final now = clock();
-    final repeat = task.repeat;
-    if (repeat != null && task.dueDate != null) {
-      final next = repeat.next(task.dueDate!);
-      store.write(Tables.tasks, task.id, {
-        'dueDate': dateKey(next),
-        'lastCompletedAt': now.toUtc().toIso8601String(),
-      });
-      for (final s in subtasks(task.id).where((s) => s.done)) {
-        store.write(Tables.tasks, s.id, {'done': false, 'completedAt': null});
-      }
-      return next;
-    }
-    store.write(Tables.tasks, task.id, {
-      'done': true,
-      'completedAt': now.toUtc().toIso8601String(),
-    });
-    return null;
-  }
-
-  void uncomplete(Task task) =>
-      store.write(Tables.tasks, task.id, {'done': false, 'completedAt': null});
-
-  void toggle(Task task) => task.done ? uncomplete(task) : complete(task);
-
-  void deleteTask(String id) =>
-      store.write(Tables.tasks, id, {deletedField: true});
-
-  void restoreTask(String id) =>
-      store.write(Tables.tasks, id, {deletedField: false});
 
   // ---- Habits ----
 
@@ -302,20 +36,6 @@ class Repo {
       'createdAt': now.toUtc().toIso8601String(),
     });
     return id;
-  }
-
-  /// Habits to show on the calendar on [day]: ones with a time that are
-  /// scheduled that day, from the day they were created.
-  List<Habit> timedHabitsOn(DateTime day) {
-    final d = dateOnly(day);
-    return [
-      for (final h in habits)
-        if (!h.isQuit &&
-            h.plan.time.isNotEmpty &&
-            h.isScheduled(d) &&
-            !dateOnly(h.createdAt.toLocal()).isAfter(d))
-          h,
-    ]..sort((a, b) => a.plan.time.compareTo(b.plan.time));
   }
 
   Habit? habit(String id) => switch (store.row(Tables.habits, id)) {
@@ -534,20 +254,10 @@ class Repo {
   void recordFocus({
     required DateTime start,
     required int minutes,
-    String? taskId,
+    String? habitId,
   }) => store.write(Tables.focusSessions, store.newId(), {
     'start': start.toUtc().toIso8601String(),
     'minutes': minutes,
-    'taskId': taskId,
+    'habitId': habitId,
   });
-
-  // ---- External calendar events ----
-
-  List<CalendarEvent> eventsOn(DateTime day) =>
-      [
-        for (final MapEntry(:key, :value) in store.table(Tables.events).entries)
-          CalendarEvent.fromFields(key, value),
-      ].where((e) => !e.deleted && e.occursOn(day)).toList()..sort(
-        (a, b) => a.start.compareTo(b.start),
-      );
 }

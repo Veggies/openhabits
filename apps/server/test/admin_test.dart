@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:server/api.dart';
 import 'package:server/auth/auth_store.dart';
-import 'package:server/calendar/calendar_sync.dart';
 import 'package:server/remote/remote_access.dart';
 import 'package:server/remote/tls.dart';
 import 'package:server/remote/upnp.dart';
@@ -83,7 +82,6 @@ void main() {
   late SettingsStore settings;
   late FakeUpnp router;
   late RemoteAccess remote;
-  late CalendarSync calendars;
   late Api api;
   String? publicIp;
 
@@ -99,14 +97,12 @@ void main() {
       upnp: router,
       publicIp: () async => publicIp,
     );
-    calendars = CalendarSync(store, [], userIdFor: (_) => auth.owner?.id);
     api = Api(
       buildHandler(
         store,
         auth,
         settings: settings,
         remote: remote,
-        calendars: calendars,
         fingerprint: 'AA:BB',
       ),
     );
@@ -270,32 +266,8 @@ void main() {
     });
   });
 
-  group('calendars and single sign-on', () {
+  group('single sign-on', () {
     setUp(setUpOwner);
-
-    test("calendar passwords are kept but never sent back", () async {
-      await api.call('PUT', '/admin/calendars', {
-        'calendars': [
-          {
-            'name': 'iCloud',
-            'type': 'caldav',
-            'url': 'https://caldav.icloud.com',
-            'username': 'me',
-            'password': 'app-pass',
-          },
-        ],
-      });
-      final (_, listed) = await api.call('GET', '/admin/calendars');
-      final entry = (listed['calendars'] as List).single as Map;
-      expect(entry['password'], isNull);
-
-      // Saving the list back (as the page does) keeps the password.
-      await api.call('PUT', '/admin/calendars', {
-        'calendars': listed['calendars'],
-      });
-      expect(settings.calendars.single['password'], 'app-pass');
-      expect(calendars.sources.single.password, 'app-pass');
-    });
 
     test('single sign-on needs a public address with a domain', () async {
       expect((await api.call('GET', '/admin/sso')).$2['callbackUrl'], isNull);

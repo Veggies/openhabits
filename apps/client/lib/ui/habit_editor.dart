@@ -186,7 +186,7 @@ class _HabitEditorState extends State<HabitEditor> {
     );
   }
 
-  /// An optional time puts the habit on the calendar, as a block of
+  /// An optional time puts the habit in your calendar app, as a block of
   /// [duration] minutes.
   Widget _timeRow() {
     final time = _plan['time']!;
@@ -199,7 +199,7 @@ class _HabitEditorState extends State<HabitEditor> {
             controller: time,
             label: 'Time (optional)',
             hint: 'Pick a time',
-            help: hasTime ? null : 'Habits with a time show on the calendar.',
+            help: hasTime ? null : 'Give it a time to see it in your calendar app. You can set that up in Settings.',
             onTap: _pickTime,
             suffix: hasTime
                 ? IconButton(

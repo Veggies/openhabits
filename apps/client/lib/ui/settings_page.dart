@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'package:url_launcher/url_launcher.dart';
@@ -15,8 +17,6 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  String? _calendarMessage;
-
   @override
   Widget build(BuildContext context) {
     final scope = AppScope.of(context);
@@ -104,7 +104,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           leading: const Icon(Icons.dns_outlined),
                           title: const Text('Server settings'),
                           subtitle: const Text(
-                            'Remote access, people, calendars and sign-in options',
+                            'Remote access, people and sign-in options',
                           ),
                           trailing: const Icon(Icons.open_in_new, size: 18),
                           onTap: () => launchUrl(Uri.parse(sync.setupPageUrl!)),
@@ -159,29 +159,6 @@ class _SettingsPageState extends State<SettingsPage> {
                       onChanged: (v) => repo.setPrefs({'atomicHabits': v}),
                     ),
                     ListTile(
-                      leading: const Icon(Icons.replay),
-                      title: const Text('Run setup again'),
-                      subtitle: const Text(
-                        'Go through the welcome steps again, including building a habit step by step.',
-                      ),
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          fullscreenDialog: true,
-                          builder: (route) => Onboarding(
-                            replay: true,
-                            onDone: () => Navigator.of(route).pop(),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              section('Calendar'),
-              Card(
-                child: Column(
-                  children: [
-                    ListTile(
                       title: const Text('Week starts on'),
                       trailing: SegmentedButton<int>(
                         showSelectedIcon: false,
@@ -200,21 +177,36 @@ class _SettingsPageState extends State<SettingsPage> {
                             repo.setPrefs({'weekStart': s.first}),
                       ),
                     ),
-                    if (signedIn)
-                      ListTile(
-                        leading: const Icon(Icons.event_repeat),
-                        title: const Text('Refresh external calendars'),
-                        subtitle: Text(
-                          _calendarMessage ?? 'Google, iCloud and other calendars set up on the server.',
-                        ),
-                        onTap: () async {
-                          setState(() => _calendarMessage = 'Refreshing…');
-                          final message = await sync.refreshCalendars();
-                          if (mounted) {
-                            setState(() => _calendarMessage = message);
-                          }
-                        },
+                    ListTile(
+                      leading: const Icon(Icons.event_outlined),
+                      title: const Text('Show habits in your calendar app'),
+                      subtitle: Text(
+                        signedIn
+                            ? 'Habits with a time show up in Apple, Google or Outlook Calendar.'
+                            : 'Connect to your server first, above.',
                       ),
+                      enabled: signedIn,
+                      onTap: () => showDialog<void>(
+                        context: context,
+                        builder: (_) => const _CalendarLinkDialog(),
+                      ),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.replay),
+                      title: const Text('Run setup again'),
+                      subtitle: const Text(
+                        'Go through the welcome steps again, including building a habit step by step.',
+                      ),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          fullscreenDialog: true,
+                          builder: (route) => Onboarding(
+                            replay: true,
+                            onDone: () => Navigator.of(route).pop(),
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -401,9 +393,7 @@ class _PeopleState extends State<_People> {
             ListTile(
               leading: const Icon(Icons.person_add_alt),
               title: const Text('Add a person'),
-              subtitle: const Text(
-                'Everyone gets their own private tasks and habits',
-              ),
+              subtitle: const Text('Everyone gets their own private habits'),
               onTap: () => _add(context, sync),
             ),
           ],
@@ -470,5 +460,179 @@ class _PeopleState extends State<_People> {
       );
       _reload();
     }
+  }
+}
+
+/// The private calendar link, with how to add it to each calendar app.
+class _CalendarLinkDialog extends StatefulWidget {
+  const _CalendarLinkDialog();
+
+  @override
+  State<_CalendarLinkDialog> createState() => _CalendarLinkDialogState();
+}
+
+class _CalendarLinkDialogState extends State<_CalendarLinkDialog> {
+  late Future<({String url, bool anywhere})> _link = AppScope.read(context).sync
+      .calendarLink();
+
+  /// Apple's calendar apps open "webcal" links as a subscription.
+  bool get _apple =>
+      defaultTargetPlatform == TargetPlatform.macOS ||
+      defaultTargetPlatform == TargetPlatform.iOS;
+
+  Future<void> _replace() async {
+    final sure = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Make a new link?'),
+        content: const Text(
+          'The current link will stop working, so any calendar using it will '
+          'stop showing your habits until you add the new one.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Make a new link'),
+          ),
+        ],
+      ),
+    );
+    if (sure != true || !mounted) return;
+    setState(
+      () => _link = AppScope.read(context).sync.calendarLink(replace: true),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.outline,
+    );
+    return AlertDialog(
+      title: const Text('Show habits in your calendar app'),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: FutureBuilder(
+          future: _link,
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return Text("Couldn't get your link: ${snapshot.error}");
+            }
+            final link = snapshot.data;
+            if (link == null) {
+              return const SizedBox(
+                height: 80,
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
+            return SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Any habit with a time shows up in your calendar as a repeating "
+                    "event, on the days it's scheduled. When you change a habit here, "
+                    'your calendar catches up within an hour or so.',
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: SelectableText(
+                      link.url,
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      FilledButton.tonalIcon(
+                        icon: const Icon(Icons.copy),
+                        label: const Text('Copy link'),
+                        onPressed: () async {
+                          await Clipboard.setData(
+                            ClipboardData(text: link.url),
+                          );
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Link copied.')),
+                            );
+                          }
+                        },
+                      ),
+                      if (_apple)
+                        OutlinedButton.icon(
+                          icon: const Icon(Icons.event),
+                          label: const Text('Open in Calendar'),
+                          onPressed: () => launchUrl(
+                            Uri.parse(
+                              link.url.replaceFirst(
+                                RegExp('^https?'),
+                                'webcal',
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  if (!link.anywhere) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        "Right now this link only works on your home network, so it won't "
+                        "work in Google Calendar or when you're out. To fix that, give your "
+                        "server a public address on its setup page, under Remote access → Advanced.",
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  Text('How to add it', style: theme.textTheme.titleSmall),
+                  const SizedBox(height: 4),
+                  Text(
+                    '• Apple Calendar: ${_apple ? 'click Open in Calendar, or ' : ''}'
+                    'choose File → New Calendar Subscription and paste the link.\n'
+                    '• Google Calendar: on the website, next to "Other calendars", '
+                    'choose + → From URL and paste the link.\n'
+                    '• Outlook: choose Add calendar → Subscribe from web and paste the link.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    "Anyone with this link can see your habits' names and times, so keep "
+                    "it to yourself. If it's ever shared by mistake, make a new one.",
+                    style: muted,
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: _replace, child: const Text('Make a new link')),
+        FilledButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Done'),
+        ),
+      ],
+    );
   }
 }

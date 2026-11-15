@@ -8,7 +8,7 @@ import 'package:shelf_router/shelf_router.dart';
 
 import 'auth/auth_store.dart';
 import 'auth/oidc.dart';
-import 'calendar/calendar_sync.dart';
+import 'calendar_feed.dart';
 import 'remote/remote_access.dart';
 import 'settings_store.dart';
 import 'sync_store.dart';
@@ -23,7 +23,6 @@ import 'web/setup_page.dart';
 Handler buildHandler(
   SyncStore store,
   AuthStore auth, {
-  CalendarSync? calendars,
   OidcProvider? oidc,
   String serverName = 'Tasks',
 
@@ -70,6 +69,17 @@ Handler buildHandler(
     'fingerprint': fingerprint,
   };
   User userOf(Request r) => r.context['user'] as User;
+
+  Map<String, Object?> calendarLink(Request r, {required bool reset}) {
+    final id = userOf(r).id;
+    final token = reset ? auth.resetCalendarToken(id) : auth.calendarToken(id);
+    final public = settings?.publicUrl ?? publicUrl;
+    final base = (public ?? r.requestedUri.origin).replaceAll(
+      RegExp(r'/+$'),
+      '',
+    );
+    return {'url': '$base/calendar/$token.ics', 'anywhere': public != null};
+  }
 
   String clientOf(Request r) {
     if (trustProxy) {
@@ -191,6 +201,23 @@ Handler buildHandler(
         return _htmlError("Couldn't sign in", e.message);
       }
     })
+    // A person's habits as a calendar file, for calendar apps to subscribe
+    // to. Calendar apps can't sign in, so the long random token in the
+    // address is what keeps it private.
+    ..get('/calendar/<file>', (Request r, String file) {
+      final token = file.endsWith('.ics')
+          ? file.substring(0, file.length - 4)
+          : file;
+      final user = auth.userForCalendarToken(token);
+      if (user == null) return Response.notFound('Not found');
+      return Response.ok(
+        habitsCalendar(store.rows(user.id, Tables.habits)),
+        headers: {
+          'content-type': 'text/calendar; charset=utf-8',
+          'cache-control': 'no-cache',
+        },
+      );
+    })
     // ---- Signed-in routes ----
     ..get(
       '/auth/me',
@@ -219,6 +246,15 @@ Handler buildHandler(
       auth.setEmail(userOf(r).id, b['email'] as String?);
       return _json({'user': auth.userById(userOf(r).id)!.toJson()});
     })
+    // The person's private calendar link. "anywhere" says whether it works
+    // away from home (and for Google Calendar, which fetches it from
+    // Google's servers): only with a public address that has a real
+    // certificate.
+    ..get('/calendar-link', (Request r) => _json(calendarLink(r, reset: false)))
+    ..post(
+      '/calendar-link/reset',
+      (Request r) => _json(calendarLink(r, reset: true)),
+    )
     // A one-time code for adding another device, shown as a QR code.
     ..post(
       '/auth/pairing-code',
@@ -363,57 +399,6 @@ Handler buildHandler(
         return _json({'ok': true});
       }),
     )
-    ..get(
-      '/admin/calendars',
-      (Request r) => _ownerOnly(r, () {
-        if (settings == null) return _jsonError(404, 'Not available.');
-        return _json({
-          'calendars': [
-            // Passwords never leave the server.
-            for (final c in settings.calendars) {...c, 'password': null},
-          ],
-        });
-      }),
-    )
-    ..put(
-      '/admin/calendars',
-      (Request r) => _ownerOnly(r, () async {
-        if (settings == null) return _jsonError(404, 'Not available.');
-        final b = await body(r);
-        final previous = {for (final c in settings.calendars) c['name']: c};
-        final next = <Map<String, Object?>>[];
-        for (final raw in b['calendars'] as List? ?? const []) {
-          final c = (raw as Map).cast<String, Object?>();
-          final name = (c['name'] as String? ?? '').trim();
-          final type = c['type'] as String? ?? 'ics';
-          final url = (c['url'] as String? ?? '').trim();
-          if (name.isEmpty ||
-              url.isEmpty ||
-              !{'ics', 'caldav'}.contains(type)) {
-            return _jsonError(
-              400,
-              'Each calendar needs a name and an address.',
-            );
-          }
-          final typed = c['password'] as String?;
-          // An unchanged calendar keeps its saved password.
-          final password = typed == null || typed.isEmpty
-              ? (previous[name]?['password'] as String?)
-              : typed;
-          next.add({
-            'name': name,
-            'type': type,
-            'url': url,
-            'username': ?(c['username'] as String?),
-            'password': ?password,
-            'user': ?(c['user'] as String?),
-          });
-        }
-        settings.calendars = next;
-        calendars?.sources = [for (final c in next) CalendarSource.fromJson(c)];
-        return _json({'ok': true});
-      }),
-    )
     // ---- Household management (owner only) ----
     ..get(
       '/users',
@@ -443,14 +428,6 @@ Handler buildHandler(
         return _json({'ok': true});
       }),
     )
-    // Re-imports external calendars now instead of waiting for the timer.
-    ..post('/calendars/refresh', (Request _) async {
-      if (calendars == null || calendars.sources.isEmpty) {
-        return _json({'sources': 0, 'errors': <String, String>{}});
-      }
-      final errors = await calendars.run();
-      return _json({'sources': calendars.sources.length, 'errors': errors});
-    })
     // One round trip does both directions: the device pushes its pending
     // changes and gets back everything after its cursor.
     //
@@ -464,11 +441,7 @@ Handler buildHandler(
         for (final c in b['changes'] as List? ?? const [])
           Change.fromJson(c as Map<String, Object?>),
       ];
-      // Imported calendar events are owned by the server.
-      store.apply(
-        userId,
-        changes.where((c) => c.table != Tables.events).toList(),
-      );
+      store.apply(userId, changes);
       return _json({
         'cursor': store.cursor,
         // Lets devices follow the server's remote address if it changes.
@@ -510,7 +483,11 @@ String? _bearer(Request r) {
 
 Middleware _authenticate(AuthStore auth) =>
     (inner) => (request) {
-      if (_publicPaths.contains(request.url.path)) return inner(request);
+      final path = request.url.path;
+      // Calendar links carry their own secret; see /calendar/<file>.
+      if (_publicPaths.contains(path) || path.startsWith('calendar/')) {
+        return inner(request);
+      }
       final token = _bearer(request);
       final user = token == null ? null : auth.userForToken(token);
       if (user == null) {

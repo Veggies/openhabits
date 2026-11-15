@@ -5,7 +5,7 @@ import 'package:test/test.dart';
 
 Change set(String field, Object? value, int millis, [String node = 'a']) =>
     Change(
-      table: 'tasks',
+      table: 'habits',
       rowId: 't1',
       field: field,
       value: value,
@@ -53,7 +53,7 @@ void main() {
       // Shuffle and duplicate some deliveries, as a flaky network would.
       final delivery = [...changes, ...changes.take(3)]..shuffle(random);
       delivery.forEach(store.apply);
-      final row = store.row('tasks', 't1');
+      final row = store.row('habits', 't1');
       result ??= row;
       expect(row, result, reason: 'delivery order: $delivery');
     }

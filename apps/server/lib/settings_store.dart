@@ -59,13 +59,6 @@ class SettingsStore {
   };
   set sso(Map<String, String> v) => set('sso', v);
 
-  /// External calendars, in the calendars.json format.
-  List<Map<String, Object?>> get calendars => [
-    for (final c in get('calendars') as List? ?? const [])
-      (c as Map).cast<String, Object?>(),
-  ];
-  set calendars(List<Map<String, Object?>> v) => set('calendars', v);
-
   /// The last address that worked, offered while re-checking after a
   /// restart.
   String? get lastRemoteUrl => get('lastRemoteUrl') as String?;

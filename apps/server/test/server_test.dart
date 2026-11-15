@@ -294,18 +294,103 @@ void main() {
       final result = await api.sync(ownerToken, 0, []);
       expect((result['changes'] as List).single['value'], 'Oat milk');
     });
+  });
 
-    test('devices cannot write imported calendar events', () async {
-      await api.sync(ownerToken, 0, [
-        Change(
-          table: Tables.events,
-          rowId: 'e',
-          field: 'title',
-          value: 'fake',
-          hlc: const Hlc(1, 0, 'x'),
+  group('calendar link', () {
+    /// Uploads a habit's fields the way the app does.
+    Future<void> habit(String id, Map<String, Object?> fields) =>
+        api.sync(ownerToken, 0, [
+          for (final (i, e) in fields.entries.indexed)
+            Change(
+              table: Tables.habits,
+              rowId: id,
+              field: e.key,
+              value: e.value,
+              hlc: Hlc(1000 + i, 0, 'phone'),
+            ),
+        ]);
+
+    test('habits with a time become repeating calendar events', () async {
+      await habit('read', {
+        'name': 'Read',
+        'time': '21:00',
+        'duration': 30,
+        'weekdays': [1, 3, 5],
+        'twoMinute': 'Read 5 pages',
+        'stackAfter': 'get into bed',
+        'createdAt': '2026-11-01T10:00:00.000Z',
+      });
+      await habit('meditate', {
+        'name': 'Meditate',
+        'time': '07:00',
+        'duration': 10,
+        'createdAt': '2026-11-01T10:00:00.000Z',
+      });
+      await habit('water', {'name': 'Drink water'}); // no time
+      await habit('old', {
+        'name': 'Old habit',
+        'time': '08:00',
+        'archived': true,
+      });
+      await habit('scroll', {
+        'name': 'Scrolling in bed',
+        'kind': 'quit',
+        'time': '22:00',
+      });
+
+      final (status, link) = await api.call(
+        'GET',
+        '/calendar-link',
+        token: ownerToken,
+      );
+      expect(status, 200);
+      final url = Uri.parse(link['url'] as String);
+      expect(url.path, matches(RegExp(r'^/calendar/[\w-]{40,}\.ics$')));
+      expect(link['anywhere'], isFalse); // no public address set up
+
+      // Calendar apps fetch it without signing in.
+      final (feedStatus, feed) = await api.call('GET', url.path);
+      expect(feedStatus, 200);
+      final ics = feed['body'] as String;
+      expect(ics, startsWith('BEGIN:VCALENDAR\r\n'));
+      expect(ics, contains('SUMMARY:Read\r\n'));
+      expect(ics, contains('DTSTART:20261101T210000\r\n'));
+      expect(ics, contains('DURATION:PT30M\r\n'));
+      expect(ics, contains('RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR\r\n'));
+      expect(
+        ics,
+        contains(
+          r'DESCRIPTION:Your version for now: Read 5 pages\nAfter I get into bed',
         ),
-      ]);
-      expect((await api.sync(ownerToken, 0, []))['changes'], isEmpty);
+      );
+      expect(ics, contains('SUMMARY:Meditate\r\n'));
+      expect(ics, contains('RRULE:FREQ=DAILY\r\n'));
+      for (final hidden in ['Drink water', 'Old habit', 'Scrolling in bed']) {
+        expect(ics, isNot(contains(hidden)));
+      }
+    });
+
+    test('the link stays the same until it is replaced', () async {
+      Future<String> link() async =>
+          (await api.call('GET', '/calendar-link', token: ownerToken)).$2['url']
+              as String;
+      final first = await link();
+      expect(await link(), first);
+
+      final (_, replaced) = await api.call(
+        'POST',
+        '/calendar-link/reset',
+        token: ownerToken,
+      );
+      final second = replaced['url'] as String;
+      expect(second, isNot(first));
+      expect((await api.call('GET', Uri.parse(first).path)).$1, 404);
+      expect((await api.call('GET', Uri.parse(second).path)).$1, 200);
+      expect((await api.call('GET', '/calendar/guess.ics')).$1, 404);
+    });
+
+    test('getting the link needs a signed-in person', () async {
+      expect((await api.call('GET', '/calendar-link')).$1, 401);
     });
   });
 

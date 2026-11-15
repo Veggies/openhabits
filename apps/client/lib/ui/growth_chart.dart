@@ -278,40 +278,6 @@ String _strengthCount(
   ({int done, int scheduled, StrengthLevel level}) s,
 ) => s.level == StrengthLevel.justStarted ? '' : _days(h, s.done, s.scheduled);
 
-/// A small "Going strong" / "Struggling" label for a habit card. Hover (or
-/// long-press) for the numbers behind it.
-class StrengthBadge extends StatelessWidget {
-  final Habit habit;
-  const StrengthBadge({super.key, required this.habit});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final s = habitStrength(AppScope.of(context).repo, habit);
-    final color = s.level.color(theme);
-    final count = _strengthCount(habit, s);
-    return Tooltip(
-      message: count.isEmpty
-          ? "It's been less than a week, so it's too soon to say."
-          : 'Last 4 weeks: $count',
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(
-          s.level.label,
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: color,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _WeekGrid extends StatefulWidget {
   final List<Habit> habits;
   final List<DateTime> weeks;

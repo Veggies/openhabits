@@ -1,6 +1,6 @@
 # Tasks
 
-A self-hostable task manager in the spirit of TickTick: lists, tasks with subtasks and tags, natural-language quick add, repeating tasks, a calendar (day/week/month/year) with your external calendars overlaid, habit tracking with optional Atomic Habits coaching, and a Pomodoro focus timer. One Flutter codebase builds for iOS, Android, macOS, Windows and Linux; a small Dart server syncs your devices.
+A self-hostable habit tracker. Build habits or break them, start small and grow them over time, see how each week went, and use a focus timer to help. The Atomic Habits method is built in, and it's optional. Your data lives on your own server. One Flutter codebase builds for iOS, Android, macOS, Windows and Linux, and a small Dart server keeps your devices in sync.
 
 ## Set up the server
 
@@ -30,10 +30,6 @@ page or in the app's Settings), which also teaches it the remote address.
 Single sign-on with Google or another OpenID Connect provider is optional and
 needs a public address with a real domain.
 
-**External calendars.** Add Google (secret iCal link), iCloud (app-specific
-password) or any CalDAV/`.ics` calendar on the setup page. They refresh every
-15 minutes and show read-only in the app's Calendar.
-
 ## Run the app
 
 Flutter is pinned with [FVM](https://fvm.app) (`.fvmrc`).
@@ -50,27 +46,25 @@ habits with the Atomic Habits framework.
 
 ## Features
 
-### Quick add
+### Habits
 
-| You type | You get |
-|---|---|
-| `tomorrow`, `fri`, `next week`, `in 3 days`, `nov 20`, `11/20` | Due date |
-| `5pm`, `at 9:30am`, `17:00`, `noon` | Due time |
-| `every day`, `weekly`, `every 2 weeks`, `every mon wed fri`, `every weekday` | Repeat |
-| `!high` `!med` `!low` (or `!3` `!2` `!1`) | Priority |
-| `#tag` | Tag |
-| `^List` | List (created if missing) |
+- **Build or break.** Check a habit off when you've done it. For a habit you're breaking, checking it off means you stayed clear that day.
+- **Progress.** One row per habit and one square per week, with the number of days you did it. Each habit also gets a plain summary of the last four weeks: going strong, getting there, or struggling.
+- **A time and a length.** Any habit can have a time of day and say how long it takes.
 
-### Habits and Atomic Habits
+### The Atomic Habits method (optional)
 
-Habits can be built (check in when done) or broken (log slips; tracks days
-clean). The Atomic Habits framework is optional. Turn it on in the setup
-wizard or Settings, and habits gain:
+Turn it on in the setup wizard or Settings, and habits gain:
 
-- an identity ("I am a reader"), with each check-in counted as a vote for it
-- the four laws: when and where, habit stacking ("After I…"), temptation bundling, a two-minute version and a reward; inverted for habits you're breaking, with an optional habit contract
-- "never miss twice" streaks that survive a single miss, with a nudge the day after
+- who you want to become ("I am a reader"), with each check-in counted as a vote for it
+- the four laws: when and where, "After I…", pairing it with something you enjoy, and a reward right after; turned around for habits you're breaking, with an optional habit contract
+- start small and grow it: begin with a tiny version, and every two weeks the app checks in. If it's sticking, it asks whether it's starting to feel too easy; if you've been missing it a lot, it offers to make it smaller
+- streaks that forgive a single missed day, with a nudge to not miss two in a row
 - a habits scorecard and a weekly review
+
+### Focus
+
+A focus timer with a break in between. A session can be linked to one of your habits.
 
 ## How sync works
 
@@ -81,16 +75,17 @@ edits are queued and sent to `POST /sync`, which returns everything newer than
 the device's cursor in the same round trip.
 
 Conflicts resolve per field with last-write-wins (`packages/core/lib/src/merge.dart`):
-renaming a task on one device while completing it on another keeps both edits.
-Deleting sets a `_deleted` field, so Trash and Restore sync like any edit.
+renaming a habit on one device while changing its color on another keeps both
+edits. Deleting sets a `_deleted` field, so deleting and restoring sync like any
+other edit.
 
 ## Layout
 
 ```
 packages/core   Shared by client and server: sync clock, merge rule, models,
-                repeat rules, habit logic, quick-add parser
+                habit logic
 apps/server     Server (Dart, SQLite): setup page, accounts, sync, remote
-                access, calendar import
+                access
 apps/client     Flutter app
 deploy/truenas  TrueNAS app config and catalog plan
 ```

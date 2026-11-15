@@ -58,20 +58,6 @@ const listColors = [
   0xFF7A8794,
 ];
 
-Color priorityColor(Priority p, ColorScheme scheme) => switch (p) {
-  Priority.high => const Color(0xFFE5534B),
-  Priority.medium => const Color(0xFFF0A020),
-  Priority.low => const Color(0xFF4772FA),
-  Priority.none => scheme.outline,
-};
-
-String priorityLabel(Priority p) => switch (p) {
-  Priority.high => 'High',
-  Priority.medium => 'Medium',
-  Priority.low => 'Low',
-  Priority.none => 'None',
-};
-
 const _monthNames = [
   'Jan',
   'Feb',
@@ -174,13 +160,6 @@ String timeLabel(BuildContext context, String hhmm) {
 
 String clockLabel(BuildContext context, DateTime d) =>
     TimeOfDay.fromDateTime(d).format(context);
-
-/// Due label for a task, e.g. "Today 5:00 PM".
-String dueLabel(BuildContext context, Task t, DateTime now) {
-  if (t.dueDate == null) return '';
-  final date = relativeDate(t.dueDate!, now);
-  return t.dueTime == null ? date : '$date ${timeLabel(context, t.dueTime!)}';
-}
 
 /// True when the layout has room for side-by-side panes.
 bool isWide(BuildContext context) => MediaQuery.sizeOf(context).width >= 840;

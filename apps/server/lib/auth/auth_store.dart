@@ -71,6 +71,12 @@ class AuthStore {
         created_at TEXT NOT NULL,
         last_seen TEXT NOT NULL
       );
+      -- One private calendar link per person. Kept as-is (not hashed) so the
+      -- app can show the link again; it only grants reading the calendar.
+      CREATE TABLE IF NOT EXISTS calendar_links (
+        user_id TEXT PRIMARY KEY,
+        token TEXT NOT NULL UNIQUE
+      );
     ''');
   }
 
@@ -139,6 +145,7 @@ class AuthStore {
     if (user == null) return;
     if (user.isOwner) throw const AuthException("The owner can't be removed.");
     _db.execute('DELETE FROM sessions WHERE user_id = ?', [id]);
+    _db.execute('DELETE FROM calendar_links WHERE user_id = ?', [id]);
     _db.execute('DELETE FROM users WHERE id = ?', [id]);
     _sync.deleteUserData(id);
   }
@@ -268,6 +275,34 @@ class AuthStore {
     }
     return userById(entry.userId) ??
         (throw const AuthException("That account doesn't exist anymore."));
+  }
+
+  /// The secret part of [userId]'s private calendar link, made on first use.
+  String calendarToken(String userId) {
+    final rows = _db.select(
+      'SELECT token FROM calendar_links WHERE user_id = ?',
+      [userId],
+    );
+    return rows.isEmpty ? resetCalendarToken(userId) : rows.first['token'];
+  }
+
+  /// Replaces [userId]'s calendar link; the old one stops working.
+  String resetCalendarToken(String userId) {
+    final token = _token(32);
+    _db.execute(
+      'INSERT OR REPLACE INTO calendar_links (user_id, token) VALUES (?, ?)',
+      [userId, token],
+    );
+    return token;
+  }
+
+  /// Whose calendar link [token] is, if anyone's.
+  User? userForCalendarToken(String token) {
+    final rows = _db.select(
+      'SELECT user_id FROM calendar_links WHERE token = ?',
+      [token],
+    );
+    return rows.isEmpty ? null : userById(rows.first['user_id'] as String);
   }
 
   static String _normalizeCode(String code) =>

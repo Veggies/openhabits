@@ -1,12 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
 import 'package:server/api.dart';
 import 'package:server/auth/auth_store.dart';
 import 'package:server/auth/oidc.dart';
-import 'package:server/calendar/calendar_sync.dart';
 import 'package:server/remote/remote_access.dart';
 import 'package:server/remote/tls.dart';
 import 'package:server/settings_store.dart';
@@ -63,30 +61,6 @@ Future<void> main(List<String> args) async {
   final certificate = ServerCertificate.loadOrCreate(dataDir);
   final remote = RemoteAccess(settings, httpsPort: httpsPort)..start();
 
-  // Calendars used to live in calendars.json; bring them into settings once.
-  final legacyCalendars = File(
-    env['CALENDARS_CONFIG'] ?? '${dataDir.path}/calendars.json',
-  );
-  if (settings.calendars.isEmpty && legacyCalendars.existsSync()) {
-    final json = jsonDecode(legacyCalendars.readAsStringSync());
-    final list = json is Map ? json['calendars'] : json;
-    settings.calendars = [
-      for (final c in list as List) (c as Map).cast<String, Object?>(),
-    ];
-    print(
-      'Imported ${settings.calendars.length} calendar(s) from ${legacyCalendars.path}.',
-    );
-  }
-  final calendars = CalendarSync(
-    store,
-    [for (final c in settings.calendars) CalendarSource.fromJson(c)],
-    userIdFor: (s) =>
-        s.user == null ? auth.owner?.id : auth.userByName(s.user!)?.id,
-  );
-  final minutes = int.parse(env['CALENDAR_SYNC_MINUTES'] ?? '15');
-  unawaited(calendars.run());
-  Timer.periodic(Duration(minutes: minutes), (_) => calendars.run());
-
   // Single sign-on: from the environment if set, otherwise from the setup
   // page. Rebuilt whenever the owner changes it.
   OidcProvider? oidc;
@@ -117,7 +91,6 @@ Future<void> main(List<String> args) async {
         buildHandler(
           store,
           auth,
-          calendars: calendars,
           serverName: env['SERVER_NAME'] ?? settings.serverName,
           trustProxy: env['TRUST_PROXY'] == 'true',
           settings: settings,

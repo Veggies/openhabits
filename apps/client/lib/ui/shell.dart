@@ -2,12 +2,10 @@ import 'package:material_ui/material_ui.dart';
 
 import '../data/focus_controller.dart';
 import '../data/sync_engine.dart';
-import 'calendar_page.dart';
 import 'common.dart';
 import 'focus_page.dart';
 import 'habits_page.dart';
 import 'settings_page.dart';
-import 'tasks_page.dart';
 
 /// Top-level navigation: a rail on wide screens, a bottom bar on phones.
 /// Pages stay alive in an [IndexedStack] so each keeps its state.
@@ -22,8 +20,6 @@ class _ShellState extends State<Shell> {
   int index = 0;
 
   static const _destinations = [
-    (Icons.check_box_outlined, Icons.check_box, 'Tasks'),
-    (Icons.calendar_month_outlined, Icons.calendar_month, 'Calendar'),
     (
       Icons.local_fire_department_outlined,
       Icons.local_fire_department,
@@ -33,13 +29,7 @@ class _ShellState extends State<Shell> {
     (Icons.settings_outlined, Icons.settings, 'Settings'),
   ];
 
-  static const _pages = [
-    TasksPage(),
-    CalendarPage(),
-    HabitsPage(),
-    FocusPage(),
-    SettingsPage(),
-  ];
+  static const _pages = [HabitsPage(), FocusPage(), SettingsPage()];
 
   @override
   void didChangeDependencies() {

@@ -4,8 +4,6 @@ import 'package:client/data/local_store.dart';
 import 'package:client/data/repo.dart';
 import 'package:client/data/sync_engine.dart';
 import 'package:client/main.dart';
-import 'package:client/ui/common.dart';
-import 'package:client/ui/growth_chart.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -27,156 +25,36 @@ Future<Repo> pumpApp(
   return repo;
 }
 
+/// A destination in the app's navigation (rail or bottom bar).
+Finder nav(String label) => find.descendant(
+  of: find.byWidgetPredicate((w) => w is NavigationRail || w is NavigationBar),
+  matching: find.text(label),
+);
+
 void main() {
   for (final (name, size) in [
     ('desktop', const Size(1400, 900)),
     ('phone', const Size(400, 860)),
   ]) {
-    testWidgets('$name: quick add, then visit every screen', (tester) async {
+    testWidgets('$name: visit every screen', (tester) async {
       final repo = await pumpApp(tester, size);
-
-      await tester.enterText(
-        find.byType(TextField).first,
-        'Pay rent today 9am !high #home',
-      );
-      await tester.pump();
-      expect(find.text('High priority'), findsOneWidget); // live parse preview
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pump();
-
-      expect(find.text('Pay rent'), findsOneWidget);
-      expect(repo.tasksFor(const SmartFilter(SmartList.today)).single.tags, [
-        'home',
-      ]);
-
-      // Open the task detail.
-      await tester.tap(find.text('Pay rent'));
-      await tester.pumpAndSettle();
-      expect(find.text('Subtasks'), findsOneWidget);
-      if (size.width < 840) {
-        await tester.pageBack();
-        await tester.pumpAndSettle();
-      }
-
-      for (final tab in ['Calendar', 'Habits', 'Focus', 'Settings', 'Tasks']) {
-        await tester.tap(find.text(tab).last);
+      repo.createHabit({'name': 'Read'});
+      expect(find.text('Tasks'), findsNothing);
+      expect(find.text('Calendar'), findsNothing);
+      for (final tab in ['Focus', 'Settings', 'Habits']) {
+        await tester.tap(nav(tab));
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull, reason: tab);
       }
+      expect(find.text('Read'), findsWidgets);
     });
   }
-
-  testWidgets('calendar shows tasks in month, week and day views', (
-    tester,
-  ) async {
-    final repo = await pumpApp(tester, const Size(1400, 900));
-    repo.quickAdd('Dentist today 3pm');
-    repo.quickAdd('Taxes today');
-    await tester.tap(find.text('Calendar'));
-    await tester.pumpAndSettle();
-    expect(find.text('Dentist'), findsWidgets);
-
-    for (final view in ['Week', 'Day', 'Month']) {
-      await tester.tap(find.text(view));
-      await tester.pumpAndSettle();
-      expect(find.text('Dentist'), findsWidgets, reason: view);
-      expect(find.text('Taxes'), findsWidgets, reason: view);
-    }
-
-    // Weeks start on Sunday, with full day names.
-    expect(find.text('Sun'), findsWidgets);
-    expect(find.text('S'), findsNothing);
-
-    // In month view, the title opens a dropdown of months with the year
-    // changeable above them.
-    final now = DateTime.now();
-    await tester.tap(find.text('${monthNamesLong[now.month - 1]} ${now.year}'));
-    await tester.pumpAndSettle();
-    expect(find.text('Jan'), findsOneWidget);
-    expect(find.text('Dec'), findsOneWidget);
-    // The last row isn't clipped by the dropdown.
-    expect(find.text('Dec').hitTestable(), findsOneWidget);
-    await tester.tap(find.byTooltip('Next year'));
-    await tester.pumpAndSettle();
-    expect(find.text('${now.year + 1}'), findsOneWidget);
-    await tester.tap(find.text('Jul'));
-    await tester.pumpAndSettle();
-    expect(find.text('July ${now.year + 1}'), findsOneWidget);
-    expect(find.text('Jan'), findsNothing); // the dropdown closed
-
-    // The arrows beside the title step one month.
-    await tester.tap(find.byTooltip('Next'));
-    await tester.pumpAndSettle();
-    expect(find.text('August ${now.year + 1}'), findsOneWidget);
-
-    // In year view, the title opens a list of years.
-    await tester.tap(find.text('Year'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('${now.year + 1}'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('${now.year - 2}'));
-    await tester.pumpAndSettle();
-    expect(find.text('${now.year - 2}'), findsOneWidget);
-    expect(find.text('January'), findsOneWidget); // still the year view
-
-    // Today comes back from anywhere.
-    await tester.tap(find.text('Today'));
-    await tester.tap(find.text('Month'));
-    await tester.pumpAndSettle();
-    expect(
-      find.text('${monthNamesLong[now.month - 1]} ${now.year}'),
-      findsOneWidget,
-    );
-  });
-
-  testWidgets('habits with a time show on the calendar', (tester) async {
-    final repo = await pumpApp(tester, const Size(1400, 900));
-    final today = DateTime.now();
-    final id = repo.createHabit({
-      'name': 'Read a book',
-      'time': '21:00',
-      'duration': 30,
-      'weekdays': [1, 2, 3, 4, 5, 6, 7],
-    });
-    repo.createHabit({'name': 'Drink water'}); // no time: not on the calendar
-    expect(
-      repo.habit(id)!.plan.isEmpty,
-      isTrue,
-    ); // a time alone isn't the framework
-
-    await tester.tap(find.text('Calendar'));
-    await tester.pumpAndSettle();
-    expect(find.text('Read a book'), findsWidgets); // month grid and day list
-    expect(find.text('Drink water'), findsNothing);
-    expect(find.textContaining('30 min · Habit'), findsOneWidget);
-
-    await tester.tap(find.text('Day'));
-    await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.text('Read a book'),
-      200,
-      scrollable: find.byType(Scrollable).last,
-    );
-    await tester.tap(find.text('Read a book'));
-    await tester.pumpAndSettle();
-    expect(repo.isHabitDone(id, today), isTrue);
-
-    // The editor offers time and length without Atomic Habits.
-    await tester.tap(find.text('Habits'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Drink water').first);
-    await tester.pumpAndSettle();
-    expect(find.text('Time (optional)'), findsOneWidget);
-    expect(find.text('How long'), findsNothing); // only once there's a time
-  });
 
   testWidgets('the habit editor scrolls from anywhere in the window', (
     tester,
   ) async {
     final repo = await pumpApp(tester, const Size(1400, 500));
     repo.setPrefs({'atomicHabits': true}); // a long form
-    await tester.tap(find.text('Habits'));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('New habit'));
     await tester.pumpAndSettle();
 
@@ -201,8 +79,6 @@ void main() {
     ) async {
       final repo = await pumpApp(tester, size);
       repo.createHabit({'name': 'Read'});
-      await tester.tap(find.text('Habits').last);
-      await tester.pumpAndSettle();
       expect(find.text('Scorecard'), findsNothing); // framework off: no tabs
 
       repo.setPrefs({'atomicHabits': true});
@@ -254,11 +130,10 @@ void main() {
     for (var d = 0; d < 14; d++) {
       if (d != 3) repo.setHabitDone(id, addDays(today, -d), true);
     }
-
-    await tester.tap(find.text('Habits').last);
     await tester.pumpAndSettle();
-    expect(find.text('Your version for now: Read one page'), findsOneWidget);
-    await tester.tap(find.text("Let's see"));
+
+    expect(find.text('Read one page'), findsOneWidget);
+    await tester.tap(find.text('Time for a check-in'));
     await tester.pumpAndSettle();
     expect(
       find.textContaining('you did this on 13 of the 14 days it was scheduled'),
@@ -275,30 +150,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(repo.habit(id)!.plan.twoMinute, 'Read five pages');
     expect(
-      find.text('Grown from: Read one page  →  Read five pages'),
+      find.byTooltip('Grown from: Read one page  →  Read five pages'),
       findsOneWidget,
     );
-    expect(find.text("Let's see"), findsNothing);
-
-    // The Growth tab: both habits, each can be switched off.
-    // Each card says how the habit's going. Read has only been kept up for
-    // the last two of the four weeks; Walk not at all.
-    expect(find.byType(StrengthBadge), findsNWidgets(2));
-    expect(find.widgetWithText(StrengthBadge, 'Struggling'), findsNWidgets(2));
-    final fresh = repo.createHabit({'name': 'Brand new'});
-    await tester.pumpAndSettle();
-    expect(
-      find.descendant(
-        of: find.ancestor(
-          of: find.text('Brand new'),
-          matching: find.byType(Card),
-        ),
-        matching: find.text('Just started'),
-      ),
-      findsOneWidget,
-    );
-    repo.deleteHabit(fresh);
-    await tester.pumpAndSettle();
+    expect(find.text('Time for a check-in'), findsNothing);
 
     final scroll = repo.createHabit({
       'name': 'Scrolling in bed',
@@ -373,8 +228,6 @@ void main() {
 
   testWidgets('habits can be created and checked in', (tester) async {
     final repo = await pumpApp(tester, const Size(1400, 900));
-    await tester.tap(find.text('Habits'));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('New habit'));
     await tester.pumpAndSettle();
     // The framework is off, so only the basics are shown.
@@ -389,23 +242,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Meditate'), findsWidgets); // card and overview
 
-    await tester.tap(find.text('Done today'));
+    await tester.tap(find.byTooltip('Done today'));
     await tester.pumpAndSettle();
     expect(repo.streak(repo.habits.single), 1);
-    expect(find.text('1 day'), findsOneWidget);
-  });
-
-  testWidgets('the "Completed" message goes away on its own', (tester) async {
-    final repo = await pumpApp(tester, const Size(1400, 900));
-    repo.quickAdd('Water plants today');
-    await tester.pumpAndSettle();
-    await tester.tap(find.byType(Checkbox).first);
-    await tester.pumpAndSettle();
-    expect(find.text('Completed "Water plants"'), findsOneWidget);
-    expect(find.text('Undo'), findsOneWidget);
-    await tester.pump(const Duration(seconds: 5));
-    await tester.pumpAndSettle();
-    expect(find.text('Completed "Water plants"'), findsNothing);
+    expect(find.byTooltip('A streak of 1 day'), findsOneWidget);
   });
 
   testWidgets('setup wizard can be run again from Settings', (tester) async {
@@ -520,8 +360,6 @@ void main() {
     // Tall enough that the whole editor is laid out without scrolling.
     final repo = await pumpApp(tester, const Size(1400, 2400));
     repo.setPrefs({'atomicHabits': true});
-    await tester.tap(find.text('Habits'));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('New habit'));
     await tester.pumpAndSettle();
     for (final law in [
@@ -542,31 +380,6 @@ void main() {
     ]) {
       expect(find.text(law), findsOneWidget);
     }
-  });
-
-  testWidgets('date picker uses day names and can jump to any month', (
-    tester,
-  ) async {
-    final repo = await pumpApp(tester, const Size(1400, 900));
-    repo.quickAdd('Book flights');
-    await tester.tap(find.text('Inbox'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Book flights'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Due date'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Sun'), findsOneWidget);
-    expect(find.text('Wed'), findsOneWidget);
-    final now = DateTime.now();
-    await tester.tap(find.text('${monthNamesLong[now.month - 1]} ${now.year}'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Jul'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('15'));
-    await tester.tap(find.text('OK'));
-    await tester.pumpAndSettle();
-    expect(repo.allTasks.single.dueDate, DateTime(now.year, 7, 15));
   });
 
   testWidgets(

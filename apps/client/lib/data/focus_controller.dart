@@ -16,7 +16,8 @@ class FocusController extends ChangeNotifier {
   FocusPhase phase = FocusPhase.focus;
   Map<FocusPhase, int> minutes = {FocusPhase.focus: 25, FocusPhase.rest: 5};
 
-  String? taskId;
+  /// The habit this session is for, if one was picked.
+  String? habitId;
 
   DateTime? _endsAt;
   DateTime? _startedAt;
@@ -77,8 +78,8 @@ class FocusController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void selectTask(String? id) {
-    taskId = id;
+  void selectHabit(String? id) {
+    habitId = id;
     notifyListeners();
   }
 
@@ -96,7 +97,7 @@ class FocusController extends ChangeNotifier {
         repo.recordFocus(
           start: _startedAt!,
           minutes: minutes[FocusPhase.focus]!,
-          taskId: taskId,
+          habitId: habitId,
         );
       }
       phase = FocusPhase.rest;

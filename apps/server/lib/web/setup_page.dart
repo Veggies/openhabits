@@ -1,5 +1,5 @@
 /// The server's own web page: first-run setup, then the owner's settings
-/// (remote access, devices, people, calendars, single sign-on). It talks to
+/// (remote access, devices, people, single sign-on). It talks to
 /// the same JSON API as the app.
 ///
 /// Everything rendered from the server goes through textContent or
@@ -194,38 +194,6 @@ const setupPageHtml = r'''<!doctype html>
         <div class="error" id="peopleError"></div>
       </section>
 
-      <!-- Calendars -->
-      <section class="card">
-        <h2>External calendars</h2>
-        <p class="sub">Show Google, iCloud and other calendars in the app's Calendar view.</p>
-        <ul class="list" id="calendars"></ul>
-        <details>
-          <summary>Add a calendar</summary>
-          <form id="calendarForm">
-            <div class="grid2">
-              <div><label for="c-name">Name</label><input id="c-name" placeholder="Work" required></div>
-              <div><label for="c-type">Kind</label>
-                <select id="c-type">
-                  <option value="ics">Calendar link (Google, Outlook, .ics, webcal://)</option>
-                  <option value="caldav">iCloud or CalDAV account</option>
-                </select></div>
-            </div>
-            <label for="c-url">Address</label>
-            <input id="c-url" required placeholder="https://calendar.google.com/calendar/ical/…/basic.ics">
-            <p class="muted" id="c-help">Google: Calendar settings → your calendar → "Secret address in iCal format".</p>
-            <div class="grid2" id="c-account" hidden>
-              <div><label for="c-username">Account email</label><input id="c-username"></div>
-              <div><label for="c-password">App-specific password</label><input id="c-password" type="password"></div>
-            </div>
-            <label for="c-user">Whose account should it show in?</label>
-            <select id="c-user"></select>
-            <div class="row"><button class="primary" type="submit">Add calendar</button></div>
-          </form>
-        </details>
-        <div class="row"><button id="calRefresh">Refresh now</button><span class="muted" id="calStatus"></span></div>
-        <div class="error" id="calError"></div>
-      </section>
-
       <!-- Single sign-on -->
       <section class="card">
         <h2>Single sign-on <span class="pill off" id="ssoPill">Off</span></h2>
@@ -318,7 +286,7 @@ async function start() {
   show("dashboard");
   show("ownerOnly", me.isOwner);
   show("remoteCard", me.isOwner);
-  if (me.isOwner) { loadRemote(); loadPeople().then(loadCalendars); loadSso(); }
+  if (me.isOwner) { loadRemote(); loadPeople(); loadSso(); }
 }
 
 // ---- First run and sign in ----
@@ -425,82 +393,17 @@ async function loadPeople() {
       li.append(button("Remove", guard("peopleError", async () => {
         if (!confirm("Remove " + p.username + "? Their account and all their data on this server will be deleted.")) return;
         await api("DELETE", "/users/" + encodeURIComponent(p.id));
-        await loadPeople(); renderCalendarUsers();
+        await loadPeople();
       }), "danger"));
     }
     list.append(li);
   }
-  renderCalendarUsers();
 }
 
 $("personForm").addEventListener("submit", guard("peopleError", async () => {
   await api("POST", "/users", { username: $("p-user").value.trim(), password: $("p-pass").value, email: $("p-email").value.trim() });
   $("personForm").reset();
   await loadPeople();
-}));
-
-// ---- Calendars ----
-let calendars = [];
-function renderCalendarUsers() {
-  const select = $("c-user");
-  select.replaceChildren();
-  for (const p of people) {
-    const option = el("option", p.username);
-    option.value = p.isOwner ? "" : p.username;
-    select.append(option);
-  }
-}
-
-async function loadCalendars() {
-  calendars = (await api("GET", "/admin/calendars")).calendars;
-  const list = $("calendars");
-  list.replaceChildren();
-  if (!calendars.length) list.append(el("li", "You haven't added any calendars yet.", "muted"));
-  calendars.forEach((c, i) => {
-    const li = el("li");
-    const text = el("div", null, "grow");
-    const owner = c.user || (people.find((p) => p.isOwner) || {}).username || "owner";
-    text.append(el("div", c.name), el("div", (c.type === "caldav" ? "CalDAV · " : "Link · ") + owner, "muted"));
-    li.append(text, button("Remove", guard("calError", async () => {
-      calendars.splice(i, 1);
-      await saveCalendars();
-    }), "danger"));
-    list.append(li);
-  });
-}
-
-async function saveCalendars() {
-  await api("PUT", "/admin/calendars", { calendars });
-  await loadCalendars();
-}
-
-$("c-type").addEventListener("change", () => {
-  const caldav = $("c-type").value === "caldav";
-  show("c-account", caldav);
-  $("c-url").placeholder = caldav ? "https://caldav.icloud.com" : "https://calendar.google.com/calendar/ical/…/basic.ics";
-  if (caldav && !$("c-url").value) $("c-url").value = "https://caldav.icloud.com";
-  $("c-help").textContent = caldav
-    ? "iCloud: create an app-specific password at appleid.apple.com → Sign-In and Security."
-    : 'Google: Calendar settings → your calendar → "Secret address in iCal format".';
-});
-
-$("calendarForm").addEventListener("submit", guard("calError", async () => {
-  const entry = { name: $("c-name").value.trim(), type: $("c-type").value, url: $("c-url").value.trim() };
-  if (entry.type === "caldav") { entry.username = $("c-username").value.trim(); entry.password = $("c-password").value; }
-  if ($("c-user").value) entry.user = $("c-user").value;
-  calendars.push(entry);
-  await saveCalendars();
-  $("calendarForm").reset();
-  $("c-type").dispatchEvent(new Event("change"));
-  $("calRefresh").click();
-}));
-
-$("calRefresh").addEventListener("click", guard("calError", async () => {
-  $("calStatus").textContent = "Refreshing…";
-  const res = await api("POST", "/calendars/refresh");
-  const errors = Object.entries(res.errors || {});
-  $("calStatus").textContent = errors.length ? "" : (res.sources ? "All up to date." : "");
-  if (errors.length) throw new Error(errors.map(([k, v]) => k + ": " + v).join("\n"));
 }));
 
 // ---- Single sign-on ----

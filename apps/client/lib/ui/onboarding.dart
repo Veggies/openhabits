@@ -151,7 +151,7 @@ class _Welcome extends StatelessWidget {
       const _Title(
         icon: Icons.check_box,
         title: 'Welcome to Tasks',
-        body: 'Tasks, calendar, habits and focus in one place, synced through your own server.',
+        body: 'Build habits that stick, with focus sessions to help, all kept on your own server.',
       ),
       FilledButton(
         onPressed: onNext,
@@ -504,7 +504,7 @@ class _Done extends StatelessWidget {
       const _Title(
         icon: Icons.celebration_outlined,
         title: "You're all set",
-        body: "To add a task, just type it the way you'd say it, like \"Call mom tomorrow 5pm #family\".",
+        body: 'Check in on the Habits page each day, and see how you\'re doing on the Progress tab.',
       ),
       FilledButton(
         onPressed: onFinish,

@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../data/focus_controller.dart';
-import '../data/repo.dart';
 import 'common.dart';
 
 class FocusPage extends StatelessWidget {
@@ -125,8 +124,7 @@ class _TimerPanel extends StatelessWidget {
     final remaining = focus.remaining;
     final mm = remaining.inMinutes.toString().padLeft(2, '0');
     final ss = (remaining.inSeconds % 60).toString().padLeft(2, '0');
-    final openTasks = repo.tasksFor(const SmartFilter(SmartList.all));
-    final selectedTask = focus.taskId == null ? null : repo.task(focus.taskId!);
+    final habits = repo.habits.where((h) => !h.isQuit).toList();
     final color = _phaseColor(focus.phase, theme.colorScheme);
     final active = focus.running || focus.paused;
 
@@ -257,26 +255,26 @@ class _TimerPanel extends StatelessWidget {
           height: 64,
           child: focus.phase == FocusPhase.focus
               ? DropdownButtonFormField<String?>(
-                  initialValue:
-                      selectedTask == null ||
-                          selectedTask.done ||
-                          selectedTask.deleted
-                      ? null
-                      : focus.taskId,
+                  initialValue: habits.any((h) => h.id == focus.habitId)
+                      ? focus.habitId
+                      : null,
                   isExpanded: true,
                   decoration: const InputDecoration(
                     labelText: 'Focusing on',
                     border: OutlineInputBorder(),
                   ),
                   items: [
-                    const DropdownMenuItem(value: null, child: Text('No task')),
-                    for (final t in openTasks)
+                    const DropdownMenuItem(
+                      value: null,
+                      child: Text('Nothing in particular'),
+                    ),
+                    for (final h in habits)
                       DropdownMenuItem(
-                        value: t.id,
-                        child: Text(t.title, overflow: TextOverflow.ellipsis),
+                        value: h.id,
+                        child: Text(h.name, overflow: TextOverflow.ellipsis),
                       ),
                   ],
-                  onChanged: focus.selectTask,
+                  onChanged: focus.selectHabit,
                 )
               : Center(
                   child: Text(
@@ -360,9 +358,9 @@ class _Stats extends StatelessWidget {
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.timer_outlined),
             title: Text(
-              s.taskId == null
+              s.habitId == null
                   ? 'Focus'
-                  : (repo.task(s.taskId!)?.title ?? 'Focus'),
+                  : (repo.habit(s.habitId!)?.name ?? 'Focus'),
             ),
             subtitle: Text(
               '${relativeDate(s.start, DateTime.now())} · ${clockLabel(context, s.start)}',

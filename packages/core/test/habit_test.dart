@@ -43,13 +43,15 @@ void main() {
     });
   });
 
-  test('quit habits count days since the last slip', () {
+  test('breaking a habit: days clean are the days marked "stayed clear"', () {
     final h = habit(kind: 'quit');
     expect(h.isQuit, isTrue);
-    expect(h.isScheduled(DateTime(2026, 11, 14)), isTrue);
-    expect(h.daysClean(doneOn([9]), today), 4);
-    expect(h.daysClean(doneOn([]), today), 12); // since Nov 1
-    expect(h.daysClean(doneOn([13]), today), 0);
+    expect(h.isScheduled(DateTime(2026, 11, 14)), isTrue); // every day
+    expect(h.daysClean(doneOn([10, 11, 12, 13]), today), 4);
+    // Today not marked yet: the run up to yesterday still counts.
+    expect(h.daysClean(doneOn([10, 11, 12]), today), 3);
+    expect(h.daysClean(doneOn([]), today), 0);
+    expect(h.daysClean(doneOn([9, 11, 12, 13]), today), 3); // 10 missed
   });
 
   test('the plan reads optional Atomic Habits fields', () {
