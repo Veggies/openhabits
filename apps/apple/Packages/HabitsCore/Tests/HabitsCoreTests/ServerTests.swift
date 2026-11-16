@@ -76,3 +76,83 @@ struct WithAServer {
         #expect(!engine.isConfigured)
     }
 }
+
+/// One half of the Apple ↔ Android check in `tool/cross_app_check.sh`: the
+/// Swift core writes a habit, the Flutter core edits it, the Swift core reads
+/// the edit back. Runs only when the script sets HABITS_CROSS_STEP.
+@MainActor
+@Suite(.enabled(if: ProcessInfo.processInfo.environment["HABITS_CROSS_STEP"] != nil))
+struct CrossApp {
+    let env = ProcessInfo.processInfo.environment
+    var url: String { env["HABITS_TEST_SERVER"] ?? "" }
+    var name: String { env["HABITS_CROSS_NAME"] ?? "" }
+
+    func signedIn() async throws -> (Repo, SyncEngine) {
+        let store = try LocalStore()
+        let (repo, engine) = (Repo(store: store), SyncEngine(store: store, deviceName: "Cross-app iPhone"))
+        _ = try await engine.signIn(url: url, username: env["HABITS_TEST_USER"] ?? "tester",
+                                    password: env["HABITS_TEST_PASSWORD"] ?? "testpass123")
+        await engine.syncNow()
+        #expect(engine.status == .idle, "\(engine.lastError ?? "")")
+        return (repo, engine)
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["HABITS_CROSS_STEP"] == "write"))
+    func appleWrites() async throws {
+        let (repo, engine) = try await signedIn()
+        let id = repo.createHabit(["name": .string(name), "weekdays": [2, 4], "duration": 15])
+        repo.setDone(id, repo.today, true)
+        await engine.syncNow()
+        #expect(engine.store.pendingCount == 0)
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["HABITS_CROSS_STEP"] == "read"))
+    func appleReadsAndroidsEdit() async throws {
+        let (repo, engine) = try await signedIn()
+        let habit = try #require(repo.habits.first { $0.name == "\(name) (from Android)" },
+                                 "The edit made by the Flutter app didn't reach the Apple app")
+        #expect(habit.weekdays == [2, 4])
+        #expect(habit.duration == 25)
+        #expect(!repo.isDone(habit.id, repo.today), "Android unticked today")
+        repo.deleteHabit(habit.id)
+        await engine.syncNow()
+        await engine.signOut()
+    }
+}
+
+/// The directory fallback against a real server, a real router and the real
+/// directory code (run by tool/directory_check.sh). The device learns the
+/// server's addresses, then every address it knows stops working, as when
+/// the home's internet address changes while it's away. It must find the
+/// server again through the directory.
+@Suite(.enabled(if: ProcessInfo.processInfo.environment["HABITS_DIRECTORY_TEST"] != nil))
+@MainActor
+struct DirectoryFallback {
+    let env = ProcessInfo.processInfo.environment
+    var url: String { env["HABITS_TEST_SERVER"] ?? "" }
+
+    @Test func findsTheServerAfterItsAddressChanges() async throws {
+        let store = try LocalStore()
+        let repo = Repo(store: store)
+        let first = SyncEngine(store: store, deviceName: "Directory test")
+        _ = try await first.signIn(url: url, username: env["HABITS_TEST_USER"] ?? "tester",
+            password: env["HABITS_TEST_PASSWORD"] ?? "testpass123")
+        await first.syncNow()
+        let realRemote = try #require(first.remoteUrl, "Remote access should be on")
+        #expect(store.meta("directoryLookup") != nil)
+
+        // Everything this device knows is now wrong (192.0.2.x never answers).
+        store.setMeta("serverUrl", "http://192.0.2.1:9")
+        store.setMeta("remoteUrl", "https://192.0.2.1:9")
+        let away = SyncEngine(store: store, deviceName: "Directory test")
+        let name = "Directory test \(UUID().uuidString.prefix(6))"
+        let id = repo.createHabit(["name": .string(name)])
+        await away.syncNow()
+        #expect(away.status == .idle, "\(away.lastError ?? "")")
+        #expect(store.pendingCount == 0)
+        #expect(away.remoteUrl == realRemote)
+
+        repo.deleteHabit(id)
+        await away.syncNow()
+    }
+}

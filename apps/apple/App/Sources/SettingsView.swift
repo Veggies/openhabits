@@ -7,8 +7,6 @@ struct SettingsView: View {
     @State private var connecting = false
     @State private var addingDevice = false
     @State private var changingPassword = false
-    @State private var editingEmail = false
-    @State private var email = ""
     @State private var message: String?
 
     var body: some View {
@@ -35,16 +33,6 @@ struct SettingsView: View {
                     SyncStatusRow()
                     Button("Add a Device", systemImage: "qrcode") { addingDevice = true }
                     Button("Change Password", systemImage: "key") { changingPassword = true }
-                    Button {
-                        email = account.email ?? ""
-                        editingEmail = true
-                    } label: {
-                        LabeledContent {
-                            Text(account.email ?? "None yet")
-                        } label: {
-                            Label("Email for Single Sign-On", systemImage: "envelope")
-                        }
-                    }
                     if account.isOwner {
                         NavigationLink {
                             PeopleView()
@@ -130,18 +118,6 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $addingDevice) { AddDeviceView() }
         .sheet(isPresented: $changingPassword) { ChangePasswordView() }
-        .alert("Email for Single Sign-On", isPresented: $editingEmail) {
-            TextField("you@example.com", text: $email).plainEntry()
-            Button("Cancel", role: .cancel) {}
-            Button("Save") {
-                Task {
-                    do { try await sync.setEmail(email.trimmingCharacters(in: .whitespaces)) }
-                    catch { message = error.localizedDescription }
-                }
-            }
-        } message: {
-            Text("Lets you sign in with your single sign-on account, if your server has it set up.")
-        }
         .alert("Something went wrong", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
             Button("OK") {}
         } message: {
@@ -319,7 +295,7 @@ struct PeopleView: View {
                             }
                         } label: {
                             Text(person.username)
-                            Text(person.isOwner ? "Owner" : person.email ?? "")
+                            if person.isOwner { Text("Owner") }
                         }
                     }
                 } footer: {
@@ -361,7 +337,6 @@ struct AddPersonView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var username = ""
     @State private var password = ""
-    @State private var email = ""
     @State private var error: String?
 
     var body: some View {
@@ -371,12 +346,7 @@ struct AddPersonView: View {
                 Section {
                     SecureField("Password", text: $password)
                 } footer: {
-                    Text("At least 8 characters.")
-                }
-                Section {
-                    TextField("Email (optional)", text: $email).plainEntry()
-                } footer: {
-                    Text(error ?? "Lets them use single sign-on.")
+                    Text(error ?? "At least 8 characters.")
                         .foregroundStyle(error == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
                 }
             }
@@ -390,7 +360,7 @@ struct AddPersonView: View {
                         Task {
                             do {
                                 try await app.sync.addPerson(username: username.trimmingCharacters(in: .whitespaces),
-                                    password: password, email: email.trimmingCharacters(in: .whitespaces))
+                                    password: password)
                                 dismiss()
                             } catch {
                                 self.error = error.localizedDescription

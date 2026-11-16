@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:server/api.dart';
 import 'package:server/auth/auth_store.dart';
+import 'package:server/remote/cloudflare_dns.dart';
+import 'package:server/remote/directory.dart';
 import 'package:server/remote/remote_access.dart';
 import 'package:server/remote/tls.dart';
 import 'package:server/remote/upnp.dart';
@@ -17,6 +19,9 @@ class FakeUpnp extends UpnpClient {
   bool present = true;
   String externalIp = '203.0.113.7';
   final mapped = <int>[];
+
+  /// Outside ports already forwarded elsewhere (by hand, or the router's own).
+  final taken = <int>{};
 
   @override
   Future<UpnpGateway?> discover({
@@ -37,6 +42,12 @@ class FakeUpnp extends UpnpClient {
     String description = '',
     int leaseSeconds = 3600,
   }) async {
+    if (taken.contains(externalPort)) {
+      throw const UpnpException(
+        'Router refused AddPortMapping (718: ConflictInMappingEntry)',
+        code: 718,
+      );
+    }
     mapped.add(externalPort);
   }
 
@@ -47,6 +58,24 @@ class FakeUpnp extends UpnpClient {
   Future<void> deletePortMapping(UpnpGateway gw, int externalPort) async =>
       mapped.remove(externalPort);
 }
+
+/// The directory, recording what the server publishes.
+class FakeDirectory extends DirectoryClient {
+  final published = <List<String>>[];
+  bool down = false;
+  FakeDirectory(DirectoryIdentity identity)
+    : super(Uri.parse('https://directory.example'), identity);
+
+  @override
+  Future<void> publish(List<String> urls) async {
+    if (down) throw const HttpException('down');
+    published.add(urls);
+  }
+}
+
+final _identity = DirectoryIdentity.loadOrCreate(
+  Directory.systemTemp.createTempSync('directory-key'),
+);
 
 class Api {
   final Handler handler;
@@ -85,7 +114,19 @@ void main() {
   late Api api;
   String? publicIp;
 
+  /// What hostnames resolve to, standing in for DNS.
+  late Map<String, List<String>> dns;
+
+  /// Calls to Cloudflare as "token host ip", and an error to answer with.
+  late List<String> cloudflare;
+  CloudflareException? cloudflareError;
+  late FakeDirectory directory;
+
   setUp(() {
+    dns = {};
+    cloudflare = [];
+    cloudflareError = null;
+    directory = FakeDirectory(_identity);
     store = SyncStore.inMemory();
     auth = AuthStore(store);
     settings = SettingsStore(store.db);
@@ -96,6 +137,12 @@ void main() {
       httpsPort: 8443,
       upnp: router,
       publicIp: () async => publicIp,
+      lookupHost: (host) async => dns[host] ?? const [],
+      updateDns: (token, host, ip) async {
+        if (cloudflareError != null) throw cloudflareError!;
+        cloudflare.add('$token $host $ip');
+      },
+      directory: directory,
     );
     api = Api(
       buildHandler(
@@ -172,6 +219,23 @@ void main() {
     });
 
     test(
+      'a port already forwarded elsewhere moves to a free one and keeps it',
+      () async {
+        router.taken.add(8443);
+        final status = await act('enable');
+        expect(status['state'], 'on');
+        final port = router.mapped.single;
+        expect(port, isNot(8443));
+        expect(status['url'], 'https://203.0.113.7:$port');
+        expect((await api.call('GET', '/admin/remote')).$2['port'], port);
+
+        // Renewing asks for the same port again, not a new one each time.
+        await act('enable');
+        expect(router.mapped.toSet(), {port});
+      },
+    );
+
+    test(
       "no answer from the router asks for a port forward, then trusts it",
       () async {
         router.present = false;
@@ -200,6 +264,185 @@ void main() {
     );
 
     test(
+      'with only an IP address, it works but warns that the address can change',
+      () async {
+        final status = await act('enable');
+        expect(status['state'], 'on');
+        expect(status['url'], 'https://203.0.113.7:8443');
+        expect(status['addressMayChange'], isTrue);
+      },
+    );
+
+    test(
+      "with a hostname, devices get the name and the server's own certificate",
+      () async {
+        dns['habits.example.com'] = ['203.0.113.7'];
+        final (code, b) = await api.call('PUT', '/admin/remote', {
+          'host': 'https://Habits.Example.com:8443/',
+        });
+        expect(code, 200, reason: '$b');
+        expect(b['host'], 'habits.example.com');
+        final status = (b['status'] as Map).cast<String, Object?>();
+        expect(status['state'], 'on');
+        expect(status['url'], 'https://habits.example.com:8443');
+        expect(status['addressMayChange'], isFalse);
+        expect(router.mapped, [8443]);
+        expect((await api.call('GET', '/auth/info')).$2['remote'], {
+          'url': 'https://habits.example.com:8443',
+          'fingerprint': 'AA:BB',
+        });
+      },
+    );
+
+    test(
+      "a hostname that doesn't point home says where it points instead",
+      () async {
+        await act('enable');
+        dns['habits.example.com'] = ['198.51.100.20'];
+        final (_, b) = await api.call('PUT', '/admin/remote', {
+          'host': 'habits.example.com',
+        });
+        final status = (b['status'] as Map).cast<String, Object?>();
+        expect(status['state'], 'hostMismatch');
+        expect(status['message'], contains('198.51.100.20'));
+        expect(status['message'], contains('203.0.113.7'));
+        // Devices keep the last address that worked until it's fixed.
+        expect((await api.call('GET', '/auth/info')).$2['remote'], isNull);
+      },
+    );
+
+    test("a hostname that doesn't exist yet is explained too", () async {
+      final (_, b) = await api.call('PUT', '/admin/remote', {
+        'host': 'habits.example.com',
+      });
+      final status = (b['status'] as Map).cast<String, Object?>();
+      expect(status['state'], 'hostMismatch');
+      expect(status['message'], contains("couldn't find"));
+    });
+
+    test('a forwarded port plus a hostname works without UPnP', () async {
+      router.present = false;
+      dns['habits.example.com'] = ['203.0.113.7'];
+      await api.call('PUT', '/admin/remote', {'host': 'habits.example.com'});
+      final status = await act('manual');
+      expect(status['state'], 'on');
+      expect(status['url'], 'https://habits.example.com:8443');
+    });
+
+    test('nonsense hostnames are turned away', () async {
+      for (final bad in ['not a host', 'http://', '-bad-.example.com']) {
+        final (code, _) = await api.call('PUT', '/admin/remote', {'host': bad});
+        expect(code, 400, reason: bad);
+      }
+    });
+
+    test(
+      'with a Cloudflare token, the server keeps the record pointed home',
+      () async {
+        final (code, b) = await api.call('PUT', '/admin/remote', {
+          'host': 'habits.example.com',
+          'cloudflareToken': ' secret-token ',
+        });
+        expect(code, 200, reason: '$b');
+        expect(b['cloudflare'], isTrue);
+        expect(jsonEncode(b), isNot(contains('secret-token')));
+        final status = (b['status'] as Map).cast<String, Object?>();
+        expect(status['state'], 'on');
+        expect(status['url'], 'https://habits.example.com:8443');
+        expect(cloudflare, ['secret-token habits.example.com 203.0.113.7']);
+
+        // Nothing changed: Cloudflare isn't asked again.
+        await act('refresh');
+        expect(cloudflare, hasLength(1));
+
+        // The provider hands out a new address: the record follows it.
+        router.externalIp = publicIp = '198.51.100.30';
+        expect(
+          (await act('refresh'))['url'],
+          'https://habits.example.com:8443',
+        );
+        expect(
+          cloudflare.last,
+          'secret-token habits.example.com 198.51.100.30',
+        );
+      },
+    );
+
+    test("Cloudflare's complaints are shown as they are", () async {
+      cloudflareError = const CloudflareException(
+        'Cloudflare refused the token.',
+      );
+      final (_, b) = await api.call('PUT', '/admin/remote', {
+        'host': 'habits.example.com',
+        'cloudflareToken': 'bad',
+      });
+      final status = (b['status'] as Map).cast<String, Object?>();
+      expect(status['state'], 'error');
+      expect(status['message'], 'Cloudflare refused the token.');
+      expect((await api.call('GET', '/auth/info')).$2['remote'], isNull);
+    });
+
+    test('a token needs a hostname to update', () async {
+      final (code, _) = await api.call('PUT', '/admin/remote', {
+        'cloudflareToken': 'secret-token',
+      });
+      expect(code, 400);
+      expect(
+        (await api.call('GET', '/admin/remote')).$2['cloudflare'],
+        isFalse,
+      );
+    });
+
+    group('the directory', () {
+      test('hears the address when remote access starts working', () async {
+        await act('enable');
+        expect(directory.published, [
+          ['https://203.0.113.7:8443'],
+        ]);
+      });
+
+      test('is only told again when the address changes', () async {
+        await act('enable');
+        await act('refresh');
+        expect(directory.published, hasLength(1));
+        router.externalIp = publicIp = '198.51.100.30';
+        await act('refresh');
+        expect(directory.published.last, ['https://198.51.100.30:8443']);
+      });
+
+      test('forgets the server when remote access is turned off', () async {
+        await act('enable');
+        await act('disable');
+        expect(directory.published.last, isEmpty);
+      });
+
+      test('keeps the old address while the router has a bad moment', () async {
+        await act('enable');
+        router.present = false;
+        expect((await act('refresh'))['state'], 'needsPortForward');
+        expect(directory.published, hasLength(1));
+      });
+
+      test('being unreachable never breaks remote access', () async {
+        directory.down = true;
+        expect((await act('enable'))['state'], 'on');
+        directory.down = false;
+        await act('refresh');
+        expect(directory.published, hasLength(1));
+      });
+
+      test('devices are told where to look the server up', () async {
+        final (_, b) = await api.call('POST', '/sync', {
+          'since': 0,
+          'changes': [],
+        });
+        expect((b['server'] as Map)['directory'], {
+          'lookup': 'https://directory.example/v1/servers/${_identity.id}',
+        });
+      });
+    });
+
+    test(
       'a custom address (Tailscale Funnel) wins and needs no pinning',
       () async {
         final (status, b) = await api.call('PUT', '/admin/remote', {
@@ -223,6 +466,7 @@ void main() {
           httpsPort: 8443,
           upnp: router,
           publicIp: () async => publicIp,
+          lookupHost: (host) async => dns[host] ?? const [],
         );
         expect(restarted.url, 'https://203.0.113.7:8443');
       },

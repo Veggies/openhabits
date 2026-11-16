@@ -5,9 +5,14 @@ A self-hostable habit tracker. Build habits or break them, start small and grow 
 ## Set up the server
 
 **TrueNAS:** until OpenHabits is in the catalog, go to *Apps → Discover Apps → ⋮ →
-Install via YAML* and paste [`deploy/truenas/tasks.yaml`](deploy/truenas/tasks.yaml)
+Install via YAML* and paste [`deploy/truenas/openhabits.yaml`](deploy/truenas/openhabits.yaml)
 (set the dataset path first).
-**Anywhere else with Docker:** `docker compose up -d`.
+**Anywhere else with Docker** (Linux, Unraid, Synology, a Raspberry Pi, Portainer):
+download [`deploy/docker-compose.yml`](deploy/docker-compose.yml) and run
+`docker compose up -d`. It pulls the ready-made image, so there's nothing to build.
+**From source:** `docker compose up -d --build` in this folder.
+
+[`apps/server/README.md`](apps/server/README.md) lists every setting.
 
 Then open `http://<your-server>:8080` in a browser. The setup page asks you to
 create your account, and afterwards is where the owner manages the server.
@@ -27,8 +32,6 @@ they're signed in. Nothing extra is installed on phones or computers.
 adds people on the setup page. A new device signs in with the server address
 and a password, or by scanning the QR code from *Add a device* (on the setup
 page or in the app's Settings), which also teaches it the remote address.
-Single sign-on with Google or another OpenID Connect provider is optional and
-needs a public address with a real domain.
 
 ## Run the app
 
@@ -122,3 +125,15 @@ deploy/truenas  TrueNAS app config and catalog plan
 The Swift tests can also sync with a real server: start one with
 `PORT=18080 DB_PATH=/tmp/test.sqlite OWNER_USERNAME=tester OWNER_PASSWORD=testpass123 fvm dart run bin/server.dart`
 in `apps/server`, then run `HABITS_TEST_SERVER=http://localhost:18080 swift test`.
+
+## Licence
+
+OpenHabits is open source.
+
+- **The apps** (`apps/apple`, `apps/client`) and the shared sync code
+  (`packages/core`) are under the [MIT licence](LICENSE): do anything you like
+  with them.
+- **The server** (`apps/server`) is under the
+  [GNU AGPL v3.0 or later](apps/server/LICENSE): you can use, change and share
+  it freely, and if you run a changed version as a service for other people,
+  you publish your changes too.

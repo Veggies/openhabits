@@ -44,7 +44,7 @@ public struct UntrustedServer: LocalizedError, Sendable {
     public var errorDescription: String? { "This server's security code isn't trusted yet." }
 }
 
-/// A pairing QR code: `tasks://pair?server=…&code=…&remote=…&fp=…`.
+/// A pairing QR code: `openhabits://pair?server=…&code=…&remote=…&fp=…`.
 public struct Pairing: Sendable {
     public let server: String
     public let code: String
@@ -59,7 +59,7 @@ public struct Pairing: Sendable {
     }
 
     public init?(payload: String) {
-        guard let c = URLComponents(string: payload), c.scheme == "tasks", c.host == "pair",
+        guard let c = URLComponents(string: payload), c.scheme == "openhabits", c.host == "pair",
             let server = c.queryItems?.first(where: { $0.name == "server" })?.value,
             let code = c.queryItems?.first(where: { $0.name == "code" })?.value
         else { return nil }
@@ -71,7 +71,7 @@ public struct Pairing: Sendable {
 
     public var payload: String {
         var c = URLComponents()
-        c.scheme = "tasks"
+        c.scheme = "openhabits"
         c.host = "pair"
         c.queryItems = [URLQueryItem(name: "server", value: server), URLQueryItem(name: "code", value: code)]
             + (remote.map { [URLQueryItem(name: "remote", value: $0)] } ?? [])
@@ -206,10 +206,10 @@ public final class SyncEngine {
     }
 
     /// Where to send the browser for single sign-on. The server sends it
-    /// back to `tasks://auth?code=…`; pass that code to `redeem`.
+    /// back to `openhabits://auth?code=…`; pass that code to `redeem`.
     public func oidcStartURL(_ url: String) -> URL? {
         var c = URLComponents(string: url + "/auth/oidc/start")
-        c?.queryItems = [URLQueryItem(name: "redirect_uri", value: "tasks://auth")]
+        c?.queryItems = [URLQueryItem(name: "redirect_uri", value: "openhabits://auth")]
         return c?.url
     }
 
@@ -227,6 +227,7 @@ public final class SyncEngine {
             store.setMeta("cursor", "0")
             store.setMeta("remoteUrl", nil)
             store.setMeta("fingerprint", nil)
+            store.setMeta("directoryLookup", nil)
         }
         store.setMeta("serverUrl", urls.first)
         store.setMeta("token", tokenValue)
@@ -272,7 +273,7 @@ public final class SyncEngine {
         }
     }
 
-    public func addPerson(username: String, password: String, email: String) async throws {
+    public func addPerson(username: String, password: String, email: String = "") async throws {
         _ = try await post("/users", [
             "username": .string(username), "password": .string(password), "email": .string(email),
         ])
@@ -316,8 +317,8 @@ public final class SyncEngine {
 
     /// Tries each address in turn. Only connection failures move on to the
     /// next; a real answer from the server, even an error, is final.
-    private func sendFirst(urls: [String], method: String, path: String, body: Fields?, auth: Bool = true)
-        async throws -> (String, Fields)
+    private func sendFirst(urls: [String], method: String, path: String, body: Fields?, auth: Bool = true,
+        askDirectory: Bool = true) async throws -> (String, Fields)
     {
         var timedOut = false
         for url in urls {
@@ -326,6 +327,20 @@ public final class SyncEngine {
                     quick: urls.count > 1))
             } catch let e as Unreachable {
                 timedOut = e.timedOut
+            }
+        }
+        // None of the known addresses answer. The home's internet address
+        // may have changed while this device was away: ask the directory
+        // where the server is now. The certificate is still checked, so a
+        // wrong answer can't lead anywhere else.
+        if askDirectory {
+            let moved = await directoryUrls().filter { !urls.contains($0) }
+            if !moved.isEmpty,
+                let found = try? await sendFirst(urls: moved, method: method, path: path, body: body,
+                    auth: auth, askDirectory: false)
+            {
+                store.setMeta("remoteUrl", found.0)
+                return found
             }
         }
         throw SyncError(timedOut
@@ -407,10 +422,26 @@ public final class SyncEngine {
         try store.applyRemote(incoming, cursor: body["cursor"]?.int ?? store.cursor)
     }
 
+    /// Where the directory says this server can be reached now.
+    private func directoryUrls() async -> [String] {
+        guard let lookup = store.meta("directoryLookup"), let url = URL(string: lookup) else { return [] }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 8
+        guard let (data, response) = try? await session.data(for: request),
+            (response as? HTTPURLResponse)?.statusCode == 200,
+            let json = try? JSONDecoder().decode([String: JSONValue].self, from: data),
+            let urls = json["urls"]?.array
+        else { return [] }
+        return urls.compactMap(\.string).filter { $0.hasPrefix("https://") }
+    }
+
     /// Keeps the remote address current, e.g. after the home internet
     /// address changes or remote access is turned on or off.
     private func followRemote(_ server: JSONValue?) {
         guard let server = server?.object else { return }
+        if let directory = server["directory"] {
+            store.setMeta("directoryLookup", directory.object?["lookup"]?.string)
+        }
         if let remote = server["remote"]?.object, let url = remote["url"]?.string {
             store.setMeta("remoteUrl", url)
             if let fp = remote["fingerprint"]?.string {

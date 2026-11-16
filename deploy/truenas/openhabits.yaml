@@ -1,17 +1,19 @@
-# Tasks server for TrueNAS (25.04 and later).
+# OpenHabits server for TrueNAS (25.04 and later).
 #
-# Until Tasks is in the TrueNAS catalog: Apps → Discover Apps → ⋮ →
+# Until OpenHabits is in the TrueNAS catalog: Apps → Discover Apps → ⋮ →
 # Install via YAML, paste this file, and change the dataset path below.
 # Then open http://<your-nas>:8080 to finish setup.
 services:
-  tasks:
-    image: ghcr.io/OWNER/tasks-server:latest # TODO: set when the image is published
+  openhabits:
+    image: ghcr.io/veggies/openhabits-server:1
     # Lets "Enable remote access" ask your router to open a port (UPnP).
     network_mode: host
     # TrueNAS's "apps" user, so files in the dataset belong to it.
     user: "568:568"
+    environment:
+      TZ: Etc/UTC
     volumes:
       # Create this dataset first (e.g. Datasets → Add Dataset under your
       # apps dataset), owned by the "apps" user.
-      - /mnt/tank/apps/tasks:/data
+      - /mnt/tank/apps/openhabits:/data
     restart: unless-stopped

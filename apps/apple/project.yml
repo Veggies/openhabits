@@ -35,10 +35,10 @@ targets:
           NSAllowsArbitraryLoads: true
         NSLocalNetworkUsageDescription: OpenHabits connects to your own server on your home network to keep your devices in sync.
         NSCameraUsageDescription: OpenHabits uses the camera to scan the pairing code shown on your other device.
-        # tasks://pair?… pairing links (from QR codes) and the sign-in callback.
+        # openhabits://pair?… pairing links (from QR codes) and the sign-in callback.
         CFBundleURLTypes:
           - CFBundleURLName: dev.openhabits.pairing
-            CFBundleURLSchemes: [tasks]
+            CFBundleURLSchemes: [openhabits]
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true

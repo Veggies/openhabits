@@ -40,6 +40,35 @@ class SettingsStore {
   int get remotePort => get('remotePort') as int? ?? 8443;
   set remotePort(int v) => set('remotePort', v);
 
+  /// A hostname that follows this home's internet address (your own domain
+  /// or dynamic DNS), e.g. habits.example.com. Devices use it instead of
+  /// the bare IP address, which can change.
+  String? get remoteHost => get('remoteHost') as String?;
+  set remoteHost(String? v) =>
+      set('remoteHost', v == null || v.isEmpty ? null : v);
+
+  /// A Cloudflare API token ("Edit zone DNS" for one domain). When set, the
+  /// server keeps [remoteHost] pointed at this home itself.
+  String? get cloudflareToken => get('cloudflareToken') as String?;
+  set cloudflareToken(String? v) =>
+      set('cloudflareToken', v == null || v.trim().isEmpty ? null : v.trim());
+
+  /// What was last sent to the directory: addresses and when, so it's only
+  /// updated when they change (and weekly, to stay listed).
+  ({List<String> urls, DateTime at})? get directoryPublished {
+    final v = get('directoryPublished') as Map?;
+    if (v == null) return null;
+    return (
+      urls: (v['urls'] as List).cast<String>(),
+      at: DateTime.fromMillisecondsSinceEpoch(v['at'] as int),
+    );
+  }
+
+  set directoryPublished(({List<String> urls, DateTime at})? v) => set(
+    'directoryPublished',
+    v == null ? null : {'urls': v.urls, 'at': v.at.millisecondsSinceEpoch},
+  );
+
   /// A public address that reaches this server some other way (Tailscale
   /// Funnel, a reverse proxy on your own domain). Overrides the automatic
   /// one.

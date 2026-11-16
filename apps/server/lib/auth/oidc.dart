@@ -82,7 +82,7 @@ class OidcProvider {
   /// Only the app's own callback addresses are allowed, so this flow can't
   /// be used to send people (or codes) to other sites.
   static bool isAllowedAppRedirect(Uri uri) =>
-      uri.scheme == 'tasks' ||
+      uri.scheme == 'openhabits' ||
       (uri.scheme == 'http' &&
           (uri.host == 'localhost' || uri.host == '127.0.0.1'));
 

@@ -1,5 +1,5 @@
 /// The server's own web page: first-run setup, then the owner's settings
-/// (remote access, devices, people, single sign-on). It talks to
+/// (remote access, devices, people). It talks to
 /// the same JSON API as the app.
 ///
 /// Everything rendered from the server goes through textContent or
@@ -11,6 +11,8 @@ const setupPageHtml = r'''<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OpenHabits Server</title>
+<link rel="icon" type="image/png" href="/icon.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <style>
   :root {
     --bg: #f6f7fb; --card: #fff; --text: #1d2130; --muted: #667085; --line: #e3e6ee;
@@ -32,8 +34,7 @@ const setupPageHtml = r'''<!doctype html>
   main { max-width: 720px; margin: 0 auto; padding: 24px 16px 64px; }
   header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
   header h1 { font-size: 20px; margin: 0; flex: 1; }
-  .logo { width: 36px; height: 36px; border-radius: 10px; background: var(--accent);
-    color: var(--accent-text); display: grid; place-items: center; font-weight: 700; }
+  .logo { width: 36px; height: 36px; display: block; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
     padding: 20px; margin-bottom: 16px; }
   .card h2 { font-size: 17px; margin: 0 0 4px; }
@@ -75,7 +76,7 @@ const setupPageHtml = r'''<!doctype html>
 <body>
 <main>
   <header>
-    <div class="logo">✓</div>
+    <img class="logo" src="/icon.png" alt="">
     <h1 id="title">OpenHabits Server</h1>
     <span id="who" class="muted"></span>
     <button id="signOut" hidden>Sign out</button>
@@ -96,8 +97,6 @@ const setupPageHtml = r'''<!doctype html>
         <div><label for="su-pass2">Password again</label>
           <input id="su-pass2" type="password" autocomplete="new-password" minlength="8" required></div>
       </div>
-      <label for="su-email">Email (optional, for single sign-on later)</label>
-      <input id="su-email" type="email" autocomplete="email">
       <div class="row"><button class="primary" type="submit">Create account</button></div>
       <div class="error" id="setupError"></div>
     </form>
@@ -121,7 +120,7 @@ const setupPageHtml = r'''<!doctype html>
     <!-- Remote access -->
     <section class="card" id="remoteCard">
       <h2>Remote access <span id="remotePill" class="pill off">Off</span></h2>
-      <p class="sub">Use your tasks away from home, on mobile data or any Wi-Fi.</p>
+      <p class="sub">Use your habits away from home, on mobile data or any Wi-Fi.</p>
       <p id="remoteMessage"></p>
       <p id="remoteUrlRow" hidden>Address: <code id="remoteUrl"></code></p>
       <p id="fingerprintRow" class="muted" hidden>Security code (shown in the app if you type the address yourself): <code id="fingerprint"></code></p>
@@ -144,13 +143,39 @@ const setupPageHtml = r'''<!doctype html>
           <li>Paste that address under <em>Advanced → Custom public address</em> below and save.</li>
         </ol>
       </div>
+      <div id="ipWarning" class="note warn" hidden>
+        <strong>Add a hostname so this keeps working</strong>
+        <p class="muted" style="margin:6px 0 0">Devices are using your internet address, and your provider can change it at any time. When that happens, devices away from home lose the connection until they're back on your Wi-Fi.</p>
+      </div>
       <div class="row" id="remoteButtons"></div>
+      <div>
+        <label for="ra-host">Hostname</label>
+        <div class="row" style="margin-top:0">
+          <input id="ra-host" placeholder="habits.example.com" autocapitalize="off" spellcheck="false" style="flex:1">
+          <button id="ra-host-save">Save</button>
+        </div>
+        <p class="muted">A name that always points at your home: a record on your own domain kept up to date by dynamic DNS, or a free dynamic DNS name (many routers have this built in). Devices use it instead of your internet address.</p>
+        <div id="cfConnected" class="row" hidden>
+          <span class="muted" style="flex:1">Cloudflare keeps this hostname pointed at your home.</span>
+          <button id="cf-remove" class="danger">Remove token</button>
+        </div>
+        <details id="cfSetup">
+          <summary>Domain on Cloudflare? Let OpenHabits keep it up to date</summary>
+          <ol class="muted">
+            <li>In Cloudflare, open <em>My Profile → API Tokens → Create Token</em> and choose the <strong>Edit zone DNS</strong> template.</li>
+            <li>Under <em>Zone Resources</em>, pick just the domain your hostname is on, then create the token.</li>
+            <li>Paste it here with your hostname above and save. OpenHabits creates the record (DNS only) and updates it whenever your internet address changes.</li>
+          </ol>
+          <label for="cf-token">Cloudflare API token</label>
+          <input id="cf-token" type="password" autocomplete="off" spellcheck="false">
+        </details>
+      </div>
       <details>
         <summary>Advanced</summary>
         <div class="grid2">
           <div><label for="ra-port">Router port</label><input id="ra-port" type="number" min="1" max="65535"></div>
-          <div><label for="ra-url">Custom public address (Tailscale Funnel, your own domain)</label>
-            <input id="ra-url" placeholder="https://tasks.example.com"></div>
+          <div><label for="ra-url">Reverse proxy or relay address (it has its own certificate, e.g. Tailscale Funnel)</label>
+            <input id="ra-url" placeholder="https://habits.example.com"></div>
         </div>
         <div class="row"><button id="ra-save">Save</button></div>
       </details>
@@ -178,7 +203,7 @@ const setupPageHtml = r'''<!doctype html>
       <!-- People -->
       <section class="card">
         <h2>People</h2>
-        <p class="sub">Everyone gets their own private tasks and habits.</p>
+        <p class="sub">Everyone gets their own private habits.</p>
         <ul class="list" id="people"></ul>
         <details>
           <summary>Add a person</summary>
@@ -187,34 +212,12 @@ const setupPageHtml = r'''<!doctype html>
               <div><label for="p-user">Username</label><input id="p-user" required></div>
               <div><label for="p-pass">Password</label><input id="p-pass" type="password" minlength="8" required></div>
             </div>
-            <label for="p-email">Email (optional, for single sign-on)</label><input id="p-email" type="email">
             <div class="row"><button class="primary" type="submit">Add</button></div>
           </form>
         </details>
         <div class="error" id="peopleError"></div>
       </section>
 
-      <!-- Single sign-on -->
-      <section class="card">
-        <h2>Single sign-on <span class="pill off" id="ssoPill">Off</span></h2>
-        <p class="sub">If you like, people can sign in with Google or another provider that supports OpenID Connect, instead of using a password.</p>
-        <div id="ssoNeedsDomain" class="note warn" hidden>
-          Single sign-on needs a public address with a real domain name. Set one under
-          <em>Remote access → Advanced → Custom public address</em> first (for example a Tailscale Funnel address).
-        </div>
-        <form id="ssoForm">
-          <p class="muted">Register this as the redirect URI with your provider: <code id="ssoCallback"></code></p>
-          <div class="grid2">
-            <div><label for="s-issuer">Issuer</label><input id="s-issuer" placeholder="https://accounts.google.com"></div>
-            <div><label for="s-label">Button label</label><input id="s-label" placeholder="Google"></div>
-            <div><label for="s-client">Client ID</label><input id="s-client"></div>
-            <div><label for="s-secret">Client secret</label><input id="s-secret" type="password" placeholder="Unchanged"></div>
-          </div>
-          <p class="muted">Someone can sign in this way when the email on their account here matches the one their provider has for them.</p>
-          <div class="row"><button class="primary" type="submit">Save</button><button type="button" id="ssoOff">Turn off</button></div>
-        </form>
-        <div class="error" id="ssoError"></div>
-      </section>
     </div>
   </div>
 </main>
@@ -286,7 +289,7 @@ async function start() {
   show("dashboard");
   show("ownerOnly", me.isOwner);
   show("remoteCard", me.isOwner);
-  if (me.isOwner) { loadRemote(); loadPeople(); loadSso(); }
+  if (me.isOwner) { loadRemote(); loadPeople(); }
 }
 
 // ---- First run and sign in ----
@@ -294,7 +297,7 @@ $("setupForm").addEventListener("submit", guard("setupError", async () => {
   if ($("su-pass").value !== $("su-pass2").value) throw new Error("The passwords don't match.");
   const res = await api("POST", "/setup", {
     username: $("su-user").value.trim(), password: $("su-pass").value,
-    email: $("su-email").value.trim(), device: "Setup page",
+    device: "Setup page",
   });
   saveToken(res.token);
   start();
@@ -318,6 +321,7 @@ $("signOut").addEventListener("click", async () => {
 const pills = {
   off: ["Off", "off"], on: ["On", "on"], needsPortForward: ["Needs a router setting", "warn"],
   cgnat: ["Blocked by your provider", "bad"], error: ["Problem", "bad"],
+  hostMismatch: ["Hostname doesn't point here", "warn"],
 };
 
 function renderRemote(r) {
@@ -332,6 +336,10 @@ function renderRemote(r) {
   $("fingerprint").textContent = pinned ? r.fingerprint.split(":").slice(0, 8).join(":") : "";
   show("portForwardHelp", r.status.state === "needsPortForward");
   show("cgnatHelp", r.status.state === "cgnat");
+  show("ipWarning", r.status.state === "on" && !!r.status.addressMayChange);
+  if (document.activeElement !== $("ra-host")) $("ra-host").value = r.host || "";
+  show("cfConnected", !!r.cloudflare);
+  show("cfSetup", !r.cloudflare);
   for (const node of document.querySelectorAll(".js-port")) node.textContent = r.port;
   $("httpsPort").textContent = r.httpsPort;
   if (document.activeElement !== $("ra-port")) $("ra-port").value = r.port;
@@ -357,7 +365,17 @@ $("ra-save").addEventListener("click", guard("remoteError", async () => {
   renderRemote(await api("PUT", "/admin/remote", {
     port: Number($("ra-port").value), publicUrl: $("ra-url").value.trim(),
   }));
-  loadSso();
+}));
+$("ra-host-save").addEventListener("click", guard("remoteError", async () => {
+  const change = { host: $("ra-host").value.trim() };
+  const token = $("cf-token").value.trim();
+  if (token) change.cloudflareToken = token;
+  $("remoteMessage").textContent = token ? "Updating Cloudflare…" : "Checking the hostname…";
+  renderRemote(await api("PUT", "/admin/remote", change));
+  $("cf-token").value = "";
+}));
+$("cf-remove").addEventListener("click", guard("remoteError", async () => {
+  renderRemote(await api("PUT", "/admin/remote", { cloudflareToken: "" }));
 }));
 
 // ---- Add a device ----
@@ -367,7 +385,7 @@ $("pairButton").addEventListener("click", guard("pairError", async () => {
   const params = new URLSearchParams({ server: location.origin, code: res.code });
   if (res.remoteUrl) params.set("remote", res.remoteUrl);
   if (res.fingerprint) params.set("fp", res.fingerprint);
-  const payload = "tasks://pair?" + params.toString();
+  const payload = "openhabits://pair?" + params.toString();
   const svg = await fetch("/qr.svg?data=" + encodeURIComponent(payload), { headers: { authorization: "Bearer " + token } });
   if (!svg.ok) throw new Error("Couldn't make the QR code.");
   $("pairQr").src = URL.createObjectURL(await svg.blob());
@@ -387,7 +405,7 @@ async function loadPeople() {
   for (const p of people) {
     const li = el("li");
     const text = el("div", null, "grow");
-    text.append(el("div", p.username), el("div", [p.isOwner ? "Owner" : null, p.email].filter(Boolean).join(" · "), "muted"));
+    text.append(el("div", p.username), el("div", p.isOwner ? "Owner" : "", "muted"));
     li.append(text);
     if (!p.isOwner) {
       li.append(button("Remove", guard("peopleError", async () => {
@@ -401,38 +419,9 @@ async function loadPeople() {
 }
 
 $("personForm").addEventListener("submit", guard("peopleError", async () => {
-  await api("POST", "/users", { username: $("p-user").value.trim(), password: $("p-pass").value, email: $("p-email").value.trim() });
+  await api("POST", "/users", { username: $("p-user").value.trim(), password: $("p-pass").value });
   $("personForm").reset();
   await loadPeople();
-}));
-
-// ---- Single sign-on ----
-async function loadSso() {
-  const s = await api("GET", "/admin/sso");
-  $("ssoPill").textContent = s.enabled ? "On" : "Off";
-  $("ssoPill").className = "pill " + (s.enabled ? "on" : "off");
-  show("ssoNeedsDomain", !s.callbackUrl);
-  show("ssoForm", !!s.callbackUrl);
-  $("ssoCallback").textContent = s.callbackUrl || "";
-  $("s-issuer").value = s.issuer || "";
-  $("s-client").value = s.clientId || "";
-  $("s-label").value = s.label || "";
-  $("s-secret").placeholder = s.hasSecret ? "Unchanged" : "";
-}
-
-$("ssoForm").addEventListener("submit", guard("ssoError", async () => {
-  await api("PUT", "/admin/sso", {
-    issuer: $("s-issuer").value.trim() || "https://accounts.google.com",
-    clientId: $("s-client").value.trim(), clientSecret: $("s-secret").value,
-    label: $("s-label").value.trim(),
-  });
-  $("s-secret").value = "";
-  await loadSso();
-}));
-
-$("ssoOff").addEventListener("click", guard("ssoError", async () => {
-  await api("PUT", "/admin/sso", { issuer: "", clientId: "", clientSecret: "", label: "" });
-  await loadSso();
 }));
 
 start();

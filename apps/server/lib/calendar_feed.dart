@@ -16,7 +16,7 @@ String habitsCalendar(
   final lines = <String>[
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//Tasks//Habits//EN',
+    'PRODID:-//OpenHabits//Habits//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'X-WR-CALNAME:${_escape(name)}',

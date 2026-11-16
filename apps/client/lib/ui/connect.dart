@@ -22,7 +22,7 @@ String pairingPayload(
   String? remoteUrl,
   String? fingerprint,
 }) => Uri(
-  scheme: 'tasks',
+  scheme: 'openhabits',
   host: 'pair',
   queryParameters: {
     'server': serverUrl,
@@ -44,7 +44,7 @@ Pairing? parsePairingPayload(String text) {
   final q = uri?.queryParameters ?? const {};
   final server = q['server'];
   final code = q['code'];
-  if (uri?.scheme != 'tasks' ||
+  if (uri?.scheme != 'openhabits' ||
       uri?.host != 'pair' ||
       server == null ||
       code == null) {

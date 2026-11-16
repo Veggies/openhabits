@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:server/api.dart';
 import 'package:server/auth/auth_store.dart';
 import 'package:server/auth/oidc.dart';
+import 'package:server/remote/directory.dart';
 import 'package:server/remote/remote_access.dart';
 import 'package:server/remote/tls.dart';
 import 'package:server/settings_store.dart';
@@ -58,8 +59,31 @@ Future<void> main(List<String> args) async {
     settings.remoteEnabled = true;
   }
 
+  // A hostname that follows this home's address (own domain or dynamic DNS).
+  final envRemoteHost = normalizeHost(env['REMOTE_HOST'] ?? '');
+  if (envRemoteHost != null) {
+    settings.remoteHost = envRemoteHost;
+    settings.remoteEnabled = true;
+  }
+
+  final envCloudflare = env['CLOUDFLARE_API_TOKEN'] ?? '';
+  if (envCloudflare.isNotEmpty) settings.cloudflareToken = envCloudflare;
+
   final certificate = ServerCertificate.loadOrCreate(dataDir);
-  final remote = RemoteAccess(settings, httpsPort: httpsPort)..start();
+  // The address book devices use to find this server after its internet
+  // address changes. DIRECTORY_URL=off turns it off.
+  final directoryUrl = env['DIRECTORY_URL'] ?? officialDirectory;
+  final directory = directoryUrl == 'off'
+      ? null
+      : DirectoryClient(
+          Uri.parse(directoryUrl),
+          DirectoryIdentity.loadOrCreate(dataDir),
+        );
+  final remote = RemoteAccess(
+    settings,
+    httpsPort: httpsPort,
+    directory: directory,
+  )..start();
 
   // Single sign-on: from the environment if set, otherwise from the setup
   // page. Rebuilt whenever the owner changes it.

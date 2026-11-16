@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:client/data/local_store.dart';
@@ -10,6 +11,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:server/api.dart';
 import 'package:server/auth/auth_store.dart';
+import 'package:server/remote/directory.dart';
 import 'package:server/remote/remote_access.dart';
 import 'package:server/remote/upnp.dart';
 import 'package:server/settings_store.dart';
@@ -29,6 +31,9 @@ class Device {
   final unreachable = <String>{};
   final hostsUsed = <String>[];
 
+  /// The directory's entries (server ID → addresses), shared by everyone.
+  static final directory = <String, List<String>>{};
+
   Device(shelf.Handler handler) {
     sync = SyncEngine(
       store,
@@ -38,6 +43,12 @@ class Device {
           throw const SocketException('No route to host');
         }
         hostsUsed.add(request.url.host);
+        if (request.url.host == 'directory.example') {
+          final urls = directory[request.url.pathSegments.last];
+          return urls == null
+              ? http.Response('{"error":"No server with that ID."}', 404)
+              : http.Response(jsonEncode({'urls': urls}), 200);
+        }
         final response = await handler(
           shelf.Request(
             request.method,
@@ -337,6 +348,68 @@ void main() {
     });
 
     test(
+      'when the home address changes while away, the directory finds it',
+      () async {
+        final router = _Router();
+        final settings = SettingsStore(serverStore.db);
+        final identity = DirectoryIdentity.loadOrCreate(
+          Directory.systemTemp.createTempSync('directory'),
+        );
+        final remote = RemoteAccess(
+          settings,
+          httpsPort: 8443,
+          upnp: router,
+          publicIp: () async => router.ip,
+          // The real client, signing real updates, into the shared entries.
+          directory: DirectoryClient(
+            Uri.parse('https://directory.example'),
+            identity,
+            client: MockClient((request) async {
+              final payload = jsonDecode(
+                (jsonDecode(request.body) as Map)['payload'] as String,
+              );
+              Device.directory[identity.id] = (payload['urls'] as List)
+                  .cast<String>();
+              return http.Response('{"ok":true}', 200);
+            }),
+          ),
+        );
+        await remote.enable();
+        final handler = buildHandler(
+          serverStore,
+          auth,
+          settings: settings,
+          remote: remote,
+          fingerprint: 'AA:BB',
+        );
+
+        final phone = Device(handler);
+        await phone.signIn();
+        expect(phone.sync.remoteUrl, 'https://203.0.113.7:8443');
+
+        // Away from home, the provider hands the house a new address. The
+        // phone only knows the old one.
+        phone.unreachable.addAll({'server', '203.0.113.7'});
+        router.ip = '198.51.100.30';
+        await remote.refresh();
+
+        phone.repo.createHabit({'name': 'Added after the address changed'});
+        phone.hostsUsed.clear();
+        await phone.sync.syncNow();
+        expect(phone.sync.status, SyncStatus.idle);
+        expect(phone.store.pendingCount, 0);
+        expect(phone.hostsUsed, contains('directory.example'));
+        expect(phone.sync.remoteUrl, 'https://198.51.100.30:8443');
+
+        // From now on it goes straight to the new address.
+        phone.hostsUsed.clear();
+        await phone.sync.syncNow();
+        expect(phone.hostsUsed, everyElement('198.51.100.30'));
+        phone.sync.dispose();
+      },
+    );
+
+    test(
       'devices follow the remote address, and forget it when turned off',
       () async {
         final device = Device(remoteHandler);
@@ -508,6 +581,9 @@ void main() {
 
 /// A home router that does whatever remote access asks.
 class _Router extends UpnpClient {
+  /// The home's internet address, as the provider has assigned it today.
+  String ip = '203.0.113.7';
+
   @override
   Future<UpnpGateway?> discover({
     Duration timeout = const Duration(seconds: 3),
@@ -527,7 +603,7 @@ class _Router extends UpnpClient {
   }) async {}
 
   @override
-  Future<String> externalAddress(UpnpGateway gw) async => '203.0.113.7';
+  Future<String> externalAddress(UpnpGateway gw) async => ip;
 
   @override
   Future<void> deletePortMapping(UpnpGateway gw, int externalPort) async {}

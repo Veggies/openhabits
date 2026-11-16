@@ -13,6 +13,7 @@ import 'remote/remote_access.dart';
 import 'settings_store.dart';
 import 'sync_store.dart';
 import 'web/qr_svg.dart';
+import 'web/icons.dart';
 import 'web/setup_page.dart';
 
 /// Builds the HTTP handler.
@@ -64,6 +65,8 @@ Handler buildHandler(
   Map<String, Object?> remoteJson() => {
     'status': remote!.status.toJson(),
     'port': settings!.remotePort,
+    'host': settings.remoteHost,
+    'cloudflare': settings.cloudflareToken != null,
     'publicUrl': settings.publicUrl,
     'httpsPort': remote.httpsPort,
     'fingerprint': fingerprint,
@@ -121,6 +124,9 @@ Handler buildHandler(
       ),
     )
     ..get('/health', (Request _) => Response.ok('ok'))
+    // The app icon for the setup page and browser tabs.
+    ..get('/icon.png', (Request _) => _png(iconPng))
+    ..get('/apple-touch-icon.png', (Request _) => _png(appleTouchIconPng))
     // What the app needs before signing in.
     ..get(
       '/auth/info',
@@ -340,16 +346,40 @@ Handler buildHandler(
           }
           settings.remotePort = port;
         }
-        final url = (b['publicUrl'] as String? ?? '').trim();
-        if (url.isNotEmpty && !RegExp(r'^https?://[^\s/]+').hasMatch(url)) {
-          return _jsonError(
-            400,
-            'Enter a full address, like https://tasks.example.com',
-          );
+        if (b.containsKey('host')) {
+          final typed = (b['host'] as String? ?? '').trim();
+          final host = typed.isEmpty ? '' : normalizeHost(typed);
+          if (host == null) {
+            return _jsonError(
+              400,
+              "That isn't a hostname. Enter just the name, like "
+              'habits.example.com',
+            );
+          }
+          settings.remoteHost = host;
+          if (host.isNotEmpty) settings.remoteEnabled = true;
         }
-        settings.publicUrl = url;
-        if (url.isNotEmpty && !settings.remoteEnabled) {
-          settings.remoteEnabled = true;
+        if (b.containsKey('cloudflareToken')) {
+          final token = (b['cloudflareToken'] as String? ?? '').trim();
+          if (token.isNotEmpty && settings.remoteHost == null) {
+            return _jsonError(
+              400,
+              'Enter the hostname Cloudflare should keep up to date, like '
+              'habits.example.com',
+            );
+          }
+          settings.cloudflareToken = token;
+        }
+        if (b.containsKey('publicUrl')) {
+          final url = (b['publicUrl'] as String? ?? '').trim();
+          if (url.isNotEmpty && !RegExp(r'^https?://[^\s/]+').hasMatch(url)) {
+            return _jsonError(
+              400,
+              'Enter a full address, like https://habits.example.com',
+            );
+          }
+          settings.publicUrl = url;
+          if (url.isNotEmpty) settings.remoteEnabled = true;
         }
         await remote.refresh();
         onSettingsChanged?.call();
@@ -449,6 +479,11 @@ Handler buildHandler(
         // when remote access is really off, not during a temporary problem.
         'server': {
           'remote': remoteInfo(),
+          // Where to ask for this server's address if it changes while a
+          // device is away from home.
+          'directory': remote?.directory == null
+              ? null
+              : {'lookup': remote!.directory!.lookupUrl.toString()},
           'remoteEnabled': settings?.remoteEnabled ?? remoteInfo() != null,
         },
         'changes': [
@@ -467,6 +502,8 @@ const _publicPaths = {
   '',
   'setup',
   'health',
+  'icon.png',
+  'apple-touch-icon.png',
   'auth/info',
   'auth/login',
   'auth/redeem',
@@ -549,3 +586,11 @@ String _page(String title, String detail) =>
 <style>body{font-family:system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 1rem;color:#222}
 @media(prefers-color-scheme:dark){body{background:#111;color:#eee}}h1{font-size:1.4rem}</style></head>
 <body><h1>${_htmlEscape.convert(title)}</h1><p>${_htmlEscape.convert(detail)}</p></body></html>''';
+
+Response _png(List<int> bytes) => Response.ok(
+  bytes,
+  headers: {
+    'content-type': 'image/png',
+    'cache-control': 'public, max-age=86400',
+  },
+);

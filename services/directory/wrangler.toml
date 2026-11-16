@@ -1,0 +1,22 @@
+# Cloudflare Worker for the OpenHabits directory. See README.md to deploy.
+name = "openhabits-directory"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+# Where servers and apps reach it. Change to a subdomain of your own domain
+# (the domain must be on this Cloudflare account).
+routes = [{ pattern = "directory.ryanruddock.com", custom_domain = true }]
+
+# Server addresses, by ID. Create with:
+#   npx wrangler kv namespace create SERVERS
+# and paste the id it prints here.
+[[kv_namespaces]]
+binding = "SERVERS"
+id = "1da3de10f8cf4b9abe19b1b597789318"
+
+# Limits updates per IP address, so nobody can use up the daily write
+# allowance by inventing new server keys.
+[[ratelimits]]
+name = "LIMITER"
+namespace_id = "1001"
+simple = { limit = 20, period = 60 }

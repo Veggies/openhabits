@@ -19,7 +19,10 @@ class UpnpGateway {
 
 class UpnpException implements Exception {
   final String message;
-  const UpnpException(this.message);
+
+  /// The router's UPnP error code, e.g. 718 when the port is already taken.
+  final int? code;
+  const UpnpException(this.message, {this.code});
 
   @override
   String toString() => message;
@@ -126,16 +129,16 @@ class UpnpClient {
     return null;
   }
 
-  /// The local address used to reach the router: connect and look.
+  /// This machine's address on the router's network. Routers only let a
+  /// device forward ports to itself, so this must be exactly right.
   Future<String> _localAddressFor(Uri location) async {
-    final socket = await Socket.connect(
-      location.host,
-      location.port,
-      timeout: const Duration(seconds: 3),
+    final interfaces = await NetworkInterface.list(
+      type: InternetAddressType.IPv4,
     );
-    final address = socket.address.address;
-    socket.destroy();
-    return address;
+    return pickLocalAddress(location.host, [
+      for (final i in interfaces)
+        for (final a in i.addresses) a.address,
+    ]);
   }
 
   Future<XmlDocument> _soap(
@@ -174,6 +177,7 @@ class UpnpClient {
           ?.innerText;
       throw UpnpException(
         'Router refused $action (${code ?? response.statusCode}${description == null ? '' : ': $description'})',
+        code: int.tryParse(code ?? ''),
       );
     }
     return xml;
@@ -216,7 +220,7 @@ class UpnpClient {
       await _soap(gw, 'AddPortMapping', args(leaseSeconds));
     } on UpnpException catch (e) {
       // Error 725: this router only supports permanent mappings.
-      if (!e.message.contains('725')) rethrow;
+      if (e.code != 725) rethrow;
       await _soap(gw, 'AddPortMapping', args(0));
     }
   }
@@ -227,4 +231,27 @@ class UpnpClient {
         'NewExternalPort': externalPort,
         'NewProtocol': 'TCP',
       });
+}
+
+/// Of this machine's [candidates], the one on the same network as [router]:
+/// the address sharing the most leading bits with it. That skips Docker and
+/// VM bridges (e.g. 192.168.139.x) in favour of the real LAN address.
+String pickLocalAddress(String router, List<String> candidates) {
+  int bits(String ip) =>
+      ip.split('.').fold(0, (n, part) => (n << 8) | int.parse(part));
+  int shared(String ip) {
+    final diff = bits(ip) ^ bits(router);
+    for (var i = 31; i >= 0; i--) {
+      if (diff & (1 << i) != 0) return 31 - i;
+    }
+    return 32;
+  }
+
+  final usable = candidates.where((a) => a != router && !a.startsWith('127.'));
+  if (usable.isEmpty) {
+    throw const UpnpException(
+      "Couldn't find this server's address on your home network.",
+    );
+  }
+  return usable.reduce((a, b) => shared(b) > shared(a) ? b : a);
 }

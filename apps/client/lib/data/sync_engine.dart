@@ -226,8 +226,8 @@ class SyncEngine extends ChangeNotifier {
         !kIsWeb &&
         (defaultTargetPlatform == TargetPlatform.windows ||
             defaultTargetPlatform == TargetPlatform.linux);
-    final callback = desktop ? 'http://localhost:43823' : 'tasks';
-    final redirect = desktop ? 'http://localhost:43823/' : 'tasks://auth';
+    final callback = desktop ? 'http://localhost:43823' : 'openhabits';
+    final redirect = desktop ? 'http://localhost:43823/' : 'openhabits://auth';
     final result = await FlutterWebAuth2.authenticate(
       url: '$url/auth/oidc/start?redirect_uri=${Uri.encodeComponent(redirect)}',
       callbackUrlScheme: callback,
@@ -260,6 +260,7 @@ class SyncEngine extends ChangeNotifier {
       store.setMeta('cursor', '0');
       store.setMeta('remoteUrl', null);
       store.setMeta('fingerprint', null);
+      store.setMeta('directoryLookup', null);
     }
     store.setMeta('serverUrl', urls.first);
     store.setMeta('token', response['token'] as String);
@@ -322,12 +323,15 @@ class SyncEngine extends ChangeNotifier {
     ];
   }
 
-  Future<void> addPerson(String username, String password, String email) =>
-      _post('/users', {
-        'username': username,
-        'password': password,
-        'email': email,
-      });
+  Future<void> addPerson(
+    String username,
+    String password, [
+    String email = '',
+  ]) => _post('/users', {
+    'username': username,
+    'password': password,
+    'email': email,
+  });
 
   Future<void> removePerson(String id) => _send('DELETE', '/users/$id');
 
@@ -374,6 +378,7 @@ class SyncEngine extends ChangeNotifier {
     String path, {
     Map<String, Object?>? body,
     bool auth = true,
+    bool askDirectory = true,
   }) async {
     Object? lastError;
     for (final url in urls) {
@@ -390,6 +395,32 @@ class SyncEngine extends ChangeNotifier {
         );
       } on _Unreachable catch (e) {
         lastError = e;
+      }
+    }
+    // None of the known addresses answer. The home's internet address may
+    // have changed while this device was away: ask the directory where the
+    // server is now. The certificate is still checked, so a wrong answer
+    // can't lead anywhere else.
+    if (askDirectory) {
+      final moved = [
+        for (final url in await _directoryUrls())
+          if (!urls.contains(url)) url,
+      ];
+      if (moved.isNotEmpty) {
+        try {
+          final found = await _sendFirst(
+            moved,
+            method,
+            path,
+            body: body,
+            auth: auth,
+            askDirectory: false,
+          );
+          store.setMeta('remoteUrl', found.$1);
+          return found;
+        } on SyncException {
+          // Fall through to the usual message.
+        }
       }
     }
     throw lastError is _Unreachable && lastError.timedOut
@@ -490,10 +521,36 @@ class SyncEngine extends ChangeNotifier {
     ], body['cursor'] as int);
   }
 
+  /// Where the directory says this server can be reached now.
+  Future<List<String>> _directoryUrls() async {
+    final lookup = store.meta('directoryLookup');
+    if (lookup == null) return const [];
+    try {
+      final response = await _http
+          .get(Uri.parse(lookup))
+          .timeout(const Duration(seconds: 8));
+      if (response.statusCode != 200) return const [];
+      final urls = (jsonDecode(response.body) as Map)['urls'] as List;
+      return [
+        for (final url in urls)
+          if (url is String && url.startsWith('https://')) url,
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
+
   /// Keeps the remote address current, e.g. after the home internet address
   /// changes or remote access is turned on or off.
   void _followRemote(Object? server) {
     if (server is! Map) return;
+    if (server.containsKey('directory')) {
+      final directory = server['directory'];
+      store.setMeta(
+        'directoryLookup',
+        directory is Map ? directory['lookup'] as String? : null,
+      );
+    }
     final remote = server['remote'];
     if (remote is Map && remote['url'] is String) {
       store.setMeta('remoteUrl', remote['url'] as String);

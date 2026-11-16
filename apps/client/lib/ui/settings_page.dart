@@ -81,25 +81,6 @@ class _SettingsPageState extends State<SettingsPage> {
                         title: const Text('Change password'),
                         onTap: () => _changePassword(context, sync),
                       ),
-                      ListTile(
-                        leading: const Icon(Icons.alternate_email),
-                        title: const Text('Email for single sign-on'),
-                        subtitle: Text(account.email ?? 'None yet'),
-                        onTap: () async {
-                          final email = await promptText(
-                            context,
-                            title: 'Email',
-                            initial: account.email ?? '',
-                            hint: 'you@gmail.com',
-                          );
-                          if (email != null && context.mounted) {
-                            await _guard(
-                              context,
-                              () => sync.setEmail(email.trim()),
-                            );
-                          }
-                        },
-                      ),
                       if (account.isOwner)
                         ListTile(
                           leading: const Icon(Icons.dns_outlined),
@@ -345,9 +326,7 @@ class _PeopleState extends State<_People> {
                 ListTile(
                   leading: const Icon(Icons.person_outline),
                   title: Text(p.username),
-                  subtitle: Text(
-                    [if (p.isOwner) 'Owner', ?p.email].join(' · '),
-                  ),
+                  subtitle: p.isOwner ? const Text('Owner') : null,
                   trailing: p.isOwner
                       ? null
                       : IconButton(
@@ -400,7 +379,6 @@ class _PeopleState extends State<_People> {
   Future<void> _add(BuildContext context, SyncEngine sync) async {
     final username = TextEditingController();
     final password = TextEditingController();
-    final email = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -421,14 +399,6 @@ class _PeopleState extends State<_People> {
                 helperText: 'At least 8 characters',
               ),
             ),
-            TextField(
-              controller: email,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
-                labelText: 'Email (optional)',
-                helperText: 'Lets them use single sign-on',
-              ),
-            ),
           ],
         ),
         actions: [
@@ -446,11 +416,7 @@ class _PeopleState extends State<_People> {
     if (ok == true && context.mounted) {
       await _guard(
         context,
-        () => sync.addPerson(
-          username.text.trim(),
-          password.text,
-          email.text.trim(),
-        ),
+        () => sync.addPerson(username.text.trim(), password.text),
         success: 'Added ${username.text.trim()}.',
       );
       _reload();

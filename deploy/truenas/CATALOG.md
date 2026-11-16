@@ -1,43 +1,58 @@
-# Getting Tasks into the TrueNAS catalog
+# Getting OpenHabits into the TrueNAS catalog
 
-Plan for when the project is public. Until then, `tasks.yaml` in this
-folder installs it with *Install via YAML*.
+TrueNAS apps live in [truenas/apps](https://github.com/truenas/apps).
+Community apps go under `ix-dev/community/<app>/` and are added by pull
+request. The entry is ready in [`catalog/openhabits`](catalog/openhabits);
+it follows the same layout as other community apps (Memos was the model).
 
-TrueNAS apps live in the [truenas/apps](https://github.com/truenas/apps)
-repository. Community apps go under `ix-dev/community/<app>/` and are
-contributed by pull request.
+Until it's accepted, people can install with *Install via YAML* using
+[`openhabits.yaml`](openhabits.yaml).
 
-## Before submitting
+## What's in the entry
 
-1. Publish the repository (GitHub, GitLab or Codeberg) and tag a release so
-   `.github/workflows/release.yml` pushes `linux/amd64` and `linux/arm64`
-   images. Replace `OWNER` in `tasks.yaml` and below.
-2. Pick the app's final name and icon (the catalog needs a square icon and
-   screenshots).
-3. Test a fresh install on TrueNAS with *Install via YAML*: setup page,
+| File | Purpose |
+| --- | --- |
+| `app.yaml` | Name, description, links, icon, version, which user it runs as. |
+| `item.yaml` | Category, icon and tags for the Discover page. |
+| `ix_values.yaml` | The image to pull, and fixed values the template uses. |
+| `questions.yaml` | The install form: timezone, optional public address, reverse proxy switch, user, host networking (on by default), the two ports, storage, labels, resources. |
+| `templates/docker-compose.yaml` | Turns the form into a container, using TrueNAS's shared library. The image is built from `scratch`, so it uses the image's own health check. |
+| `templates/test_values/` | Two installs the TrueNAS CI renders and starts: host networking, and bridge networking with published ports. |
+| `icon.png` | 512×512 app icon. |
+
+## Before opening the pull request
+
+1. **Make the repository public** and, ideally, rename it to `openhabits`.
+   The links in `app.yaml`, `item.yaml` and `README.md` assume
+   `github.com/Veggies/openhabits`.
+2. **Publish a release:** push a tag like `v1.0.0`. The `Server` workflow
+   tests the code and pushes `ghcr.io/veggies/openhabits-server` for amd64
+   and arm64. On GitHub, open the package's settings and make it public.
+3. **Pin the image** in `ix_values.yaml` to the version and its digest:
+   `docker buildx imagetools inspect ghcr.io/veggies/openhabits-server:1.0.0`
+   prints the digest; the tag becomes `"1.0.0@sha256:…"`. Make `app_version`
+   in `app.yaml` match.
+4. **Test a real install** on TrueNAS with *Install via YAML*: setup page,
    remote access through a real router, a phone on mobile data.
 
-## The catalog entry
+## Submitting
 
-Copy an existing community app with a similar shape (one container, a
-storage volume, host networking) as the starting point, then:
+```sh
+git clone https://github.com/<you>/apps.git && cd apps   # your fork of truenas/apps
+cp -r <this repo>/deploy/truenas/catalog/openhabits ix-dev/community/
+python3 .github/scripts/ci.py --app openhabits --train community --test-file basic-values.yaml
+python3 .github/scripts/ci.py --app openhabits --train community --test-file bridge-values.yaml
+```
 
-- `app.yaml`: name, description, home page, icon, screenshots, maintainers,
-  `run_as_context` (user 568), and the image tag.
-- `ix_values.yaml`: `ghcr.io/OWNER/tasks-server` and the release tag.
-- `questions.yaml`, the install form. Keep it short:
-  - Storage for `/data` (ixVolume by default, or a host path).
-  - Host networking on by default, with a note that it's needed for
-    automatic remote access.
-  - Ports for when host networking is off: 8080 (web/setup) and 8443
-    (remote HTTPS).
-  - Optional: a custom public address (`PUBLIC_URL`) for people using a
-    reverse proxy or Tailscale Funnel.
-- `templates/docker-compose.yaml`, rendered with the shared library: the
-  service, its volume, `network_mode`, the health check
-  (`/app/bin/server --healthcheck`), and the "Web UI" portal link to port
-  8080.
-- `README.md`: one paragraph and a link to the docs.
+The CI script renders the template and starts the container, so it catches
+form or template mistakes before reviewers do. The icon is moved to
+TrueNAS's media host during review; the `icon` links then change to theirs.
+Expect feedback on naming and defaults. Note there's already an unrelated
+`openhabittracker` app in the catalog, so the description should make the
+difference clear.
 
-Run the repository's own validation and CI before opening the pull request,
-and expect review feedback on naming and defaults.
+## After it's in
+
+New server releases need a pull request to bump the image tag, `app_version`
+and `version` in the catalog entry. TrueNAS's bot (Renovate) often opens these
+automatically once the app is listed.

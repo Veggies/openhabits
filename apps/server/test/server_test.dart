@@ -112,7 +112,19 @@ void main() {
       expect(status, 200);
       expect(info['hasUsers'], isTrue);
       expect(info['oidc'], isNull);
-      expect((await api.call('GET', '/')).$2['body'], contains('OpenHabits Server'));
+      expect(
+        (await api.call('GET', '/')).$2['body'],
+        contains('OpenHabits Server'),
+      );
+      for (final path in ['/icon.png', '/apple-touch-icon.png']) {
+        final response = await api.handler(
+          Request('GET', Uri.parse('http://localhost$path')),
+        );
+        expect(response.statusCode, 200, reason: path);
+        expect(response.headers['content-type'], 'image/png');
+        final bytes = await response.read().expand((b) => b).toList();
+        expect(bytes.sublist(1, 4), 'PNG'.codeUnits, reason: path);
+      }
     });
 
     test('wrong passwords are rejected, then rate limited', () async {
@@ -490,7 +502,7 @@ void main() {
         Request(
           'GET',
           Uri.parse(
-            'http://localhost/auth/oidc/start?redirect_uri=tasks://auth',
+            'http://localhost/auth/oidc/start?redirect_uri=openhabits://auth',
           ),
         ),
       );
@@ -518,7 +530,7 @@ void main() {
         );
         expect(callback.statusCode, 302);
         final back = Uri.parse(callback.headers['location']!);
-        expect(back.scheme, 'tasks');
+        expect(back.scheme, 'openhabits');
         final (status, b) = await oidcApi.call(
           'POST',
           '/auth/redeem',

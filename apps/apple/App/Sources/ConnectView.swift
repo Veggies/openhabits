@@ -153,7 +153,7 @@ struct ConnectView: View {
     private func signInWithSSO(_ server: ServerInfo) {
         guard let start = app.sync.oidcStartURL(server.url) else { return }
         run {
-            let callback = try await webAuth.authenticate(using: start, callbackURLScheme: "tasks",
+            let callback = try await webAuth.authenticate(using: start, callbackURLScheme: "openhabits",
                 preferredBrowserSession: .shared)
             guard let code = URLComponents(url: callback, resolvingAgainstBaseURL: false)?
                 .queryItems?.first(where: { $0.name == "code" })?.value

@@ -132,7 +132,7 @@ final class AppModel {
         #endif
     }
 
-    /// Handles `tasks://pair?…` links, e.g. from scanning a pairing QR code
+    /// Handles `openhabits://pair?…` links, e.g. from scanning a pairing QR code
     /// with the Camera app.
     func open(_ url: URL) {
         if let pairing = Pairing(payload: url.absoluteString) { pendingPairing = pairing }

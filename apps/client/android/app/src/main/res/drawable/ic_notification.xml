@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One-colour version of the app icon for notifications and themed icons:
+     a person outline with seven dots in an arc above. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M2.47,15.58a1.35,1.35 0 1,0 2.7,0a1.35,1.35 0 1,0 -2.7,0M2.47,9.62a1.35,1.35 0 1,0 2.7,0a1.35,1.35 0 1,0 -2.7,0M5.66,5.47a1.35,1.35 0 1,0 2.7,0a1.35,1.35 0 1,0 -2.7,0M10.65,3.90a1.35,1.35 0 1,0 2.7,0a1.35,1.35 0 1,0 -2.7,0M15.64,5.47a1.35,1.35 0 1,0 2.7,0a1.35,1.35 0 1,0 -2.7,0M18.83,9.62a1.35,1.35 0 1,0 2.7,0a1.35,1.35 0 1,0 -2.7,0M18.83,15.58a1.35,1.35 0 1,0 2.7,0a1.35,1.35 0 1,0 -2.7,0" />
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.5"
+        android:strokeLineJoin="round"
+        android:pathData="M12,11.2m-2.4,0a2.4,2.4 0 1,0 4.8,0a2.4,2.4 0 1,0 -4.8,0M7,20.6C7,17.7 9.2,15.6 12,15.6C14.8,15.6 17,17.7 17,20.6Z" />
+</vector>

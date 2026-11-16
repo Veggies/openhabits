@@ -1,0 +1,33 @@
+# OpenHabits server for any machine with Docker: a Linux box, Unraid,
+# Synology, a Raspberry Pi, or Portainer's "stacks" page. Nothing to build;
+# this pulls the published image.
+#
+#   docker compose up -d
+#
+# Then open http://<this-machine>:8080 in a browser to create your account.
+services:
+  openhabits:
+    image: ghcr.io/veggies/openhabits-server:1
+    container_name: openhabits
+    # Host networking lets "Enable remote access" ask your router to open a
+    # port for you (UPnP). It works on Linux. On Docker Desktop for macOS or
+    # Windows, remove this line, uncomment "ports" below, and forward port
+    # 8443 on your router by hand.
+    network_mode: host
+    # ports:
+    #   - "8080:8080" # the app and the setup page on your home network
+    #   - "8443:8443" # secure connection for using the app away from home
+    volumes:
+      - openhabits-data:/data
+    environment:
+      TZ: Etc/UTC
+      # Everything below is optional. The setup page covers all of it.
+      # PORT: "8080"
+      # HTTPS_PORT: "8443"
+      # Your own domain, if you already run a reverse proxy in front of it:
+      # PUBLIC_URL: https://habits.example.com
+      # TRUST_PROXY: "true"
+    restart: unless-stopped
+
+volumes:
+  openhabits-data:
