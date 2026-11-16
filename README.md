@@ -21,141 +21,27 @@
 
 ## What it does
 
+- **Check in each day.** Tick off what you did, or for habits you're breaking, the days you stayed clear.
+- **Start small, then grow.** Begin with a tiny version; every couple of weeks the app asks whether it's time for a little more.
+- **Never miss twice.** One missed day won't break your streak, and the app nudges you before a second.
+- **See how it's going.** A square for every week, and a plain summary of each habit.
+- **Look back each week.** A short weekly review, and a scorecard of the habits you already have.
+- **Built around Atomic Habits.** Who you want to become, and the four laws, for every habit.
+- **Focus timer, reminders and your calendar.** A focus timer with breaks, a nudge at each habit's time, and your habits in your calendar app.
+- **Your data, on your own server.** Each person in your household gets a private account, and it works away from home too.
+
 <table>
 <tr>
-<td width="50%" align="center">
-
-<img src="docs/images/iphone-habits.png" width="260" alt="Today's habits on iPhone">
-
-</td>
-<td width="50%">
-
-<h3>Check in each day</h3>
-
-Tick off what you did, right from the list. Habits you're trying to break work the other way round: ticking them off means you stayed clear that day.
-
-
-</td>
+<td align="center"><img src="docs/images/mac-progress.png" alt="Progress"><br><sub>Progress, week by week</sub></td>
+<td align="center"><img src="docs/images/mac-checkin.png" alt="A size check-in"><br><sub>Start small, then grow</sub></td>
 </tr>
 <tr>
-<td width="50%">
-
-<h3>Start small, then grow</h3>
-
-Begin with a tiny version of a habit, like "read one page". Every couple of weeks the app checks in: if it's sticking, it asks whether you're ready for a little more. If it's been hard, it suggests making it smaller.
-
-
-</td>
-<td width="50%" align="center">
-
-<img src="docs/images/iphone-checkin.png" width="260" alt="A size check-in">
-
-</td>
+<td align="center"><img src="docs/images/mac-plan.png" alt="A habit's Atomic Habits plan"><br><sub>Your Atomic Habits plan</sub></td>
+<td align="center"><img src="docs/images/mac-reflect.png" alt="The weekly review"><br><sub>The weekly review</sub></td>
 </tr>
 <tr>
-<td width="50%" align="center">
-
-<img src="docs/images/mac-missed.png" width="380" alt="A habit marked as missed last time">
-
-</td>
-<td width="50%">
-
-<h3>Never miss twice</h3>
-
-Missing one day won't break your streak, but missing two in a row will. When you missed a habit last time, the app says so gently, so you can get back on track.
-
-
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-<h3>See how it's going</h3>
-
-Every habit gets a square for each week showing how many days you did it, plus a plain summary: going strong, getting there, or struggling.
-
-
-</td>
-<td width="50%" align="center">
-
-<img src="docs/images/iphone-progress.png" width="260" alt="Progress, week by week">
-
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-
-<img src="docs/images/iphone-reflect.png" width="260" alt="The weekly review">
-
-</td>
-<td width="50%">
-
-<h3>Look back each week</h3>
-
-A short weekly review shows how each habit went and asks what went well. A habits scorecard helps you notice the habits you already have.
-
-
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-<h3>Built around Atomic Habits</h3>
-
-Each habit can carry the ideas from James Clear's book: who you want to become ("I am a reader", with every check-in a vote for that person) and the four laws: make it obvious, attractive, easy and satisfying. For habits you're breaking, they're turned around.
-
-
-</td>
-<td width="50%" align="center">
-
-<img src="docs/images/iphone-plan.png" width="260" alt="A habit's Atomic Habits plan">
-
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-
-<img src="docs/images/mac-focus.png" width="380" alt="The focus timer on a Mac">
-
-</td>
-<td width="50%">
-
-<h3>Focus when it counts</h3>
-
-A focus timer with breaks in between. Link a session to a habit, and see how many you've done today.
-
-
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-<h3>Reminders and your calendar</h3>
-
-Get a nudge at each habit's time, and mark it done right from the notification. Or get one daily check-in listing what's left. Habits with a time can show up in your calendar app too.
-
-
-</td>
-<td width="50%" align="center">
-
-<img src="docs/images/iphone-settings.png" width="260" alt="Reminder settings">
-
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-
-<img src="docs/images/server-settings.png" width="380" alt="The server's settings page">
-
-</td>
-<td width="50%">
-
-<h3>Your data, on your own server</h3>
-
-Your habits live on a small server you run at home, on a NAS or any always-on computer, and every device keeps in sync with it. Each person in your household gets their own private account. Turn on <em>Remote access</em> and it works away from home too, with nothing extra to set up on your phone. The apps also work offline and catch up when they're back in touch.
-
-
-</td>
+<td align="center"><img src="docs/images/mac-focus.png" alt="The focus timer"><br><sub>Focus timer</sub></td>
+<td align="center"><img src="docs/images/server-settings.png" alt="The server's settings page"><br><sub>Your server's settings page</sub></td>
 </tr>
 </table>
 
