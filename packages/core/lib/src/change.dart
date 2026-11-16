@@ -6,7 +6,7 @@ const deletedField = '_deleted';
 
 /// One field-level edit: the unit of sync.
 ///
-/// Creating a task produces one change per field. Editing its title produces
+/// Creating a habit produces one change per field. Editing its name produces
 /// one change, and deleting it sets [deletedField] to true.
 class Change {
   final String table;
@@ -24,8 +24,6 @@ class Change {
     required this.value,
     required this.hlc,
   });
-
-  bool get isDelete => field == deletedField;
 
   Map<String, Object?> toJson() => {
     'table': table,

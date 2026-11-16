@@ -104,6 +104,7 @@ void main() {
   late Device laptop;
 
   setUp(() async {
+    Device.directory.clear(); // shared by every device, so start each test empty
     serverStore = SyncStore.inMemory();
     auth = AuthStore(serverStore);
     auth.createUser('ryan', password: 'correct horse');
@@ -219,11 +220,11 @@ void main() {
     expect(replaced.url, isNot(link.url));
   });
 
-  test('preferences such as the Atomic Habits choice follow you', () async {
-    phone.repo.setPrefs({'atomicHabits': true});
+  test('preferences such as the first day of the week follow you', () async {
+    phone.repo.setPrefs({'weekStart': DateTime.monday}); // not the default
     await phone.sync.syncNow();
     await laptop.sync.syncNow();
-    expect(laptop.repo.atomicHabits, isTrue);
+    expect(laptop.repo.weekStart, DateTime.monday);
   });
 
   group('signing in', () {
@@ -306,8 +307,8 @@ void main() {
 
     test('addresses are normalized', () {
       expect(
-        SyncEngine.normalizeUrl('tasks.example.com/'),
-        'https://tasks.example.com',
+        SyncEngine.normalizeUrl('habits.example.com/'),
+        'https://habits.example.com',
       );
       expect(
         SyncEngine.normalizeUrl('192.168.1.10:8080'),
@@ -402,9 +403,9 @@ void main() {
       () async {
         final router = _Router();
         final settings = SettingsStore(serverStore.db);
-        final identity = DirectoryIdentity.loadOrCreate(
-          Directory.systemTemp.createTempSync('directory'),
-        );
+        final keyDir = Directory.systemTemp.createTempSync('directory');
+        addTearDown(() => keyDir.deleteSync(recursive: true));
+        final identity = DirectoryIdentity.loadOrCreate(keyDir);
         final remote = RemoteAccess(
           settings,
           httpsPort: 8443,
@@ -462,9 +463,9 @@ void main() {
 
         // A directory that's been tampered with points somewhere else. The
         // address isn't signed by the server, so the phone ignores it.
-        final forger = DirectoryIdentity.loadOrCreate(
-          Directory.systemTemp.createTempSync('forger'),
-        );
+        final forgerDir = Directory.systemTemp.createTempSync('forger');
+        addTearDown(() => forgerDir.deleteSync(recursive: true));
+        final forger = DirectoryIdentity.loadOrCreate(forgerDir);
         final forged = jsonEncode({
           'id': identity.id,
           'urls': ['https://evil.example'],
@@ -760,7 +761,6 @@ void main() {
     });
 
     test('size check-ins: grow, keep, shrink, and "feels right"', () {
-      repo.setPrefs({'atomicHabits': true});
       final id = repo.createHabit({
         'name': 'Read',
         'weekdays': [1, 2, 3, 4, 5, 6, 7],
@@ -847,7 +847,6 @@ void main() {
       repo.updateScorecardItem(repo.scorecard.single.id, {'rating': '-'});
       expect(repo.scorecard.single.rating, '-');
 
-      repo.setPrefs({'atomicHabits': true});
       habit();
       expect(repo.lastWeekReviewDue, isTrue);
       repo.saveReview(DateTime(2026, 11, 5), 'wentWell', 'Read every day');

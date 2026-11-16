@@ -7,8 +7,7 @@ import '../data/reminders.dart';
 import '../data/repo.dart';
 import 'common.dart';
 
-/// Creates or edits a habit. Shows the Atomic Habits fields only when the
-/// framework is turned on (or the habit already uses them).
+/// Creates or edits a habit, including its Atomic Habits plan.
 Future<void> editHabit(BuildContext context, {Habit? existing}) =>
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -103,7 +102,6 @@ class _HabitEditorState extends State<HabitEditor> {
   @override
   Widget build(BuildContext context) {
     final repo = AppScope.of(context).repo;
-    final framework = true;
     final theme = Theme.of(context);
 
     return Scaffold(
@@ -176,7 +174,7 @@ class _HabitEditorState extends State<HabitEditor> {
             const SizedBox(height: 12),
             _timeRow(),
           ],
-          if (framework) ...[
+          ...[
             const SizedBox(height: 28),
             Text('Atomic Habits', style: theme.textTheme.titleMedium),
             Text(

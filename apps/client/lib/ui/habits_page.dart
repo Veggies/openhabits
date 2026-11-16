@@ -94,7 +94,7 @@ Future<bool> confirmDeleteHabit(BuildContext context, Habit habit) async =>
       builder: (context) => AlertDialog(
         title: Text('Delete ${habit.name}?'),
         content: const Text(
-          'This removes it and its check-ins from all your devices.',
+          'This removes it from all your devices.',
         ),
         actions: [
           TextButton(
@@ -266,8 +266,7 @@ class _HabitList extends StatelessWidget {
             habits: quit,
           ),
         // A nudge toward the scorecard while there's little to track yet.
-        if (repo.atomicHabits &&
-            habits.length < 3 &&
+        if (habits.length < 3 &&
             repo.scorecard.isEmpty) ...[
           const SizedBox(height: 16),
           ListTile(
@@ -456,8 +455,7 @@ class _HabitRow extends StatelessWidget {
 
     // If you missed it last time, the second line says so instead, in
     // amber. Hovering shows the full "never miss twice" message.
-    final missed =
-        repo.atomicHabits && !checkedToday && repo.missedLastTime(habit);
+    final missed = !checkedToday && repo.missedLastTime(habit);
     final String line;
     final String hover;
     if (missed) {

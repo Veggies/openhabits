@@ -1,8 +1,7 @@
 import HabitsCore
 import SwiftUI
 
-/// Creates or edits a habit. The Atomic Habits sections only show when the
-/// framework is on, or the habit already uses them.
+/// Creates or edits a habit, including its Atomic Habits plan.
 struct HabitEditor: View {
     let existing: Habit?
     @Environment(AppModel.self) private var app
@@ -26,7 +25,6 @@ struct HabitEditor: View {
 
     var body: some View {
         let repo = app.repo
-        let framework = true
 
         NavigationStack {
             Form {
@@ -80,16 +78,14 @@ struct HabitEditor: View {
                         : "Give it a time to get a reminder, and to see it in your calendar app.")
                 }
 
-                if framework {
-                    Section {
-                        field("identity", "I am a person who…")
-                    } header: {
-                        Text("Who do you want to become?")
-                    } footer: {
-                        Text("Each time you do the habit, it's a vote for becoming this person. Everything from here on is optional, so just fill in what helps you.")
-                    }
-                    if kind == .build { buildSections } else { breakSections }
+                Section {
+                    field("identity", "I am a person who…")
+                } header: {
+                    Text("Who do you want to become?")
+                } footer: {
+                    Text("Each time you do the habit, it's a vote for becoming this person. Everything from here on is optional, so just fill in what helps you.")
                 }
+                if kind == .build { buildSections } else { breakSections }
 
                 if let existing {
                     Section {

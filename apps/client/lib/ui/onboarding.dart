@@ -9,13 +9,13 @@ import 'common.dart';
 import 'connect.dart';
 import 'habit_editor.dart';
 
-/// First-run setup: connect to a server (or skip), choose whether to use
-/// the Atomic Habits framework, and if so build a first habit with it.
+/// First-run setup: connect to a server (or skip), take the tour of how
+/// the app uses Atomic Habits, and build a first habit.
 class Onboarding extends StatefulWidget {
   final VoidCallback onDone;
 
-  /// Opened again from Settings: always asks the framework question (even
-  /// though it was answered before) and skips connecting if already signed in.
+  /// Opened again from Settings: takes the tour again, and skips connecting
+  /// if already signed in.
   final bool replay;
   const Onboarding({super.key, required this.onDone, this.replay = false});
 

@@ -113,12 +113,11 @@ public final class Repo {
         setDone(habitId, day, !isDone(habitId, day))
     }
 
-    /// Scheduled days done in a row. With Atomic Habits on, one missed day
-    /// is forgiven ("never miss twice").
+    /// Scheduled days done in a row. One missed day is forgiven ("never
+    /// miss twice").
     public func streak(_ h: Habit) -> Int {
-        let forgiving = atomicHabits
-        return remember("streak\(h.id)\(forgiving)") {
-            h.streak(isDone: { isDone(h.id, $0) }, today: clock(), forgiving: forgiving)
+        remember("streak\(h.id)") {
+            h.streak(isDone: { isDone(h.id, $0) }, today: clock(), forgiving: true)
         }
     }
 
@@ -196,14 +195,13 @@ public final class Repo {
     /// means it's sticking, so ask whether it feels too easy; done on under
     /// half suggests making it smaller. Otherwise nothing.
     public func sizeSuggestion(_ h: Habit) -> SizeSuggestion? {
-        let atomic = atomicHabits
-        let result: SizeSuggestion?? = remember("size\(h.id)\(atomic)") { .some(computeSizeSuggestion(h)) }
+        let result: SizeSuggestion?? = remember("size\(h.id)") { .some(computeSizeSuggestion(h)) }
         return result ?? nil
     }
 
     private func computeSizeSuggestion(_ h: Habit) -> SizeSuggestion? {
         let plan = h.plan
-        guard atomicHabits, !h.isQuit, !plan.twoMinute.isEmpty, !plan.sizeSettled else { return nil }
+        guard !h.isQuit, !plan.twoMinute.isEmpty, !plan.sizeSettled else { return nil }
         let since = Days.parse(plan.steppedUpAt) ?? h.startDay
         guard Days.between(since, today) >= 14 else { return nil }
         let r = record(h, end: today, days: 14)
@@ -251,10 +249,6 @@ public final class Repo {
 
     public var prefs: Prefs { Prefs(store.row(Tables.prefs, Prefs.rowId)) }
     public func setPrefs(_ fields: Fields) { store.write(Tables.prefs, Prefs.rowId, fields) }
-    /// The app is built around Atomic Habits, so its ideas (one missed day
-    /// forgiven, size check-ins, the weekly review) are always on. The
-    /// synced preference is still read by older versions of the Android app.
-    public var atomicHabits: Bool { true }
     public var weekStart: Int { prefs.weekStart }
 
     // MARK: Scorecard and weekly review
@@ -294,7 +288,6 @@ public final class Repo {
 
     /// Last week's review hasn't been written yet.
     public var lastWeekReviewDue: Bool {
-        guard atomicHabits else { return false }
         let all = habits
         guard !all.isEmpty else { return false }
         let thisWeek = Days.startOfWeek(clock(), firstDay: weekStart)

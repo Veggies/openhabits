@@ -82,7 +82,7 @@ struct HabitDetailView: View {
                     leave()
                 }
             } message: {
-                Text("This removes it and its check-ins from all your devices.")
+                Text("This removes it from all your devices.")
             }
         } else {
             ContentUnavailableView("This habit was deleted", systemImage: "trash")
@@ -133,7 +133,7 @@ struct HabitDetailView: View {
                     symbol: "chart.line.uptrend.xyaxis",
                     color: strength.level.color)
                 StatTile(value: "\(repo.votes(habit.id))",
-                    label: repo.atomicHabits && !habit.plan.identity.isEmpty ? "votes for who you're becoming" : "check-ins",
+                    label: !habit.plan.identity.isEmpty ? "votes for who you're becoming" : "check-ins",
                     symbol: "checkmark",
                     color: habit.tint)
             }

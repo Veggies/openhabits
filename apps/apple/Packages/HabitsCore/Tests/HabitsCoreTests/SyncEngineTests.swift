@@ -3,15 +3,6 @@ import Testing
 
 @testable import HabitsCore
 
-/// The repository's shared test data, also read by the Dart and JavaScript
-/// tests, so every implementation is held to the same answers.
-func fixture(_ name: String) throws -> [String: JSONValue] {
-    var root = URL(fileURLWithPath: #filePath)
-    for _ in 0..<7 { root.deleteLastPathComponent() }
-    let data = try Data(contentsOf: root.appending(path: "fixtures/\(name)"))
-    return try JSONDecoder().decode([String: JSONValue].self, from: data)
-}
-
 @Suite struct SharedFixtures {
     @Test func clockAndMergeMatchDart() throws {
         let f = try fixture("hlc.json")
@@ -251,7 +242,7 @@ final class StubProtocol: URLProtocol {
         #expect(store.pendingCount > 0)
     }
 
-        @Test func afterAReinstallSigningInAgainUploadsInsteadOfDeleting() async throws {
+    @Test func afterAReinstallSigningInAgainUploadsInsteadOfDeleting() async throws {
         try await signIn()
         addHabit("Only copy is on the phone")
         await engine.syncNow()
@@ -298,7 +289,7 @@ final class StubProtocol: URLProtocol {
         #expect(warning?.contains("1 change that hasn't been sent yet") == true)
     }
 
-        @Test func anApprovalIsForgottenWhenSignInFails() async throws {
+    @Test func anApprovalIsForgottenWhenSignInFails() async throws {
         engine.trustCertificate("CC:DD", for: "http://home")
         server.impostors["home"] = (400, "application/json", #"{"error":"That code doesn't work."}"#)
         await #expect(throws: (any Error).self) { try await engine.redeem(url: "http://home", code: "X") }
@@ -333,7 +324,7 @@ final class StubProtocol: URLProtocol {
         #expect(engine.serverUrl == "http://home")
     }
 
-        @Test func signingInToAnotherServerForgetsTheOldCertificate() async throws {
+    @Test func signingInToAnotherServerForgetsTheOldCertificate() async throws {
         store.setMeta("serverUrl", "https://old")
         store.setMeta("fingerprint", "AA:BB")
         engine.pinning.pinned = "AA:BB"

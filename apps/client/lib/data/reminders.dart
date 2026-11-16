@@ -113,7 +113,7 @@ class Reminders extends ChangeNotifier {
     final now = DateTime.now();
     final today = dateOnly(now);
     final habits = repo.habits;
-    final requests = <(DateTime, int, String, String, String?, bool)>[];
+    final requests = <_Reminder>[];
 
     // As many days ahead as the 60 notifications kept below cover, so
     // reminders keep coming for weeks even if the app isn't opened (it
@@ -128,12 +128,12 @@ class Reminders extends ChangeNotifier {
           final at = DateTime(day.year, day.month, day.day, t.hour, t.minute);
           if (!at.isAfter(now) || repo.isHabitDone(h.id, day)) continue;
           requests.add((
-            at,
-            Object.hash(h.id, dateKey(day)) & 0x7fffffff,
-            h.name,
-            _habitMessage(h),
-            '${h.id}|${dateKey(day)}',
-            true,
+            at: at,
+            id: Object.hash(h.id, dateKey(day)) & 0x7fffffff,
+            title: h.name,
+            body: _habitMessage(h),
+            payload: '${h.id}|${dateKey(day)}',
+            isHabit: true,
           ));
         }
       }
@@ -148,21 +148,22 @@ class Reminders extends ChangeNotifier {
         // Nothing left today: no need to remind.
         if (offset == 0 && left.isEmpty) continue;
         requests.add((
-          at,
-          offset + 1,
-          'Time to check in on your habits',
-          offset != 0
+          at: at,
+          id: offset + 1,
+          title: 'Time to check in on your habits',
+          body: offset != 0
               ? 'Take a minute to mark off what you did today.'
               : left.length == 1
               ? "You haven't marked ${left.single.name} yet today."
               : "You haven't marked these yet today: ${_names(left)}.",
-          null,
-          false,
+          payload: null,
+          isHabit: false,
         ));
       }
     }
-    requests.sort((a, b) => a.$1.compareTo(b.$1));
-    for (final (at, id, title, body, payload, isHabit) in requests.take(60)) {
+    requests.sort((a, b) => a.at.compareTo(b.at));
+    for (final (:at, :id, :title, :body, :payload, :isHabit)
+        in requests.take(60)) {
       await _plugin.zonedSchedule(
         id: id,
         scheduledDate: tz.TZDateTime.from(at, tz.local),
@@ -227,3 +228,14 @@ class Reminders extends ChangeNotifier {
     super.dispose();
   }
 }
+
+/// One notification to schedule. [payload] identifies the habit and day
+/// for "Mark as done"; it's null for the daily check-in.
+typedef _Reminder = ({
+  DateTime at,
+  int id,
+  String title,
+  String body,
+  String? payload,
+  bool isHabit,
+});

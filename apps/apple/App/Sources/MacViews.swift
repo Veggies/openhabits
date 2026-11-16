@@ -18,15 +18,12 @@ struct MacMainView: View {
         withAnimation(.smooth(duration: 0.32)) { app.previewHabit = nil }
     }
 
-    private func tabs(_ atomic: Bool) -> [(tab: MacTab, title: String)] {
-        [(.today, "Today"), (.progress, "Progress")]
-            + (atomic ? [(.reflect, "Reflect")] : [])
-            + [(.focus, "Focus")]
-    }
+    private let tabs: [(tab: MacTab, title: String)] = [
+        (.today, "Today"), (.progress, "Progress"), (.reflect, "Reflect"), (.focus, "Focus"),
+    ]
 
     var body: some View {
         @Bindable var app = app
-        let atomic = app.repo.atomicHabits
         let focus = app.focus
 
         Group {
@@ -73,7 +70,7 @@ struct MacMainView: View {
             // The same tabs on every screen, so the toolbar never shifts.
             ToolbarItem(placement: .principal) {
                 Picker("View", selection: $app.macTab) {
-                    ForEach(tabs(atomic), id: \.tab) { item in
+                    ForEach(tabs, id: \.tab) { item in
                         Text(item.title).tag(item.tab)
                     }
                 }
@@ -104,9 +101,6 @@ struct MacMainView: View {
         // closes its preview.
         .onChange(of: app.repo.habits.map(\.id)) { _, ids in
             if let open = app.previewHabit, !ids.contains(open) { app.previewHabit = nil }
-        }
-        .onChange(of: atomic) { _, on in
-            if !on && app.macTab == .reflect { app.macTab = .today }
         }
     }
 }

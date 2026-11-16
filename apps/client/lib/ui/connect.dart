@@ -259,7 +259,7 @@ class _ConnectFormState extends State<ConnectForm> {
             readOnly: info != null,
             decoration: InputDecoration(
               labelText: 'Server address',
-              hintText: 'tasks.example.com or 192.168.1.10:8080',
+              hintText: 'habits.example.com or 192.168.1.10:8080',
               border: const OutlineInputBorder(),
               suffixIcon: info == null
                   ? null

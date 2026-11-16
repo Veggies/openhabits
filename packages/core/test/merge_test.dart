@@ -3,6 +3,8 @@ import 'dart:math';
 import 'package:core/core.dart';
 import 'package:test/test.dart';
 
+import 'support/field_store.dart';
+
 Change set(String field, Object? value, int millis, [String node = 'a']) =>
     Change(
       table: 'habits',

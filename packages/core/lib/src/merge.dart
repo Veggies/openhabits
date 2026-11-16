@@ -9,7 +9,7 @@ import 'change.dart';
 /// no matter how many times the same change arrives.
 bool shouldApply(Change incoming, Change? current) {
   // Last write wins on every field, including the deleted flag, so a later
-  // restore (deleted = false) brings a task back from the trash. Equal
+  // restore (deleted = false) brings a habit back. Equal
   // timestamps mean the same change was delivered twice, so it's ignored.
   return current == null || incoming.hlc > current.hlc;
 }

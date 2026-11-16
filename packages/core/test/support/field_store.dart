@@ -1,10 +1,7 @@
-import 'change.dart';
-import 'merge.dart';
+import 'package:core/core.dart';
 
-/// An in-memory store holding the winning change for each field.
-///
-/// The server and client persist the same state in SQL. This version
-/// exercises the merge rule in tests and documents the expected behaviour.
+/// An in-memory store holding the winning change for each field, for
+/// testing the merge rule. The server and apps keep the same state in SQL.
 class FieldStore {
   final _fields = <(String, String, String), Change>{};
 

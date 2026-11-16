@@ -66,9 +66,9 @@ void main() {
     late String url;
 
     setUpAll(() async {
-      certificate = ServerCertificate.loadOrCreate(
-        Directory.systemTemp.createTempSync('tls'),
-      );
+      final dir = Directory.systemTemp.createTempSync('tls');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      certificate = ServerCertificate.loadOrCreate(dir);
       server = await HttpServer.bindSecure(
         InternetAddress.loopbackIPv4,
         0,

@@ -111,7 +111,7 @@ struct HabitsView: View {
                 if let h = confirmingDelete { repo.deleteHabit(h.id) }
             }
         } message: {
-            Text("This removes it and its check-ins from all your devices.")
+            Text("This removes it from all your devices.")
         }
         #if os(iOS)
         .onChange(of: app.newHabitRequested) { _, requested in
@@ -335,7 +335,7 @@ struct HabitRow: View {
     /// with each day labelled under its circle.
     private var phoneRow: some View {
         let repo = app.repo
-        let missed = repo.atomicHabits && repo.missedLastTime(habit)
+        let missed = repo.missedLastTime(habit)
         let detail = missed
             ? (habit.isQuit ? "Yesterday wasn't a clear day" : "You missed this last time")
             : detailLine(habit, repo: repo, includeTime: false)
@@ -381,7 +381,7 @@ struct HabitRow: View {
 
     private var wideRow: some View {
         let repo = app.repo
-        let missed = repo.atomicHabits && repo.missedLastTime(habit)
+        let missed = repo.missedLastTime(habit)
         let detail = missed
             ? (habit.isQuit ? "Yesterday wasn't a clear day" : "You missed this last time")
             : detailLine(habit, repo: repo)

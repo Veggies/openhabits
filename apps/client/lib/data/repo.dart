@@ -50,11 +50,6 @@ class Repo {
   void setPrefs(Fields fields) =>
       store.write(Tables.prefs, Prefs.rowId, fields);
 
-  /// The app is built around Atomic Habits, so its ideas (one missed day
-  /// forgiven, size check-ins, the weekly review) are always on. The synced
-  /// preference is kept for older versions of the app.
-  bool get atomicHabits => true;
-
   /// How many pomodoros to aim for each day.
   int get focusGoal => prefs.focusGoal;
 
@@ -108,7 +103,7 @@ class Repo {
   /// Last week's review, if it hasn't been written yet: prompts the review
   /// banner from the start of the new week.
   bool get lastWeekReviewDue {
-    if (!atomicHabits || habits.isEmpty) return false;
+    if (habits.isEmpty) return false;
     final thisWeek = startOfWeek(clock(), weekStart);
     final hadHabitsLastWeek = habits.any(
       (h) => h.createdAt.toLocal().isBefore(thisWeek),
@@ -134,13 +129,10 @@ class Repo {
     {'habitId': habitId, 'date': dateKey(day), 'done': done},
   );
 
-  /// For build habits: scheduled days done in a row. With the Atomic Habits
-  /// framework on, a single miss is forgiven ("never miss twice").
-  int streak(Habit habit) => habit.streak(
-    (d) => isHabitDone(habit.id, d),
-    clock(),
-    forgiving: atomicHabits,
-  );
+  /// For build habits: scheduled days done in a row. A single miss is
+  /// forgiven ("never miss twice").
+  int streak(Habit habit) =>
+      habit.streak((d) => isHabitDone(habit.id, d), clock(), forgiving: true);
 
   /// The Goldilocks rule: keep each habit at a size that's a little
   /// challenging but still easy to keep doing. Consistency can't tell how
@@ -151,12 +143,12 @@ class Repo {
   /// feels right, nothing is suggested.
   SizeSuggestion? sizeSuggestion(Habit habit) {
     final plan = habit.plan;
-    if (!atomicHabits || habit.isQuit || plan.twoMinute.isEmpty) return null;
+    if (habit.isQuit || plan.twoMinute.isEmpty) return null;
     if (plan.sizeSettled) return null;
     final today = dateOnly(clock());
     // A date that can't be read counts from the start, as in the Apple app.
     final since =
-        _tryParseDateKey(plan.steppedUpAt) ??
+        tryParseDateKey(plan.steppedUpAt) ??
         dateOnly(habit.createdAt.toLocal());
     if (daysBetween(since, today) < 14) return null;
     final (:done, :scheduled) = record(habit, today, 14);
@@ -227,7 +219,7 @@ class Repo {
   bool missedLastTime(Habit habit) =>
       habit.missedLastTime((d) => isHabitDone(habit.id, d), clock());
 
-  /// For quit habits, a check-in records a slip.
+  /// For quit habits, a check-in means a day you stayed clear.
   int daysClean(Habit habit) =>
       habit.daysClean((d) => isHabitDone(habit.id, d), clock());
 
@@ -273,15 +265,4 @@ class Repo {
     'minutes': minutes,
     'habitId': habitId,
   });
-}
-
-DateTime? _tryParseDateKey(String key) {
-  if (key.isEmpty) return null;
-  try {
-    return parseDateKey(key);
-  } on FormatException {
-    return null;
-  } on RangeError {
-    return null;
-  }
 }

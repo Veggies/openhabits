@@ -113,8 +113,8 @@ public final class SyncEngine {
     @ObservationIgnored private var again = false
     @ObservationIgnored private var activeUrl: String?
 
-    /// Addresses that have shown they're this device's server. The sign-in
-    /// token is only sent to these.
+    /// Addresses that have shown they're this device's server. Once the
+    /// server's id is known, the sign-in token is only sent to these.
     @ObservationIgnored private var verified: Set<String> = []
 
     /// An address where a different OpenHabits server answered, e.g. after
@@ -237,6 +237,13 @@ public final class SyncEngine {
         if let fingerprint, let remoteUrl { trustCertificate(fingerprint, for: remoteUrl) }
         return try await finishSignIn(urls: [url] + (remoteUrl.map { [$0] } ?? []),
             path: "/auth/redeem", body: ["code": .string(code)])
+    }
+
+    /// Signs in with a pairing link or scanned QR code.
+    @discardableResult
+    public func redeem(_ pairing: Pairing) async throws -> Account {
+        try await redeem(url: Self.normalize(pairing.server), code: pairing.code,
+            remoteUrl: pairing.remote, fingerprint: pairing.fingerprint)
     }
 
     /// Where to send the browser for single sign-on. The server sends it

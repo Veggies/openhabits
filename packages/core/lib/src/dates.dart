@@ -14,6 +14,18 @@ DateTime parseDateKey(String key) {
   );
 }
 
+/// Like [parseDateKey], but null for anything that isn't a date key.
+DateTime? tryParseDateKey(String key) {
+  if (key.isEmpty) return null;
+  try {
+    return parseDateKey(key);
+  } on FormatException {
+    return null;
+  } on RangeError {
+    return null;
+  }
+}
+
 /// Midnight at the start of [d]'s day, in [d]'s time zone.
 DateTime dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 

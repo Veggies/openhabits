@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../data/sync_engine.dart';
 import 'common.dart';
+import 'sync_status.dart';
 import 'connect.dart';
 import 'onboarding.dart';
 
@@ -53,7 +54,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           ),
                         ),
                         title: Text('Signed in as ${account.username}'),
-                        trailing: _StatusIcon(sync: sync),
+                        trailing: SyncStatusButton(sync: sync),
                       ),
                       if (sync.status == SyncStatus.error &&
                           sync.lastError != null)
@@ -96,12 +97,13 @@ class _SettingsPageState extends State<SettingsPage> {
                     ],
                   ),
                 ),
-                Text(
-                  '${repo.store.pendingCount} change(s) waiting to upload',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.outline,
+                if (repo.store.pendingCount case final n when n > 0)
+                  Text(
+                    '$n change${n == 1 ? '' : 's'} waiting to upload',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.outline,
+                    ),
                   ),
-                ),
               ] else
                 Card(
                   child: Padding(
@@ -254,40 +256,6 @@ Future<void> _guard(
   }
 }
 
-class _StatusIcon extends StatelessWidget {
-  final SyncEngine sync;
-  const _StatusIcon({required this.sync});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final (icon, color, tip) = switch (sync.status) {
-      SyncStatus.syncing => (Icons.cloud_sync, scheme.primary, 'Syncing…'),
-      SyncStatus.idle => (
-        Icons.cloud_done,
-        Colors.green,
-        sync.lastSynced == null
-            ? 'Connected'
-            : 'Synced at ${clockLabel(context, sync.lastSynced!)}',
-      ),
-      SyncStatus.error => (
-        Icons.cloud_off,
-        scheme.error,
-        sync.lastError ?? "Couldn't sync just now",
-      ),
-      SyncStatus.notConfigured || SyncStatus.signedOut => (
-        Icons.cloud_off,
-        scheme.outline,
-        'Not connected',
-      ),
-    };
-    return IconButton(
-      tooltip: tip,
-      icon: Icon(icon, color: color),
-      onPressed: sync.syncNow,
-    );
-  }
-}
 
 /// The owner's household list: add and remove people.
 class _People extends StatefulWidget {

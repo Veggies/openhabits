@@ -100,8 +100,7 @@ void main() {
   testWidgets('the habit editor scrolls from anywhere in the window', (
     tester,
   ) async {
-    final repo = await pumpApp(tester, const Size(1400, 500));
-    repo.setPrefs({'atomicHabits': true}); // a long form
+    await pumpApp(tester, const Size(1400, 500));
     await tester.tap(find.text('New habit'));
     await tester.pumpAndSettle();
 
@@ -151,7 +150,6 @@ void main() {
     tester,
   ) async {
     final repo = await pumpApp(tester, const Size(1400, 900));
-    repo.setPrefs({'atomicHabits': true});
     final today = dateOnly(DateTime.now());
     final id = repo.createHabit({
       'name': 'Read',
@@ -438,8 +436,7 @@ void main() {
 
   testWidgets('the editor shows the four laws', (tester) async {
     // Tall enough that the whole editor is laid out without scrolling.
-    final repo = await pumpApp(tester, const Size(1400, 2400));
-    repo.setPrefs({'atomicHabits': true});
+    await pumpApp(tester, const Size(1400, 2400));
     await tester.tap(find.text('New habit'));
     await tester.pumpAndSettle();
     for (final law in [

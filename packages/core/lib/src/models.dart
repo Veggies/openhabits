@@ -20,9 +20,6 @@ typedef Fields = Map<String, Object?>;
 class Prefs {
   static const rowId = 'me';
 
-  /// Null until the person has answered the setup wizard's question.
-  final bool? atomicHabits;
-
   /// [DateTime.sunday] or [DateTime.monday].
   final int weekStart;
 
@@ -30,8 +27,7 @@ class Prefs {
   final int focusGoal;
 
   Prefs.fromFields(Fields? f)
-    : atomicHabits = f?['atomicHabits'] as bool?,
-      weekStart = f?['weekStart'] as int? ?? DateTime.sunday,
+    : weekStart = f?['weekStart'] as int? ?? DateTime.sunday,
       focusGoal = f?['focusGoal'] as int? ?? 4;
 }
 
@@ -41,8 +37,7 @@ DateTime? _dateTime(Object? v) => v is String ? DateTime.tryParse(v) : null;
 
 enum HabitKind { build, quit }
 
-/// The optional Atomic Habits fields. Every field may be empty; the app only
-/// asks for them when the framework is turned on.
+/// The optional Atomic Habits fields. Every field may be empty.
 class HabitPlan {
   /// "I am a person who…" — the identity each check-in is a vote for.
   final String identity;
@@ -126,7 +121,7 @@ class HabitPlan {
   ];
 
   /// True when none of the Atomic Habits fields are filled in. The time
-  /// doesn't count: any habit can have one, framework or not.
+  /// doesn't count: any habit can have one.
   bool get isEmpty => fieldNames.every((n) => n == 'time' || _value(n).isEmpty);
 
   String _value(String name) => switch (name) {

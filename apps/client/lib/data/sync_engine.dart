@@ -88,7 +88,8 @@ class SyncEngine extends ChangeNotifier {
   String? _activeUrl;
 
   /// Addresses that have shown they're this device's server since the app
-  /// started. The sign-in token is only sent to these.
+  /// started. Once the server's id is known, the sign-in token is only sent
+  /// to these.
   final _verified = <String>{};
 
   /// An address where a different OpenHabits server answered, e.g. after
@@ -156,7 +157,7 @@ class SyncEngine extends ChangeNotifier {
     unawaited(syncNow());
   }
 
-  /// Accepts "tasks.example.com", "192.168.1.10:8080" or a full URL. Bare
+  /// Accepts "habits.example.com", "192.168.1.10:8080" or a full URL. Bare
   /// LAN addresses and anything with a port default to http; public names
   /// default to https.
   static String normalizeUrl(String input) {
@@ -297,7 +298,14 @@ class SyncEngine extends ChangeNotifier {
     } finally {
       _trustOnce = null;
     }
-    final account = Account.fromJson(response['user'] as Map<String, Object?>);
+    final user = response['user'];
+    final token = response['token'];
+    if (user is! Map<String, Object?> || token is! String) {
+      throw const SyncException(
+        'The server sent back something unexpected. Try again.',
+      );
+    }
+    final account = Account.fromJson(user);
     final sameServer = urls.first == serverUrl;
     final previous = this.account;
     if (previous != null && previous.id != account.id) {
@@ -329,7 +337,7 @@ class SyncEngine extends ChangeNotifier {
       ..add(url);
     _otherServerAt = null;
     store.setMeta('serverUrl', urls.first);
-    store.setMeta('token', response['token'] as String);
+    store.setMeta('token', token);
     store.setMeta('account', jsonEncode(account.toJson()));
     if (urls.length > 1) store.setMeta('remoteUrl', urls[1]);
     // Pin the certificate the person confirmed or the QR code carried, even

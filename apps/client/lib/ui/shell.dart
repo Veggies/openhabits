@@ -4,6 +4,7 @@ import '../data/focus_controller.dart';
 import '../data/sync_engine.dart';
 import 'atomic_pages.dart';
 import 'common.dart';
+import 'sync_status.dart';
 import 'focus_page.dart';
 import 'growth_chart.dart';
 import 'habits_page.dart';
@@ -148,7 +149,7 @@ class _TopBar extends StatelessWidget {
             right: 12,
             child: Row(
               children: [
-                _SyncIndicator(sync: sync),
+                SyncStatusButton(sync: sync),
                 IconButton(
                   tooltip: 'Settings',
                   isSelected: nav.tab == AppTab.settings,
@@ -220,41 +221,3 @@ class ReflectPage extends StatelessWidget {
   }
 }
 
-class _SyncIndicator extends StatelessWidget {
-  final SyncEngine sync;
-  const _SyncIndicator({required this.sync});
-
-  @override
-  Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: sync,
-      builder: (context, _) {
-        final scheme = Theme.of(context).colorScheme;
-        final (icon, color, tip) = switch (sync.status) {
-          SyncStatus.notConfigured => (
-            Icons.cloud_off,
-            scheme.outline,
-            'Not connected to a server',
-          ),
-          SyncStatus.syncing => (Icons.cloud_sync, scheme.primary, 'Syncing…'),
-          SyncStatus.idle => (Icons.cloud_done, Colors.green, 'Synced'),
-          SyncStatus.error => (
-            Icons.cloud_off,
-            scheme.error,
-            sync.lastError ?? "Couldn't sync just now",
-          ),
-          SyncStatus.signedOut => (
-            Icons.cloud_off,
-            scheme.error,
-            "You've been signed out. Sign back in from Settings to keep syncing.",
-          ),
-        };
-        return IconButton(
-          tooltip: tip,
-          icon: Icon(icon, color: color),
-          onPressed: sync.syncNow,
-        );
-      },
-    );
-  }
-}

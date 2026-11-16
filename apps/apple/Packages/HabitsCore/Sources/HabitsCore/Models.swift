@@ -17,15 +17,12 @@ private func isDeleted(_ f: Fields) -> Bool { f[deletedField]?.bool == true }
 public struct Prefs: Sendable {
     public static let rowId = "me"
 
-    /// Nil until the person has answered the setup wizard's question.
-    public let atomicHabits: Bool?
     /// `Days.sunday` or `Days.monday`.
     public let weekStart: Int
     /// How many pomodoros (focus sessions) to aim for each day.
     public let focusGoal: Int
 
     public init(_ f: Fields?) {
-        atomicHabits = f?["atomicHabits"]?.bool
         weekStart = f?["weekStart"]?.int ?? Days.sunday
         focusGoal = f?["focusGoal"]?.int ?? 4
     }

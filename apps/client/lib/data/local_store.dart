@@ -7,7 +7,7 @@ import 'package:sqlite3/sqlite3.dart';
 
 /// The device's copy of all synced data.
 ///
-/// Every row is kept in memory as a field map (personal task data is small)
+/// Every row is kept in memory as a field map (habit data is small)
 /// and persisted to SQLite. Local edits are applied immediately and queued
 /// in an outbox until the sync engine delivers them to the server.
 class LocalStore extends ChangeNotifier {

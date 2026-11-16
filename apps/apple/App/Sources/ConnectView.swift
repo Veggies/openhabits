@@ -107,10 +107,7 @@ struct ConnectView: View {
         ) { pairing in
             Button("Cancel", role: .cancel) {}
             Button(app.sync.replacementWarning(for: pairing.server) == nil ? "Connect" : "Switch Servers") {
-                run {
-                    try await app.sync.redeem(url: SyncEngine.normalize(pairing.server), code: pairing.code,
-                        remoteUrl: pairing.remote, fingerprint: pairing.fingerprint)
-                }
+                run { try await app.sync.redeem(pairing) }
             }
         } message: { pairing in
             Text(app.sync.replacementWarning(for: pairing.server)

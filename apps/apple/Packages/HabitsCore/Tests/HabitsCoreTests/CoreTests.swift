@@ -95,11 +95,11 @@ import Testing
     @Test func oneMissedDayIsForgiven() throws {
         let r = try repo()
         let h = habit(r)
-        for d in [0, 1, 3, 4] { r.setDone(h.id, Days.add(today, -d), true) }
-        #expect(r.streak(h) == 4)  // one miss is forgiven ("never miss twice")
+        for d in [0, 1, 3, 4, 5, 6, 7, 8] { r.setDone(h.id, Days.add(today, -d), true) }
+        #expect(r.streak(h) == 8)  // day 2 alone is forgiven ("never miss twice")
         r.setDone(h.id, Days.add(today, -5), false)
         r.setDone(h.id, Days.add(today, -6), false)
-        #expect(r.streak(h) == 4)  // two misses in a row end it
+        #expect(r.streak(h) == 4)  // two misses in a row end it: days 7 and 8 drop out
         r.setDone(h.id, today, false)
         #expect(r.streak(h) == 3)  // today not done yet: counts from yesterday
     }
@@ -125,7 +125,6 @@ import Testing
 
     @Test func sizeCheckIns() throws {
         let r = try repo()
-        r.setPrefs(["atomicHabits": true])
         let h = habit(r, ["twoMinute": "Read one page"])
         for d in 0..<14 where d != 3 { r.setDone(h.id, Days.add(today, -d), true) }
         #expect(r.sizeSuggestion(h) == .grow)

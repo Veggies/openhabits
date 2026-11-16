@@ -123,8 +123,7 @@ struct PairingLinkView: View {
         working = true
         defer { working = false }
         do {
-            try await app.sync.redeem(url: SyncEngine.normalize(pairing.server), code: pairing.code,
-                remoteUrl: pairing.remote, fingerprint: pairing.fingerprint)
+            try await app.sync.redeem(pairing)
             dismiss()
         } catch {
             self.error = error.localizedDescription

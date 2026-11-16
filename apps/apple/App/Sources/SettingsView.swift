@@ -7,7 +7,6 @@ struct SettingsView: View {
     @State private var connecting = false
     @State private var addingDevice = false
     @State private var changingPassword = false
-    @State private var message: String?
 
     var body: some View {
         let sync = app.sync
@@ -112,11 +111,6 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $addingDevice) { AddDeviceView() }
         .sheet(isPresented: $changingPassword) { ChangePasswordView() }
-        .alert("Something went wrong", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
-            Button("OK") {}
-        } message: {
-            Text(message ?? "")
-        }
     }
 }
 
@@ -271,6 +265,7 @@ struct PeopleView: View {
     @State private var people: Result<[Account], Error>?
     @State private var adding = false
     @State private var removing: Account?
+    @State private var problem: String?
 
     var body: some View {
         Form {
@@ -311,12 +306,17 @@ struct PeopleView: View {
             Button("Remove", role: .destructive) {
                 guard let person = removing else { return }
                 Task {
-                    try? await app.sync.removePerson(person.id)
+                    do { try await app.sync.removePerson(person.id) } catch { problem = error.localizedDescription }
                     await load()
                 }
             }
         } message: {
             Text("This deletes their account and everything they've saved on this server.")
+        }
+        .alert("Couldn't remove them", isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } })) {
+            Button("OK") {}
+        } message: {
+            Text(problem ?? "")
         }
     }
 

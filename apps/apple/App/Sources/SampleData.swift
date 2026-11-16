@@ -31,7 +31,6 @@ extension AppModel {
     }
 
     private func addSampleHabits() {
-        repo.setPrefs(["atomicHabits": true])
         let today = repo.today
         let all: JSONValue = [1, 2, 3, 4, 5, 6, 7]
         // name, icon, colour, version for now, after I…, time, days,
