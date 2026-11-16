@@ -22,7 +22,7 @@ enum _Range {
   quarter('3 months', 91),
   half('6 months', 182),
   year('1 year', 365),
-  custom('Custom…', 0);
+  custom('Custom dates', 0);
 
   final String label;
   final int days;
@@ -39,7 +39,6 @@ class _GrowthViewState extends State<GrowthView> {
   /// Habits switched off in the filter. Tracking the hidden ones (rather
   /// than the shown ones) means new habits appear without extra steps.
   final hidden = <String>{};
-  bool table = false;
 
   @override
   Widget build(BuildContext context) => DataBuilder(
@@ -79,102 +78,93 @@ class _GrowthViewState extends State<GrowthView> {
         maxWidth: 1100,
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'How your habits are going',
-                  style: theme.textTheme.titleMedium,
-                ),
-              ),
-              if (habits.isNotEmpty)
-                TextButton.icon(
-                  icon: Icon(
-                    table ? Icons.grid_view : Icons.table_rows_outlined,
-                  ),
-                  label: Text(table ? 'Show as squares' : 'Show as a table'),
-                  onPressed: () => setState(() => table = !table),
-                ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            "Here's how each of your habits has gone, week by week. The number in each "
-            'square is how many days you did it that week. For habits you\'re trying to '
-            'break, it\'s how many days you went without it. The dates along the top are '
-            'when each week starts.',
-            style: muted,
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final r in _Range.values)
-                ChoiceChip(
-                  label: Text(
-                    r == _Range.custom &&
-                            range == _Range.custom &&
-                            custom != null
-                        ? '${shortDate(custom!.start)} – ${shortDate(custom!.end)}'
-                        : r.label,
-                  ),
-                  selected: range == r,
-                  onSelected: (_) => r == _Range.custom
-                      ? _pickCustom(context, started, from, to, today)
-                      : setState(() => range = r),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (habits.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 32),
-              child: Text(
-                "Once you've started a habit, you'll see how each week went here.",
-                textAlign: TextAlign.center,
-                style: muted,
-              ),
-            )
-          else ...[
-            // Choose which habits to show.
+          if (habits.isNotEmpty)
             Wrap(
-              spacing: 8,
+              spacing: 10,
               runSpacing: 8,
               children: [
-                for (final h in habits)
-                  FilterChip(
-                    avatar: CircleAvatar(
-                      backgroundColor: Color(h.color),
-                      radius: 6,
-                    ),
-                    label: Text(h.name),
-                    selected: !hidden.contains(h.id),
-                    showCheckmark: false,
-                    onSelected: (on) => setState(
-                      () => on ? hidden.remove(h.id) : hidden.add(h.id),
-                    ),
-                  ),
+                _rangeMenu(context, started, from, to, today),
+                if (habits.length > 1) _habitFilter(habits),
               ],
             ),
-            const SizedBox(height: 20),
-            if (shown.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 32),
-                child: Text(
-                  'Pick a habit above to see it here.',
-                  textAlign: TextAlign.center,
-                  style: muted,
-                ),
-              )
-            else if (table)
-              _WeekTable(habits: shown, weeks: weeks, data: data, today: today)
-            else
-              _WeekGrid(habits: shown, weeks: weeks, data: data, today: today),
-          ],
+          const SizedBox(height: 14),
+          Text(
+            "Here's how each habit has gone, week by week. The number in each square is "
+            "how many days you did it that week. For habits you're trying to break, it's "
+            'how many days you went without it.',
+            style: muted,
+          ),
+          const SizedBox(height: 16),
+          if (habits.isEmpty)
+            _Nothing(
+              icon: Icons.grid_view,
+              title: 'Nothing to show yet',
+              text: "Once you've started a habit, you'll see how each week went here.",
+            )
+          else if (shown.isEmpty)
+            const _Nothing(
+              icon: Icons.filter_list,
+              title: 'No habits chosen',
+              text: 'Choose which habits to show with the filter button.',
+            )
+          else
+            _WeekGrid(habits: shown, weeks: weeks, data: data, today: today),
         ],
       );
     },
+  );
+
+  /// Which weeks to show, as one menu button.
+  Widget _rangeMenu(
+    BuildContext context,
+    DateTime started,
+    DateTime from,
+    DateTime to,
+    DateTime today,
+  ) {
+    final title = range == _Range.custom && custom != null
+        ? '${shortDate(custom!.start)} – ${shortDate(custom!.end)}'
+        : range.label;
+    return MenuAnchor(
+      menuChildren: [
+        for (final r in _Range.values)
+          MenuItemButton(
+            leadingIcon: Icon(range == r ? Icons.check : null, size: 18),
+            onPressed: () => r == _Range.custom
+                ? _pickCustom(context, started, from, to, today)
+                : setState(() => range = r),
+            child: Text(r.label),
+          ),
+      ],
+      builder: (context, menu, _) => _MenuButton(
+        icon: Icons.calendar_today_outlined,
+        label: title,
+        onPressed: () => menu.isOpen ? menu.close() : menu.open(),
+      ),
+    );
+  }
+
+  /// Which habits to show: one button, a tick for each habit. The menu
+  /// stays open so several can be switched in one go.
+  Widget _habitFilter(List<Habit> habits) => MenuAnchor(
+    menuChildren: [
+      for (final h in habits)
+        CheckboxMenuButton(
+          value: !hidden.contains(h.id),
+          closeOnActivate: false,
+          onChanged: (on) => setState(
+            () => on == true ? hidden.remove(h.id) : hidden.add(h.id),
+          ),
+          child: Text(h.name),
+        ),
+    ],
+    builder: (context, menu, _) => _MenuButton(
+      icon: hidden.isEmpty ? Icons.filter_list : Icons.filter_alt,
+      label: hidden.isEmpty
+          ? 'All habits'
+          : '${habits.length - hidden.length} of ${habits.length} habits',
+      onPressed: () => menu.isOpen ? menu.close() : menu.open(),
+    ),
   );
 
   Future<void> _pickCustom(
@@ -280,12 +270,6 @@ enum StrengthLevel {
       : StrengthLevel.struggling;
   return (done: done, scheduled: scheduled, level: level);
 }
-
-/// "26 of 28 days", or "" when it's too soon to say.
-String _strengthCount(
-  Habit h,
-  ({int done, int scheduled, StrengthLevel level}) s,
-) => s.level == StrengthLevel.justStarted ? '' : _days(h, s.done, s.scheduled);
 
 class _WeekGrid extends StatefulWidget {
   final List<Habit> habits;
@@ -689,58 +673,62 @@ class _Legend extends StatelessWidget {
   }
 }
 
-/// The same numbers as a table, for anyone who'd rather read than look.
-class _WeekTable extends StatelessWidget {
-  final List<Habit> habits;
-  final List<DateTime> weeks;
-  final Map<String, List<_Week>> data;
-  final DateTime today;
-  const _WeekTable({
-    required this.habits,
-    required this.weeks,
-    required this.data,
-    required this.today,
+/// A rounded button that opens a menu: icon, label and a small arrow.
+class _MenuButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+  const _MenuButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
   });
 
   @override
+  Widget build(BuildContext context) => OutlinedButton(
+    onPressed: onPressed,
+    style: OutlinedButton.styleFrom(
+      shape: const StadiumBorder(),
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 18),
+        const SizedBox(width: 8),
+        Text(label),
+        const SizedBox(width: 4),
+        const Icon(Icons.expand_more, size: 18),
+      ],
+    ),
+  );
+}
+
+/// An empty state: an icon, a short title and a line of help.
+class _Nothing extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String text;
+  const _Nothing({required this.icon, required this.title, required this.text});
+
+  @override
   Widget build(BuildContext context) {
-    final repo = AppScope.of(context).repo;
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      primary: false,
-      child: DataTable(
-        columns: [
-          const DataColumn(label: Text('Week')),
-          for (final h in habits) DataColumn(label: Text(h.name)),
-        ],
-        rows: [
-          DataRow(
-            cells: [
-              const DataCell(Text('Last 4 weeks')),
-              for (final h in habits)
-                DataCell(
-                  Text(switch (habitStrength(repo, h)) {
-                    final s when _strengthCount(h, s).isEmpty => s.level.label,
-                    final s => '${_strengthCount(h, s)} · ${s.level.label}',
-                  }),
-                ),
-            ],
-          ),
-          for (var i = weeks.length - 1; i >= 0; i--)
-            DataRow(
-              cells: [
-                DataCell(Text(_weekName(weeks[i], today))),
-                for (final h in habits)
-                  DataCell(
-                    Text(switch (data[h.id]![i]) {
-                      (scheduled: 0, done: _) => '–',
-                      final w =>
-                        '${w.done} of ${w.scheduled}'
-                            '${_changeIn(h, weeks[i]) == null ? '' : ' · changed version'}',
-                    }),
-                  ),
-              ],
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 40),
+      child: Column(
+        children: [
+          Icon(icon, size: 40, color: theme.colorScheme.outline),
+          const SizedBox(height: 12),
+          Text(title, style: theme.textTheme.titleMedium),
+          const SizedBox(height: 4),
+          Text(
+            text,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.outline,
             ),
+          ),
         ],
       ),
     );

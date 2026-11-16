@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "dev.local" "\0"
-            VALUE "FileDescription", "client" "\0"
+            VALUE "CompanyName", "OpenHabits" "\0"
+            VALUE "FileDescription", "OpenHabits" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "client" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 dev.local. All rights reserved." "\0"
-            VALUE "OriginalFilename", "client.exe" "\0"
-            VALUE "ProductName", "client" "\0"
+            VALUE "InternalName", "openhabits" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 The OpenHabits contributors. MIT licence." "\0"
+            VALUE "OriginalFilename", "openhabits.exe" "\0"
+            VALUE "ProductName", "OpenHabits" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

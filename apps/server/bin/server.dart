@@ -59,16 +59,6 @@ Future<void> main(List<String> args) async {
     settings.remoteEnabled = true;
   }
 
-  // A hostname that follows this home's address (own domain or dynamic DNS).
-  final envRemoteHost = normalizeHost(env['REMOTE_HOST'] ?? '');
-  if (envRemoteHost != null) {
-    settings.remoteHost = envRemoteHost;
-    settings.remoteEnabled = true;
-  }
-
-  final envCloudflare = env['CLOUDFLARE_API_TOKEN'] ?? '';
-  if (envCloudflare.isNotEmpty) settings.cloudflareToken = envCloudflare;
-
   final certificate = ServerCertificate.loadOrCreate(dataDir);
   // The address book devices use to find this server after its internet
   // address changes. DIRECTORY_URL=off turns it off.

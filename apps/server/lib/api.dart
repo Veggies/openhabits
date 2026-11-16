@@ -65,8 +65,6 @@ Handler buildHandler(
   Map<String, Object?> remoteJson() => {
     'status': remote!.status.toJson(),
     'port': settings!.remotePort,
-    'host': settings.remoteHost,
-    'cloudflare': settings.cloudflareToken != null,
     'publicUrl': settings.publicUrl,
     'httpsPort': remote.httpsPort,
     'fingerprint': fingerprint,
@@ -345,30 +343,6 @@ Handler buildHandler(
             );
           }
           settings.remotePort = port;
-        }
-        if (b.containsKey('host')) {
-          final typed = (b['host'] as String? ?? '').trim();
-          final host = typed.isEmpty ? '' : normalizeHost(typed);
-          if (host == null) {
-            return _jsonError(
-              400,
-              "That isn't a hostname. Enter just the name, like "
-              'habits.example.com',
-            );
-          }
-          settings.remoteHost = host;
-          if (host.isNotEmpty) settings.remoteEnabled = true;
-        }
-        if (b.containsKey('cloudflareToken')) {
-          final token = (b['cloudflareToken'] as String? ?? '').trim();
-          if (token.isNotEmpty && settings.remoteHost == null) {
-            return _jsonError(
-              400,
-              'Enter the hostname Cloudflare should keep up to date, like '
-              'habits.example.com',
-            );
-          }
-          settings.cloudflareToken = token;
         }
         if (b.containsKey('publicUrl')) {
           final url = (b['publicUrl'] as String? ?? '').trim();

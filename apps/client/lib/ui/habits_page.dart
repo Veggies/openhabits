@@ -317,8 +317,12 @@ class _Section extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final today = dateOnly(AppScope.of(context).repo.clock());
-    final days = [for (var i = 6; i >= 0; i--) addDays(today, -i)];
+    final repo = AppScope.of(context).repo;
+    final today = dateOnly(repo.clock());
+    // This calendar week, starting on the day chosen in Settings. Days
+    // still to come show faintly until they arrive.
+    final weekStart = startOfWeek(today, repo.weekStart);
+    final days = [for (var i = 0; i < 7; i++) addDays(weekStart, i)];
     final heading = Text(
       title ?? '',
       style: theme.textTheme.labelLarge?.copyWith(
@@ -366,17 +370,11 @@ class _Section extends StatelessWidget {
                         labels,
                       ],
                     )
-                  : Row(
-                      children: [
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.only(left: 8),
-                            child: heading,
-                          ),
-                        ),
-                        labels,
-                        const SizedBox(width: 8),
-                      ],
+                  // Narrow: each row labels its own days, so the header is
+                  // just the group's name.
+                  : Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: heading,
                     ),
             ),
             Card(
@@ -417,7 +415,7 @@ class _HabitRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final repo = AppScope.of(context).repo;
     final theme = Theme.of(context);
-    final today = days.last;
+    final today = dateOnly(repo.clock());
     final color = Color(habit.color);
     final checkedToday = repo.isHabitDone(habit.id, today);
     final plan = habit.plan;
@@ -433,7 +431,7 @@ class _HabitRow extends StatelessWidget {
         : [
             if (plan.twoMinute.isNotEmpty && !habit.isQuit) plan.twoMinute,
             if (plan.stackAfter.isNotEmpty) 'After I ${plan.stackAfter}',
-            if (plan.time.isNotEmpty) timeLabel(context, plan.time),
+            if (plan.time.isNotEmpty && wide) timeLabel(context, plan.time),
             if (plan.location.isNotEmpty) plan.location,
           ].join(' · ');
 
@@ -480,11 +478,23 @@ class _HabitRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          habit.name,
-          style: theme.textTheme.titleSmall,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+        Row(
+          children: [
+            Flexible(
+              child: Text(
+                habit.name,
+                style: theme.textTheme.titleSmall,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (!wide && plan.time.isNotEmpty) ...[
+              const SizedBox(width: 8),
+              Icon(Icons.schedule, size: 13, color: theme.colorScheme.outline),
+              const SizedBox(width: 3),
+              Text(timeLabel(context, plan.time), style: small),
+            ],
+          ],
         ),
         if (line.isNotEmpty)
           Tooltip(
@@ -494,34 +504,43 @@ class _HabitRow extends StatelessWidget {
               style: missed
                   ? small?.copyWith(color: Colors.amber.shade800)
                   : small,
-              maxLines: 1,
+              maxLines: wide ? 1 : 2,
               overflow: TextOverflow.ellipsis,
             ),
           ),
       ],
     );
 
-    final week = Row(
-      mainAxisSize: MainAxisSize.min,
+    Widget weekRow({required bool spread}) => Row(
+      mainAxisSize: spread ? MainAxisSize.max : MainAxisSize.min,
       children: [
         for (final day in days)
-          _DayToggle(
-            key: day == today ? ValueKey('today-${habit.id}') : null,
-            tooltip: day == today
-                ? (habit.isQuit ? 'Stayed clear today' : 'Done today')
-                : weekdayShort(day.weekday),
-            isToday: day == today,
-            checked: repo.isHabitDone(habit.id, day),
-            scheduled: habit.isScheduled(day),
-            color: color,
-            onTap: () => repo.setHabitDone(
-              habit.id,
-              day,
-              !repo.isHabitDone(habit.id, day),
+          _spreadIf(
+            spread,
+            _DayToggle(
+              key: day == today ? ValueKey('today-${habit.id}') : null,
+              tooltip: day == today
+                  ? (habit.isQuit ? 'Stayed clear today' : 'Done today')
+                  : weekdayShort(day.weekday),
+              dayName: day == today ? 'Today' : weekdayShort(day.weekday),
+              shortName: weekdayShort(day.weekday),
+              doneWord: habit.isQuit ? 'Stayed clear' : 'Done',
+              labelled: !wide,
+              isToday: day == today,
+              checked: repo.isHabitDone(habit.id, day),
+              scheduled: habit.isScheduled(day),
+              upcoming: day.isAfter(today),
+              color: color,
+              onTap: () => repo.setHabitDone(
+                habit.id,
+                day,
+                !repo.isHabitDone(habit.id, day),
+              ),
             ),
           ),
       ],
     );
+    final week = weekRow(spread: false);
 
     final avatar = Padding(
       padding: const EdgeInsets.only(left: 12, right: 10),
@@ -569,12 +588,10 @@ class _HabitRow extends StatelessWidget {
                         const SizedBox(width: 12),
                       ],
                     ),
+                    const SizedBox(height: 6),
                     Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: Align(
-                        alignment: Alignment.centerRight,
-                        child: week,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: weekRow(spread: true),
                     ),
                   ],
                 ),
@@ -614,19 +631,41 @@ class _Stat extends StatelessWidget {
   );
 }
 
+/// In a spread-out week each day takes an equal share of the row.
+Widget _spreadIf(bool spread, Widget child) =>
+    spread ? Expanded(child: Center(child: child)) : child;
+
 class _DayToggle extends StatelessWidget {
   final String tooltip;
+
+  /// For screen readers: "Today" or "Mon", and what a check-in means.
+  final String dayName;
+  final String doneWord;
+
+  /// Shown under the circle when [labelled]: "Mon", today in bold.
+  final String shortName;
+
+  /// Shows the day's name under the circle (narrow screens).
+  final bool labelled;
   final bool isToday;
   final bool checked;
   final bool scheduled;
+
+  /// Later this week: shown faintly, and can't be ticked yet.
+  final bool upcoming;
   final Color color;
   final VoidCallback onTap;
   const _DayToggle({
     super.key,
     required this.tooltip,
+    required this.dayName,
+    required this.doneWord,
+    required this.shortName,
+    this.labelled = false,
     required this.isToday,
     required this.checked,
     required this.scheduled,
+    this.upcoming = false,
     required this.color,
     required this.onTap,
   });
@@ -638,37 +677,70 @@ class _DayToggle extends StatelessWidget {
     // a day you stayed clear. Today's circle is a little bigger and ringed
     // in the habit's colour, so it's easy to find down the list.
     final size = isToday ? 32.0 : 26.0;
-    return Tooltip(
-      message: tooltip,
-      child: InkResponse(
-        onTap: onTap,
-        radius: 20,
-        child: SizedBox(
-          width: _daySlot,
-          height: 38,
-          child: Center(
-            child: Container(
-              width: size,
-              height: size,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: checked ? color : null,
-                border: Border.all(
-                  color: checked || isToday
-                      ? color
-                      : (scheduled ? outline : outline.withValues(alpha: 0.3)),
-                  width: 2,
-                ),
-              ),
-              child: checked
-                  ? Icon(
-                      Icons.check,
-                      size: isToday ? 20 : 16,
-                      color: Colors.white,
-                    )
-                  : null,
+    final theme = Theme.of(context);
+    final circle = SizedBox(
+      width: _daySlot,
+      height: 38,
+      child: Center(
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: checked ? color : null,
+            border: Border.all(
+              color: checked || isToday
+                  ? color
+                  : (scheduled && !upcoming
+                        ? outline
+                        : outline.withValues(alpha: 0.3)),
+              width: 2,
             ),
           ),
+          child: checked
+              ? Icon(Icons.check, size: isToday ? 20 : 16, color: Colors.white)
+              : null,
+        ),
+      ),
+    );
+    return Semantics(
+      button: true,
+      label: dayName,
+      value: upcoming
+          ? 'Upcoming'
+          : checked
+          ? doneWord
+          : 'Not done',
+      excludeSemantics: true,
+      child: Tooltip(
+        message: tooltip,
+        child: InkResponse(
+          // A later day takes the tap without doing anything, so it
+          // doesn't fall through and open the habit.
+          onTap: upcoming ? () {} : onTap,
+          splashColor: upcoming ? Colors.transparent : null,
+          highlightColor: upcoming ? Colors.transparent : null,
+          enableFeedback: !upcoming,
+          radius: 20,
+          child: labelled
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    circle,
+                    Text(
+                      shortName,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: isToday
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.outline.withValues(
+                                alpha: upcoming ? 0.5 : 1,
+                              ),
+                        fontWeight: isToday ? FontWeight.w700 : null,
+                      ),
+                    ),
+                  ],
+                )
+              : circle,
         ),
       ),
     );

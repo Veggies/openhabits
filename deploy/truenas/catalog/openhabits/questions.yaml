@@ -29,24 +29,6 @@ questions:
     schema:
       type: dict
       attrs:
-        - variable: remote_host
-          label: Hostname (Optional)
-          description: |
-            A hostname that always points at your home, kept current by dynamic DNS,</br>
-            for example habits.example.com. Devices away from home use it instead of</br>
-            your internet address, which can change. You can also set it on the setup page.
-          schema:
-            type: string
-            default: ""
-        - variable: cloudflare_api_token
-          label: Cloudflare API Token (Optional)
-          description: |
-            If the hostname's domain is on Cloudflare: a token from the "Edit zone DNS"</br>
-            template for that domain. OpenHabits then keeps the record pointed at your home.
-          schema:
-            type: string
-            private: true
-            default: ""
         - variable: public_url
           label: Reverse Proxy Address (Optional)
           description: |

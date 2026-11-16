@@ -14,13 +14,14 @@ Future<Repo> pumpApp(
   WidgetTester tester,
   Size size, {
   bool onboarded = true,
+  DateTime Function()? clock,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final store = LocalStore.inMemory();
   if (onboarded) store.setMeta('onboarded', '1');
-  final repo = Repo(store);
+  final repo = Repo(store, clock: clock);
   await tester.pumpWidget(
     App(repo: repo, sync: SyncEngine(store), focus: FocusController(repo)),
   );
@@ -44,6 +45,39 @@ Future<void> go(WidgetTester tester, String label) async {
 }
 
 void main() {
+  testWidgets('the habit list shows this week, from the chosen first day', (
+    tester,
+  ) async {
+    // A Wednesday, with weeks starting on Monday.
+    final now = DateTime(2026, 11, 18, 12);
+    final repo = await pumpApp(tester, const Size(420, 900), clock: () => now);
+    repo.setPrefs({'weekStart': DateTime.monday});
+    final id = repo.createHabit({'name': 'Read'});
+    await tester.pumpAndSettle();
+
+    // Monday to Sunday, in order, under the circles.
+    final names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final xs = [for (final n in names) tester.getCenter(find.text(n)).dx];
+    expect(xs, orderedEquals([...xs]..sort()));
+
+    // Earlier this week can be ticked; later this week can't, yet.
+    await tester.tap(find.text('Mon'));
+    await tester.tap(find.text('Fri'));
+    await tester.pumpAndSettle();
+    expect(repo.isHabitDone(id, DateTime(2026, 11, 16)), isTrue);
+    expect(repo.isHabitDone(id, DateTime(2026, 11, 20)), isFalse);
+    // Tapping a later day does nothing at all (it doesn't open the habit).
+    expect(find.text('Your plan'), findsNothing);
+
+    // With weeks starting on Sunday, the row starts on Sunday instead.
+    repo.setPrefs({'weekStart': DateTime.sunday});
+    await tester.pumpAndSettle();
+    expect(
+      tester.getCenter(find.text('Sun')).dx,
+      lessThan(tester.getCenter(find.text('Mon')).dx),
+    );
+  });
+
   for (final (name, size) in [
     ('desktop', const Size(1400, 900)),
     ('phone', const Size(400, 860)),
@@ -171,10 +205,17 @@ void main() {
     }
     await tester.tap(find.text('Progress'));
     await tester.pumpAndSettle();
-    expect(find.text('How your habits are going'), findsOneWidget);
+    // One button for the period, which opens a menu of them all, and one
+    // for which habits to show.
+    expect(find.text('All habits'), findsOneWidget);
+    await tester.tap(find.text('Since you started'));
+    await tester.pumpAndSettle();
     for (final range in ['1 month', '3 months', '6 months', '1 year']) {
-      expect(find.widgetWithText(ChoiceChip, range), findsOneWidget);
+      expect(find.widgetWithText(MenuItemButton, range), findsOneWidget);
     }
+    await tester.tap(find.widgetWithText(MenuItemButton, '3 months'));
+    await tester.pumpAndSettle();
+    expect(find.text('3 months'), findsOneWidget); // now the button's label
 
     // Each habit says how the last four weeks went, in words.
     expect(find.text('BUILDING'), findsOneWidget);
@@ -187,8 +228,6 @@ void main() {
       find.text('${read.done} of the last ${read.scheduled} days'),
       findsOneWidget,
     );
-    expect(find.widgetWithText(FilterChip, 'Read'), findsOneWidget);
-    expect(find.widgetWithText(FilterChip, 'Walk'), findsOneWidget);
 
     // Hovering or tapping a square says how that week went, and what the
     // version changed from and to.
@@ -210,22 +249,18 @@ void main() {
       ),
     );
 
-    // The same numbers as a table.
-    await tester.tap(find.text('Show as a table'));
+    // Switching a habit off in the filter menu hides its row, and the
+    // button says how many are showing.
+    await tester.tap(find.text('All habits'));
     await tester.pumpAndSettle();
-    expect(
-      find.text('${week.done} of ${week.scheduled} · changed version'),
-      findsOneWidget,
-    );
-
-    // Switching a habit off hides its row.
-    await tester.tap(find.widgetWithText(FilterChip, 'Walk'));
+    await tester.tap(find.widgetWithText(CheckboxMenuButton, 'Walk'));
     await tester.pumpAndSettle();
-    expect(find.text('Walk'), findsOneWidget); // only its chip is left
-    await tester.tap(find.text('Show as squares'));
+    await tester.tapAt(Offset.zero); // close the menu
     await tester.pumpAndSettle();
+    expect(find.text('2 of 3 habits'), findsOneWidget);
     expect(find.byKey(const ValueKey('progress-grid')), findsOneWidget);
-    expect(find.text('Walk'), findsOneWidget);
+    expect(find.text('Walk'), findsNothing);
+    expect(find.text('Read'), findsWidgets);
   });
 
   testWidgets('habits can be created and checked in', (tester) async {
@@ -371,7 +406,7 @@ void main() {
     expect(habit.name, 'Read');
     expect(habit.plan.identity, 'a reader');
     expect(habit.plan.reward, 'A square of chocolate');
-    expect(find.text('Today'), findsWidgets); // now in the app
+    expect(find.text('Read'), findsWidgets); // now in the app, in the list
   });
 
   testWidgets('the editor shows the four laws', (tester) async {

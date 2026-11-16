@@ -363,33 +363,44 @@ class _MonthCalendar extends StatelessWidget {
                     final open = !day.isAfter(today) && !day.isBefore(start);
                     final scheduled = habit.isScheduled(day);
                     return Center(
-                      child: InkResponse(
-                        radius: 20,
-                        onTap: open
-                            ? () => repo.setHabitDone(habit.id, day, !done)
-                            : null,
-                        child: Container(
-                          width: 36,
-                          height: 36,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: done ? color : null,
-                            border: day == today && !done
-                                ? Border.all(color: color, width: 2)
-                                : null,
-                          ),
-                          child: Text(
-                            '${day.day}',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: day == today ? FontWeight.bold : null,
-                              color: done
-                                  ? Colors.white
-                                  : open && scheduled
-                                  ? null
-                                  : theme.colorScheme.outline.withValues(
-                                      alpha: 0.5,
-                                    ),
+                      child: Semantics(
+                        button: open,
+                        label: MaterialLocalizations.of(context)
+                            .formatFullDate(day),
+                        value: done
+                            ? (habit.isQuit ? 'Stayed clear' : 'Done')
+                            : 'Not done',
+                        excludeSemantics: true,
+                        child: InkResponse(
+                          radius: 20,
+                          onTap: open
+                              ? () => repo.setHabitDone(habit.id, day, !done)
+                              : null,
+                          child: Container(
+                            width: 36,
+                            height: 36,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: done ? color : null,
+                              border: day == today && !done
+                                  ? Border.all(color: color, width: 2)
+                                  : null,
+                            ),
+                            child: Text(
+                              '${day.day}',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: day == today
+                                    ? FontWeight.bold
+                                    : null,
+                                color: done
+                                    ? Colors.white
+                                    : open && scheduled
+                                    ? null
+                                    : theme.colorScheme.outline.withValues(
+                                        alpha: 0.5,
+                                      ),
+                              ),
                             ),
                           ),
                         ),

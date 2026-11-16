@@ -18,17 +18,11 @@ struct SettingsView: View {
         Form {
             Section {
                 if signedIn, let account {
-                    LabeledContent {
-                        Text(account.isOwner ? "Owner" : "")
-                    } label: {
-                        Label {
-                            Text(account.username)
-                            Text(sync.serverUrl ?? "")
-                        } icon: {
-                            Image(systemName: "person.crop.circle.fill")
-                                .font(.title)
-                                .foregroundStyle(.tint)
-                        }
+                    Label {
+                        Text("Signed in as \(account.username)")
+                    } icon: {
+                        Image(systemName: "person.crop.circle.fill")
+                            .foregroundStyle(.tint)
                     }
                     SyncStatusRow()
                     Button("Add a Device", systemImage: "qrcode") { addingDevice = true }
@@ -413,7 +407,7 @@ struct CalendarLinkView: View {
                     }
                 } footer: {
                     if !link.anywhere {
-                        Text("Right now this link only works on your home network, so it won't work in Google Calendar or when you're out. Calendar apps need an address with a normal certificate, so on your server's setup page, add a reverse proxy or relay address under Remote access → Advanced.")
+                        Text("Right now this link only works on your home network, so it won't work in Google Calendar or when you're out. Calendar apps need an address with a normal certificate, so on your server's setup page, add a reverse proxy address under Advanced.")
                             .foregroundStyle(.orange)
                     }
                 }

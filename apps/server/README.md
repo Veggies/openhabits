@@ -27,8 +27,6 @@ All of these are optional. The setup page covers everything for most people.
 | `PORT` | `8080` | Port for the app and the setup page on your home network. |
 | `HTTPS_PORT` | `8443` | Secure port devices use away from home. |
 | `DB_PATH` | `/data/data.sqlite` | Where the database lives. The certificate is kept next to it. |
-| `REMOTE_HOST` | | A hostname that points at your home and follows its internet address (a DNS record kept current by dynamic DNS), e.g. `habits.example.com`. Devices away from home use it with the router port instead of your bare IP address, which can change. Setting it turns remote access on. |
-| `CLOUDFLARE_API_TOKEN` | | With `REMOTE_HOST` on a Cloudflare domain: a token from the "Edit zone DNS" template for that domain. The server then creates the record (DNS only) and keeps it pointed at your home, so you don't need a separate dynamic DNS updater. |
 | `DIRECTORY_URL` | `https://directory.ryanruddock.com` | Where the server publishes its current address, so devices away from home can find it after your internet address changes (see `services/directory`). Only the address is sent, signed by the server; `off` turns it off. |
 | `PUBLIC_URL` | | Only for a reverse proxy or tunnel that has its own certificate (e.g. Tailscale Funnel, Caddy), e.g. `https://habits.example.com`. Setting it turns remote access on. |
 | `TRUST_PROXY` | `false` | Set to `true` behind a reverse proxy so the server sees visitors' real addresses. |
@@ -50,26 +48,13 @@ reach the old one asks the directory where to go, the way Plex apps ask
 plex.tv. Devices still check the server's certificate, so the directory never
 has to be trusted. Nothing to set up.
 
-### Or give it a hostname
+### Your own domain
 
-If you'd rather not use the directory (`DIRECTORY_URL=off`), give the server
-a hostname that always points home, and enter it under *Remote access →
-Hostname* (or set `REMOTE_HOST`):
-
-- **Your own domain on Cloudflare:** paste a Cloudflare API token ("Edit
-  zone DNS" template, limited to that domain) next to the hostname. The
-  server creates the record and keeps it current by itself.
-- **Your own domain elsewhere:** add an `A` record such as
-  `habits.example.com`, and keep it current with dynamic DNS. If your DNS host has an API (Cloudflare,
-  Porkbun, deSEC and others), `ddclient` or the `ddns-updater` app on TrueNAS
-  can update the record. Or point a `CNAME` at a name your router keeps up to
-  date (below).
-- **No domain:** many routers update a free name by themselves (TP-Link
-  DDNS, ASUS DDNS, No-IP, DuckDNS). Use that name directly.
-
-The server checks that the name points at your home and says so plainly if
-it doesn't. Devices still recognise the server by its certificate
-fingerprint, so no certificate setup is needed.
+If you already run a reverse proxy (Caddy, Traefik, Nginx Proxy Manager) or a
+tunnel like Tailscale Funnel, put its address under *Advanced → Reverse
+proxy address* on the setup page, or set `PUBLIC_URL`. Devices then use it,
+with its normal certificate. It's also the way to go if your provider shares
+one address between many homes (CGNAT), where port forwarding can't work.
 
 ## Backups
 

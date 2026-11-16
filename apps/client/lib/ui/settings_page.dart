@@ -52,10 +52,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             account.username.substring(0, 1).toUpperCase(),
                           ),
                         ),
-                        title: Text(account.username),
-                        subtitle: Text(
-                          '${sync.serverUrl}${account.isOwner ? ' · Owner' : ''}',
-                        ),
+                        title: Text('Signed in as ${account.username}'),
                         trailing: _StatusIcon(sync: sync),
                       ),
                       if (sync.status == SyncStatus.error &&
@@ -560,7 +557,7 @@ class _CalendarLinkDialogState extends State<_CalendarLinkDialog> {
                         "Right now this link only works on your home network, so it won't "
                         "work in Google Calendar or when you're out. Calendar apps need an "
                         "address with a normal certificate, so on your server's setup page, "
-                        "add a reverse proxy or relay address under Remote access → Advanced.",
+                        "add a reverse proxy address under Advanced.",
                         style: theme.textTheme.bodySmall,
                       ),
                     ),

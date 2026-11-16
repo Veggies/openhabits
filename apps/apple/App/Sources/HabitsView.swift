@@ -1,8 +1,8 @@
 import HabitsCore
 import SwiftUI
 
-/// The main list: every habit with its last seven days, so you can check
-/// them all off quickly. Today is always the last circle on the right.
+/// The main list: every habit with this week's days, so you can check
+/// them all off quickly. Today is ringed, wherever it falls in the week.
 struct HabitsView: View {
     @Environment(AppModel.self) private var app
     @State private var editing: EditorTarget?
@@ -16,7 +16,10 @@ struct HabitsView: View {
         let building = habits.filter { !$0.isQuit }
         let breaking = habits.filter(\.isQuit)
         let due = habits.filter { repo.sizeSuggestion($0) != nil }
-        let days = (0..<7).reversed().map { Days.add(repo.today, -$0) }
+        // This calendar week, starting on the day chosen in Settings. Days
+        // still to come show faintly until they arrive.
+        let weekStart = Days.startOfWeek(repo.today, firstDay: repo.weekStart)
+        let days = (0..<7).map { Days.add(weekStart, $0) }
 
         Group {
             if habits.isEmpty {
@@ -247,11 +250,12 @@ struct Banner: View {
 /// The days, labelled once above a section's circles.
 struct DayLabelRow: View {
     let days: [Date]
+    @Environment(AppModel.self) private var app
 
     var body: some View {
         HStack(spacing: 0) {
             ForEach(days, id: \.self) { day in
-                let isToday = day == days.last
+                let isToday = day == app.repo.today
                 Text(isToday ? "Today" : dayLabel(Days.weekday(day)))
                     .font(.caption2.weight(isToday ? .bold : .medium))
                     .foregroundStyle(isToday ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
@@ -270,6 +274,7 @@ let daySlot: CGFloat = 36
 struct DayLabels: View {
     let title: String?
     let days: [Date]
+    @Environment(AppModel.self) private var app
 
     var body: some View {
         HStack(spacing: 0) {
@@ -277,7 +282,7 @@ struct DayLabels: View {
                 .fixedSize()
             Spacer(minLength: 8)
             ForEach(days, id: \.self) { day in
-                let isToday = day == days.last
+                let isToday = day == app.repo.today
                 Text(isToday ? "Today" : dayLabel(Days.weekday(day)))
                     .font(.caption2.weight(isToday ? .bold : .medium))
                     .foregroundStyle(isToday ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
@@ -365,7 +370,7 @@ struct HabitRow: View {
             }
             HStack(spacing: 0) {
                 ForEach(days, id: \.self) { day in
-                    DayCircle(habit: habit, day: day, isToday: day == days.last, labelled: true)
+                    DayCircle(habit: habit, day: day, isToday: day == app.repo.today, labelled: true)
                         .frame(maxWidth: .infinity)
                 }
             }
@@ -402,7 +407,7 @@ struct HabitRow: View {
 
         let week = HStack(spacing: 0) {
             ForEach(days, id: \.self) { day in
-                DayCircle(habit: habit, day: day, isToday: day == days.last)
+                DayCircle(habit: habit, day: day, isToday: day == app.repo.today)
             }
         }
 
@@ -456,14 +461,18 @@ struct DayCircle: View {
     var body: some View {
         let done = app.repo.isDone(habit.id, day)
         let scheduled = habit.isScheduled(day)
+        let upcoming = day > app.repo.today
         let size: CGFloat = isToday ? 30 : 24
         Button {
+            // A later day takes the tap without doing anything, so it
+            // doesn't fall through and open the habit.
+            guard !upcoming else { return }
             withAnimation(.snappy(duration: 0.25)) { app.repo.toggle(habit.id, day) }
         } label: {
             ZStack {
                 Circle()
                     .strokeBorder(
-                        done || isToday ? habit.tint : Color.secondary.opacity(scheduled ? 0.35 : 0.12),
+                        done || isToday ? habit.tint : Color.secondary.opacity(scheduled && !upcoming ? 0.35 : 0.12),
                         lineWidth: isToday ? 2.5 : 1.5)
                 if done {
                     Circle().fill(habit.tint)
@@ -479,7 +488,8 @@ struct DayCircle: View {
                 if labelled {
                     Text(weekdayShort(Days.weekday(day)))
                         .font(.caption2.weight(isToday ? .bold : .medium))
-                        .foregroundStyle(isToday ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                        .foregroundStyle(isToday ? AnyShapeStyle(.tint)
+                            : upcoming ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.secondary))
                         .offset(y: 15)
                 }
             }
@@ -489,7 +499,7 @@ struct DayCircle: View {
         .buttonStyle(.borderless)
         .sensoryFeedback(.success, trigger: done) { old, new in isToday && !old && new }
         .accessibilityLabel(isToday ? "Today" : day.formatted(.dateTime.weekday(.wide)))
-        .accessibilityValue(done ? (habit.isQuit ? "Stayed clear" : "Done") : "Not done")
+        .accessibilityValue(upcoming ? "Upcoming" : done ? (habit.isQuit ? "Stayed clear" : "Done") : "Not done")
         .help(isToday ? (habit.isQuit ? "Stayed clear today" : "Done today") : day.formatted(.dateTime.weekday(.wide)))
     }
 }
