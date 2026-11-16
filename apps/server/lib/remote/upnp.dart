@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
 
+import 'remote_access.dart' show isPrivateAddress;
+
 /// A home router that accepts UPnP port-mapping requests.
 class UpnpGateway {
   final Uri controlUrl;
@@ -61,7 +63,12 @@ class UpnpClient {
         multiLine: true,
       ).firstMatch(utf8.decode(datagram.data, allowMalformed: true));
       final url = match == null ? null : Uri.tryParse(match[1]!);
-      if (url != null) {
+      // The description must come from the device that answered, on the
+      // home network. Otherwise anything on the network could point the
+      // server at an address of its choosing.
+      if (url != null &&
+          url.host == datagram.address.address &&
+          isPrivateAddress(url.host)) {
         locations.add(url);
         // Give other devices a moment to answer, then stop early.
         Timer(const Duration(milliseconds: 300), () {

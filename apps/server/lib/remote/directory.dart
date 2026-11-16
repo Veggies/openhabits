@@ -46,6 +46,10 @@ class DirectoryIdentity {
     return DirectoryIdentity.fromPem(file.readAsStringSync());
   }
 
+  /// [publicKey] in unpadded base64url, as the directory and devices use it.
+  String get publicKeyBase64Url =>
+      base64Url.encode(publicKey).replaceAll('=', '');
+
   /// An ECDSA P-256 / SHA-256 signature in the raw r‖s form WebCrypto uses.
   Uint8List sign(List<int> data) {
     final sig = CryptoUtils.ecSign(

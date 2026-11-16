@@ -441,6 +441,11 @@ async function loadPeople() {
     const control = el("div", null, "control");
     if (p.isOwner) control.append(el("span", "Owner", "muted"));
     else {
+      control.append(button("Sign out everywhere", guard("peopleError", async () => {
+        if (!confirm("Sign " + p.username + " out on all their devices? Their habits stay; they just sign in again.")) return;
+        await api("POST", "/users/" + encodeURIComponent(p.id) + "/sign-out");
+        alert(p.username + " has been signed out everywhere.");
+      })));
       control.append(button("Remove", guard("peopleError", async () => {
         if (!confirm("Remove " + p.username + "? Their account and all their data on this server will be deleted.")) return;
         await api("DELETE", "/users/" + encodeURIComponent(p.id));

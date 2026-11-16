@@ -60,15 +60,15 @@ Future<void> main(List<String> args) async {
   }
 
   final certificate = ServerCertificate.loadOrCreate(dataDir);
+  // The server's own signing key. Its id is how devices recognise this
+  // server, and it signs what the server publishes to the directory.
+  final identity = DirectoryIdentity.loadOrCreate(dataDir);
   // The address book devices use to find this server after its internet
   // address changes. DIRECTORY_URL=off turns it off.
   final directoryUrl = env['DIRECTORY_URL'] ?? officialDirectory;
   final directory = directoryUrl == 'off'
       ? null
-      : DirectoryClient(
-          Uri.parse(directoryUrl),
-          DirectoryIdentity.loadOrCreate(dataDir),
-        );
+      : DirectoryClient(Uri.parse(directoryUrl), identity);
   final remote = RemoteAccess(
     settings,
     httpsPort: httpsPort,
@@ -106,7 +106,9 @@ Future<void> main(List<String> args) async {
           store,
           auth,
           serverName: env['SERVER_NAME'] ?? settings.serverName,
-          trustProxy: env['TRUST_PROXY'] == 'true',
+          trustProxy: ProxyTrust.parse(env['TRUST_PROXY']),
+          serverId: identity.id,
+          serverKey: identity.publicKeyBase64Url,
           settings: settings,
           remote: remote,
           fingerprint: certificate.fingerprint,

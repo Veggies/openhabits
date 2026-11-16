@@ -13,6 +13,19 @@ void main() {
   setUp(() => dir = Directory.systemTemp.createTempSync('directory-test'));
   tearDown(() => dir.deleteSync(recursive: true));
 
+  test('the shared record matches what this server derives from its key', () {
+    // fixtures/directory_record.json is also checked by the directory's
+    // tests (JavaScript, WebCrypto) and both apps. If the ID or key format
+    // drifted here, every address update would be refused.
+    final record =
+        jsonDecode(File('../../fixtures/directory_record.json').readAsStringSync())
+            as Map<String, Object?>;
+    final identity = DirectoryIdentity.fromPem(record['privateKeyPem'] as String);
+    expect(identity.id, record['id']);
+    expect(identity.publicKeyBase64Url, record['key']);
+    expect((jsonDecode(record['payload'] as String) as Map)['id'], identity.id);
+  });
+
   test('the identity is created once and kept', () {
     final first = DirectoryIdentity.loadOrCreate(dir);
     expect(first.id, matches(RegExp(r'^[a-z2-7]{26}$')));

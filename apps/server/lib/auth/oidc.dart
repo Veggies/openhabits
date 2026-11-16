@@ -14,6 +14,10 @@ class OidcConfig {
   /// Button label in the app, e.g. "Google".
   final String label;
 
+  /// Accept an email the provider doesn't say it verified. Only for
+  /// providers that check emails but leave out `email_verified`.
+  final bool trustEmail;
+
   /// The server's public address; the provider redirects back to
   /// `<publicUrl>/auth/oidc/callback`, which must be registered with it.
   final Uri publicUrl;
@@ -24,6 +28,7 @@ class OidcConfig {
     required this.clientSecret,
     required this.label,
     required this.publicUrl,
+    this.trustEmail = false,
   });
 
   static OidcConfig? fromEnv(Map<String, String> env) {
@@ -47,6 +52,7 @@ class OidcConfig {
       clientSecret: env['OIDC_CLIENT_SECRET'] ?? '',
       label: env['OIDC_LABEL'] ?? 'SSO',
       publicUrl: Uri.parse(publicUrl.replaceAll(RegExp(r'/+$'), '')),
+      trustEmail: env['OIDC_TRUST_EMAIL'] == 'true',
     );
   }
 
@@ -111,6 +117,11 @@ class OidcProvider {
     }
     final metadata = await _metadata();
     _pending.removeWhere((_, v) => v.expires.isBefore(_clock()));
+    // Anyone can start a sign-in, so cap how many can be waiting at once.
+    // The oldest are dropped first (maps keep insertion order).
+    while (_pending.length >= 1000) {
+      _pending.remove(_pending.keys.first);
+    }
     final state = _randomString();
     final verifier = _randomString();
     final nonce = _randomString();
@@ -190,7 +201,14 @@ class OidcProvider {
       );
     }
     final email = claims['email'] as String?;
-    if (email == null || claims['email_verified'] == false) {
+    // A missing claim counts as unverified: accounts are matched by email,
+    // so an address nobody checked could be anyone's. Providers that never
+    // send the claim can be trusted with OIDC_TRUST_EMAIL=true.
+    final verified =
+        claims['email_verified'] == true ||
+        claims['email_verified'] == 'true' ||
+        (config.trustEmail && claims['email_verified'] == null);
+    if (email == null || !verified) {
       throw const OidcException(
         "Your account with that provider doesn't have a verified email address.",
       );

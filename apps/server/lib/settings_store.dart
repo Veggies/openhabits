@@ -40,6 +40,12 @@ class SettingsStore {
   int get remotePort => get('remotePort') as int? ?? 8443;
   set remotePort(int v) => set('remotePort', v);
 
+  /// Router ports this server has asked to forward, so they can be closed
+  /// again when remote access is turned off or the port changes.
+  List<int> get mappedPorts =>
+      (get('mappedPorts') as List? ?? const []).cast<int>();
+  set mappedPorts(List<int> v) => set('mappedPorts', v.isEmpty ? null : v);
+
   /// What was last sent to the directory: addresses and when, so it's only
   /// updated when they change (and weekly, to stay listed).
   ({List<String> urls, DateTime at})? get directoryPublished {

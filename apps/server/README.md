@@ -29,7 +29,7 @@ All of these are optional. The setup page covers everything for most people.
 | `DB_PATH` | `/data/data.sqlite` | Where the database lives. The certificate is kept next to it. |
 | `DIRECTORY_URL` | `https://directory.ryanruddock.com` | Where the server publishes its current address, so devices away from home can find it after your internet address changes (see `services/directory`). Only the address is sent, signed by the server; `off` turns it off. |
 | `PUBLIC_URL` | | Only for a reverse proxy or tunnel that has its own certificate (e.g. Tailscale Funnel, Caddy), e.g. `https://habits.example.com`. Setting it turns remote access on. |
-| `TRUST_PROXY` | `false` | Set to `true` behind a reverse proxy so the server sees visitors' real addresses. |
+| `TRUST_PROXY` | `false` | Set to `true` behind a reverse proxy (Caddy, nginx, Traefik) so the server sees visitors' real addresses; it then uses the address your proxy adds to `X-Forwarded-For`. Use `cloudflare` for a Cloudflare tunnel. Either way, the header is only believed when the request comes from this machine or your home network. |
 | `SERVER_NAME` | | The name devices show for this server. |
 | `OWNER_USERNAME`, `OWNER_PASSWORD` | | Creates the owner account on first start, for installs with no browser step. |
 

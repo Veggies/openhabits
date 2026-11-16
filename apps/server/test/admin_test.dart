@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -22,6 +23,10 @@ class FakeUpnp extends UpnpClient {
   /// Outside ports already forwarded elsewhere (by hand, or the router's own).
   final taken = <int>{};
 
+  /// When set, the router takes until this completes to answer a request
+  /// to forward a port, like a slow real router.
+  Completer<void>? slow;
+
   @override
   Future<UpnpGateway?> discover({
     Duration timeout = const Duration(seconds: 3),
@@ -41,13 +46,15 @@ class FakeUpnp extends UpnpClient {
     String description = '',
     int leaseSeconds = 3600,
   }) async {
+    if (slow case final gate?) await gate.future;
     if (taken.contains(externalPort)) {
       throw const UpnpException(
         'Router refused AddPortMapping (718: ConflictInMappingEntry)',
         code: 718,
       );
     }
-    mapped.add(externalPort);
+    // Renewing a forward replaces it, as on a real router.
+    if (!mapped.contains(externalPort)) mapped.add(externalPort);
   }
 
   @override
@@ -90,7 +97,10 @@ class Api {
       Request(
         method,
         Uri.parse('http://localhost$path'),
-        headers: {'authorization': ?(token == null ? null : 'Bearer $token')},
+        headers: {
+          'authorization': ?(token == null ? null : 'Bearer $token'),
+          if (body != null) 'content-type': 'application/json',
+        },
         body: body == null ? null : jsonEncode(body),
       ),
     );
@@ -136,6 +146,8 @@ void main() {
         settings: settings,
         remote: remote,
         fingerprint: 'AA:BB',
+        serverId: _identity.id,
+        serverKey: _identity.publicKeyBase64Url,
       ),
     );
   });
@@ -293,7 +305,9 @@ void main() {
         });
         expect((b['server'] as Map)['directory'], {
           'lookup': 'https://directory.example/v1/servers/${_identity.id}',
+          'key': _identity.publicKeyBase64Url,
         });
+        expect((b['server'] as Map)['id'], _identity.id);
       });
     });
 
@@ -329,6 +343,40 @@ void main() {
     test('turning it off removes the router mapping', () async {
       await act('enable');
       expect((await act('disable'))['state'], 'off');
+      expect(router.mapped, isEmpty);
+    });
+
+    test('turning it off during a check keeps it off', () async {
+      await act('enable');
+      router.slow = Completer();
+      // The 15-minute check starts and waits on the router...
+      final check = remote.refresh();
+      // ...while the owner turns remote access off.
+      final off = remote.disable();
+      router.slow!.complete();
+      await check;
+      expect((await off).state, RemoteState.off);
+      expect(remote.status.state, RemoteState.off);
+      expect(remote.url, isNull);
+      expect(router.mapped, isEmpty);
+      expect(directory.published.last, isEmpty);
+    });
+
+    test('changing the port closes the old one on the router', () async {
+      await act('enable');
+      final (status, _) = await api.call('PUT', '/admin/remote', {
+        'port': 9443,
+      });
+      expect(status, 200);
+      expect(router.mapped, [9443]);
+      await act('disable');
+      expect(router.mapped, isEmpty);
+    });
+
+    test('a forward from before ports were tracked is still closed', () async {
+      router.mapped.add(8443); // made by an older version
+      settings.remoteEnabled = true;
+      await act('disable');
       expect(router.mapped, isEmpty);
     });
 

@@ -1,4 +1,7 @@
+import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
+import 'dart:isolate';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -31,6 +34,12 @@ class AuthException implements Exception {
   String toString() => message;
 }
 
+/// Someone tried to set up a server that already has an owner.
+class SetupDoneException extends AuthException {
+  const SetupDoneException()
+    : super("This server's already set up, so just sign in.");
+}
+
 /// Accounts, sessions and short-lived one-time codes.
 ///
 /// Passwords are stored as salted PBKDF2-SHA256 hashes. Session tokens and
@@ -46,11 +55,29 @@ class AuthStore {
   /// minutes, so losing them on restart is harmless.
   final _codes = <String, ({String userId, DateTime expires})>{};
 
-  /// Failed sign-ins per client, for rate limiting.
-  final _failures = <String, ({int count, DateTime until})>{};
+  /// Failed sign-ins and code redemptions, for rate limiting. Keyed by
+  /// client and username (so one person guessing can't lock everyone else
+  /// out), and by client alone (so trying many usernames is limited too).
+  final _failures = <String, ({int count, DateTime until, DateTime last})>{};
+
+  /// Password checks waiting for, or running in, a background isolate.
+  int _checksInFlight = 0;
+  final _checkQueue = Queue<Completer<void>>();
 
   static const passwordIterations = 120000;
   static const codeLifetime = Duration(minutes: 10);
+
+  /// Sessions not used for this long stop working.
+  static const sessionLifetime = Duration(days: 90);
+
+  /// Failures are forgotten after this long without another one.
+  static const failureMemory = Duration(hours: 1);
+
+  /// Password checks run in the background, at most this many at once, so
+  /// sign-in attempts can't stall syncing. Beyond [maxQueuedChecks]
+  /// waiting, new attempts are turned away.
+  static const maxConcurrentChecks = 2;
+  static const maxQueuedChecks = 16;
 
   AuthStore(this._sync, {DateTime Function()? clock})
     : _db = _sync.db,
@@ -140,6 +167,14 @@ class AuthStore {
     return userById(id)!;
   }
 
+  /// Creates the first account, the owner, but only if there are no
+  /// accounts yet. The check and the insert happen with nothing in between,
+  /// so two people setting up at once can't both succeed.
+  User createOwner(String username, {required String password, String? email}) {
+    if (hasUsers) throw const SetupDoneException();
+    return createUser(username, password: password, email: email);
+  }
+
   void deleteUser(String id) {
     final user = userById(id);
     if (user == null) return;
@@ -166,35 +201,98 @@ class AuthStore {
   );
 
   /// Checks a username and password. [client] identifies the caller (e.g.
-  /// its IP) for rate limiting: after 5 failures, sign-in is refused for a
-  /// growing delay.
-  User signIn(String username, String password, {String client = ''}) {
-    final now = _clock();
-    final failures = _failures[client];
-    if (failures != null &&
-        failures.count >= 5 &&
-        now.isBefore(failures.until)) {
-      final wait = failures.until.difference(now).inSeconds + 1;
-      throw AuthException(
-        "That's too many tries for now. Wait $wait seconds and try again.",
-      );
-    }
+  /// its IP) for rate limiting: after 5 wrong passwords for one username,
+  /// or 20 across all usernames, that client waits a growing delay.
+  ///
+  /// The password check is slow on purpose, so it runs in the background
+  /// and doesn't hold up other requests.
+  Future<User> signIn(
+    String username,
+    String password, {
+    String client = '',
+  }) async {
+    final name = username.trim().toLowerCase();
+    final keys = ['$client|$name', '$client|*'];
+    _checkLockout(keys[0], 5);
+    _checkLockout(keys[1], 20);
+    // Count the attempt before checking, so a burst of attempts sent at
+    // once can't all slip in before the first one fails.
+    _recordFailure(keys[0], 5);
+    _recordFailure(keys[1], 20);
     final rows = _db.select('SELECT * FROM users WHERE username = ?', [
       username.trim(),
     ]);
     final hash = rows.isEmpty ? null : rows.first['password_hash'] as String?;
     // Verify even for unknown users so response time doesn't reveal them.
-    final ok = verifyPassword(password, hash ?? _dummyHash);
+    final ok = await _verifyInBackground(password, hash ?? _dummyHash);
     if (rows.isEmpty || hash == null || !ok) {
-      final count = (failures?.count ?? 0) + 1;
-      final lockout = Duration(
-        seconds: count < 5 ? 0 : 30 * (1 << min(count - 5, 6)),
-      );
-      _failures[client] = (count: count, until: now.add(lockout));
       throw const AuthException("That username or password isn't right.");
     }
-    _failures.remove(client);
+    _failures.remove(keys[0]);
+    _forgiveOne(keys[1]);
     return _toUser(rows.first);
+  }
+
+  void _checkLockout(String key, int allowed) {
+    final now = _clock();
+    final f = _failures[key];
+    if (f == null) return;
+    if (now.difference(f.last) > failureMemory && now.isAfter(f.until)) {
+      _failures.remove(key);
+      return;
+    }
+    if (f.count >= allowed && now.isBefore(f.until)) {
+      final wait = f.until.difference(now).inSeconds + 1;
+      throw AuthException(
+        "That's too many tries for now. Wait $wait seconds and try again.",
+      );
+    }
+  }
+
+  void _recordFailure(String key, int allowed) {
+    final now = _clock();
+    if (_failures.length > 10000) {
+      _failures.removeWhere(
+        (_, f) =>
+            now.difference(f.last) > failureMemory && now.isAfter(f.until),
+      );
+    }
+    final count = (_failures[key]?.count ?? 0) + 1;
+    final lockout = Duration(
+      seconds: count < allowed ? 0 : 30 * (1 << min(count - allowed, 6)),
+    );
+    _failures[key] = (count: count, until: now.add(lockout), last: now);
+  }
+
+  /// Takes back one counted attempt after it turned out to be right.
+  void _forgiveOne(String key) {
+    final f = _failures[key];
+    if (f == null) return;
+    if (f.count <= 1) {
+      _failures.remove(key);
+    } else {
+      _failures[key] = (count: f.count - 1, until: f.until, last: f.last);
+    }
+  }
+
+  Future<bool> _verifyInBackground(String password, String stored) async {
+    if (_checksInFlight >= maxConcurrentChecks) {
+      if (_checkQueue.length >= maxQueuedChecks) {
+        throw const AuthException(
+          "The server's busy right now. Try again in a moment.",
+        );
+      }
+      final turn = Completer<void>();
+      _checkQueue.add(turn);
+      await turn.future;
+    }
+    _checksInFlight++;
+    try {
+      return await Isolate.run(() => verifyPassword(password, stored));
+    } finally {
+      _checksInFlight--;
+      if (_checkQueue.isNotEmpty) _checkQueue.removeFirst().complete();
+    }
   }
 
   static final _dummyHash = hashPassword('not-a-real-password');
@@ -218,12 +316,18 @@ class AuthStore {
   }
 
   /// The user a bearer token belongs to, or null if it isn't valid.
+  /// Sessions unused for [sessionLifetime] have expired.
   User? userForToken(String token) {
     final rows = _db.select(
-      'SELECT user_id FROM sessions WHERE token_hash = ?',
+      'SELECT user_id, last_seen FROM sessions WHERE token_hash = ?',
       [_sha(token)],
     );
     if (rows.isEmpty) return null;
+    final lastSeen = DateTime.parse(rows.first['last_seen'] as String);
+    if (_clock().difference(lastSeen) > sessionLifetime) {
+      endSession(token);
+      return null;
+    }
     _db.execute('UPDATE sessions SET last_seen = ? WHERE token_hash = ?', [
       _clock().toUtc().toIso8601String(),
       _sha(token),
@@ -234,15 +338,41 @@ class AuthStore {
   void endSession(String token) =>
       _db.execute('DELETE FROM sessions WHERE token_hash = ?', [_sha(token)]);
 
-  List<Map<String, Object?>> sessionsFor(String userId) => [
+  /// A short, non-secret name for a session: the start of its token's hash.
+  static String sessionIdOf(String token) => _sha(token).substring(0, 16);
+
+  /// Ends one of [userId]'s sessions by its id, e.g. for a lost phone.
+  /// Returns whether there was one.
+  bool endSessionById(String userId, String sessionId) {
+    if (!RegExp(r'^[0-9a-f]{16}$').hasMatch(sessionId)) return false;
+    final before = _db.select(
+      "SELECT 1 FROM sessions WHERE user_id = ? AND token_hash LIKE ? || '%'",
+      [userId, sessionId],
+    );
+    _db.execute(
+      "DELETE FROM sessions WHERE user_id = ? AND token_hash LIKE ? || '%'",
+      [userId, sessionId],
+    );
+    return before.isNotEmpty;
+  }
+
+  /// Ends all of [userId]'s sessions, except [keep] (a token) if given.
+  void endSessionsFor(String userId, {String? keep}) => _db.execute(
+    'DELETE FROM sessions WHERE user_id = ? AND token_hash != ?',
+    [userId, keep == null ? '' : _sha(keep)],
+  );
+
+  List<Map<String, Object?>> sessionsFor(String userId, {String? current}) => [
     for (final r in _db.select(
-      'SELECT device, created_at, last_seen FROM sessions WHERE user_id = ? ORDER BY last_seen DESC',
+      'SELECT token_hash, device, created_at, last_seen FROM sessions WHERE user_id = ? ORDER BY last_seen DESC',
       [userId],
     ))
       {
+        'id': (r['token_hash'] as String).substring(0, 16),
         'device': r['device'],
         'createdAt': r['created_at'],
         'lastSeen': r['last_seen'],
+        'current': current != null && r['token_hash'] == _sha(current),
       },
   ];
 
@@ -265,10 +395,13 @@ class AuthStore {
   }
 
   /// Exchanges a one-time code for the user it was made for. Each code works
-  /// once.
-  User redeemCode(String code) {
+  /// once. After 10 wrong codes, [client] waits a growing delay.
+  User redeemCode(String code, {String client = ''}) {
+    final key = 'code|$client';
+    _checkLockout(key, 10);
     final entry = _codes.remove(_sha(_normalizeCode(code)));
     if (entry == null || entry.expires.isBefore(_clock())) {
+      _recordFailure(key, 10);
       throw const AuthException(
         "That code doesn't work. It may have expired, so try getting a new one.",
       );

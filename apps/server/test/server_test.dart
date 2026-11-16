@@ -35,7 +35,10 @@ class Api {
       Request(
         method,
         Uri.parse('http://localhost$path'),
-        headers: {'authorization': ?(token == null ? null : 'Bearer $token')},
+        headers: {
+          'authorization': ?(token == null ? null : 'Bearer $token'),
+          if (body != null) 'content-type': 'application/json',
+        },
         body: body == null ? null : jsonEncode(body),
       ),
     );
@@ -406,7 +409,7 @@ void main() {
     });
   });
 
-  test('state survives a restart, and pre-account data goes to the owner', () {
+  test('state survives a restart, and pre-account data goes to the owner', () async {
     final dir = Directory.systemTemp.createTempSync('sync_test');
     addTearDown(() => dir.deleteSync(recursive: true));
     final path = '${dir.path}/data.sqlite';
@@ -433,7 +436,7 @@ void main() {
     expect(reopened.cursor, 1);
     reopened.apply(owner.id, [set('title', 'Oat milk', 2, 'phone')]);
     expect(reopened.cursor, 2); // keeps counting, never reuses a sequence
-    expect(AuthStore(reopened).signIn('ryan', 'correct horse').id, owner.id);
+    expect((await AuthStore(reopened).signIn('ryan', 'correct horse')).id, owner.id);
   });
 
   group('OIDC', () {
@@ -476,7 +479,9 @@ void main() {
                 'email': request.bodyFields['code'] == 'stranger'
                     ? 'who@example.com'
                     : 'ryan@example.com',
-                'email_verified': true,
+                // Some providers leave the claim out entirely.
+                if (request.bodyFields['code'] != 'unverified')
+                  'email_verified': true,
               }),
             }),
             200,
@@ -540,6 +545,20 @@ void main() {
         expect((b['user'] as Map)['username'], 'ryan');
       },
     );
+
+    test('an email the provider never verified is turned away', () async {
+      final state = await startFlow();
+      final callback = await oidcApi.handler(
+        Request(
+          'GET',
+          Uri.parse(
+            'http://localhost/auth/oidc/callback?state=$state&code=unverified',
+          ),
+        ),
+      );
+      expect(callback.statusCode, 400);
+      expect(await callback.readAsString(), contains('verified email'));
+    });
 
     test('an email with no account is told to ask the owner', () async {
       final state = await startFlow();

@@ -27,9 +27,18 @@ Handler buildHandler(
   OidcProvider? oidc,
   String serverName = 'OpenHabits',
 
-  /// Trust X-Forwarded-For / CF-Connecting-IP for the client address. Only
-  /// safe behind a proxy or tunnel that sets them.
-  bool trustProxy = false,
+  /// Which header names the client's address when a reverse proxy or
+  /// tunnel on the home network passes requests on. See [ProxyTrust].
+  ProxyTrust trustProxy = ProxyTrust.none,
+
+  /// This server's identity (the id of its signing key). Devices remember
+  /// it and check it before sending their sign-in token to an address, so
+  /// they don't hand it to some other device that happens to answer there.
+  String? serverId,
+
+  /// The signing key's public half, for devices to check the addresses the
+  /// directory gives them.
+  String? serverKey,
 
   /// The server's public address, if it has one, for pairing QR codes.
   String? publicUrl,
@@ -82,20 +91,40 @@ Handler buildHandler(
     return {'url': '$base/calendar/$token.ics', 'anywhere': public != null};
   }
 
+  var warnedAboutProxy = false;
   String clientOf(Request r) {
-    if (trustProxy) {
-      final forwarded =
-          r.headers['cf-connecting-ip'] ??
-          r.headers['x-forwarded-for']?.split(',').first.trim();
-      if (forwarded != null && forwarded.isNotEmpty) return forwarded;
-    }
     final info = r.context['shelf.io.connection_info'];
-    return info is HttpConnectionInfo ? info.remoteAddress.address : '';
+    final peer = info is HttpConnectionInfo ? info.remoteAddress : null;
+    // Forwarded headers are only believed from a proxy on this machine or
+    // the home network. Anyone else could write whatever they like there.
+    final fromProxy =
+        peer != null && (peer.isLoopback || isPrivateAddress(peer.address));
+    final forwarded = clientFromHeaders(r.headers, trustProxy);
+    if (fromProxy && forwarded != null) return forwarded;
+    if (trustProxy == ProxyTrust.none &&
+        fromProxy &&
+        !warnedAboutProxy &&
+        r.headers.containsKey('x-forwarded-for')) {
+      warnedAboutProxy = true;
+      stderr.writeln(
+        'Requests are arriving through a reverse proxy, so everyone looks '
+        'like the same address and one person typing wrong passwords can '
+        'slow sign-in for everyone. Set TRUST_PROXY=true (or '
+        'TRUST_PROXY=cloudflare for a Cloudflare tunnel) to fix that.',
+      );
+    }
+    return peer?.address ?? '';
   }
 
   Future<Map<String, Object?>> body(Request r) async {
     final text = await r.readAsString();
     if (text.isEmpty) return {};
+    // Browsers can send plain-text forms to any site without asking, but
+    // not JSON. Insisting on JSON stops another web page from submitting
+    // requests here on a visitor's behalf.
+    if (!(r.mimeType ?? '').startsWith('application/json')) {
+      throw const _UnsupportedBody();
+    }
     final decoded = jsonDecode(text);
     if (decoded is! Map<String, Object?>) {
       throw const FormatException('Expected a JSON object.');
@@ -106,6 +135,7 @@ Handler buildHandler(
   Response signedIn(User user, String device) => _json({
     'token': auth.createSession(user.id, device),
     'user': user.toJson(),
+    'server': {'id': serverId},
   });
 
   final router = Router()
@@ -130,6 +160,7 @@ Handler buildHandler(
       '/auth/info',
       (Request _) => _json({
         'name': serverName,
+        'id': serverId,
         'hasUsers': auth.hasUsers,
         'needsSetup': !auth.hasUsers,
         'oidc': switch (sso()) {
@@ -141,7 +172,7 @@ Handler buildHandler(
     )
     ..post('/auth/login', (Request r) async {
       final b = await body(r);
-      final user = auth.signIn(
+      final user = await auth.signIn(
         b['username'] as String? ?? '',
         b['password'] as String? ?? '',
         client: clientOf(r),
@@ -152,7 +183,7 @@ Handler buildHandler(
     ..post('/auth/redeem', (Request r) async {
       final b = await body(r);
       return signedIn(
-        auth.redeemCode(b['code'] as String? ?? ''),
+        auth.redeemCode(b['code'] as String? ?? '', client: clientOf(r)),
         b['device'] as String? ?? '',
       );
     })
@@ -227,22 +258,32 @@ Handler buildHandler(
       '/auth/me',
       (Request r) => _json({
         'user': userOf(r).toJson(),
-        'sessions': auth.sessionsFor(userOf(r).id),
+        'sessions': auth.sessionsFor(userOf(r).id, current: _bearer(r)),
       }),
     )
     ..post('/auth/logout', (Request r) {
       auth.endSession(_bearer(r)!);
       return _json({'ok': true});
     })
+    // Signs out one of your own devices, e.g. a lost phone.
+    ..delete('/auth/sessions/<id>', (Request r, String id) {
+      if (!auth.endSessionById(userOf(r).id, id)) {
+        return _jsonError(404, "That device isn't signed in anymore.");
+      }
+      return _json({'ok': true});
+    })
+    // Changing your password signs out your other devices, in case the
+    // old one was known to someone else.
     ..post('/auth/password', (Request r) async {
       final b = await body(r);
       final user = userOf(r);
-      auth.signIn(
+      await auth.signIn(
         user.username,
         b['current'] as String? ?? '',
         client: clientOf(r),
       );
       auth.setPassword(user.id, b['new'] as String? ?? '');
+      auth.endSessionsFor(user.id, keep: _bearer(r));
       return _json({'ok': true});
     })
     ..post('/auth/email', (Request r) async {
@@ -273,14 +314,11 @@ Handler buildHandler(
     // First run: the setup page creates the owner account. Only works
     // while the server has no accounts at all.
     ..post('/setup', (Request r) async {
-      if (auth.hasUsers) {
-        return _jsonError(
-          409,
-          "This server's already set up, so just sign in.",
-        );
-      }
+      if (auth.hasUsers) throw const SetupDoneException();
       final b = await body(r);
-      final user = auth.createUser(
+      // Checked again after reading the request: another setup may have
+      // finished in the meantime.
+      final user = auth.createOwner(
         b['username'] as String? ?? '',
         password: b['password'] as String? ?? '',
         email: b['email'] as String?,
@@ -432,6 +470,18 @@ Handler buildHandler(
         return _json({'ok': true});
       }),
     )
+    // Signs a person out on all their devices without touching their data,
+    // e.g. when a family member loses their phone.
+    ..post(
+      '/users/<id>/sign-out',
+      (Request r, String id) => _ownerOnly(r, () {
+        if (auth.userById(id) == null) {
+          return _jsonError(404, "That person isn't on this server.");
+        }
+        auth.endSessionsFor(id);
+        return _json({'ok': true});
+      }),
+    )
     // One round trip does both directions: the device pushes its pending
     // changes and gets back everything after its cursor.
     //
@@ -455,9 +505,15 @@ Handler buildHandler(
           'remote': remoteInfo(),
           // Where to ask for this server's address if it changes while a
           // device is away from home.
+          'id': serverId,
           'directory': remote?.directory == null
               ? null
-              : {'lookup': remote!.directory!.lookupUrl.toString()},
+              : {
+                  'lookup': remote!.directory!.lookupUrl.toString(),
+                  // Devices check that answers from the directory were
+                  // signed with this key, i.e. published by this server.
+                  'key': serverKey,
+                },
           'remoteEnabled': settings?.remoteEnabled ?? remoteInfo() != null,
         },
         'changes': [
@@ -467,6 +523,7 @@ Handler buildHandler(
     });
 
   return const Pipeline()
+      .addMiddleware(_identify(serverId))
       .addMiddleware(_errors())
       .addMiddleware(_authenticate(auth))
       .addHandler(router.call);
@@ -510,13 +567,28 @@ Middleware _authenticate(AuthStore auth) =>
       return inner(request.change(context: {'user': user}));
     };
 
+/// Labels every answer with this server's id, so a device can tell its
+/// own server from something else that answers at the same address (on
+/// another network, the home address can belong to anything).
+Middleware _identify(String? serverId) =>
+    (inner) => (request) async {
+      final response = await inner(request);
+      return serverId == null
+          ? response
+          : response.change(headers: {'x-openhabits-server': serverId});
+    };
+
 /// Turns known failures into JSON errors the app can show.
 Middleware _errors() =>
     (inner) => (request) async {
       try {
         return await inner(request);
+      } on SetupDoneException catch (e) {
+        return _jsonError(409, e.message);
       } on AuthException catch (e) {
         return _jsonError(400, e.message);
+      } on _UnsupportedBody {
+        return _jsonError(415, 'Send the request as JSON.');
       } on FormatException catch (e) {
         return _jsonError(400, 'Invalid request: ${e.message}');
       } on TypeError catch (_) {
@@ -568,3 +640,38 @@ Response _png(List<int> bytes) => Response.ok(
     'cache-control': 'public, max-age=86400',
   },
 );
+
+class _UnsupportedBody implements Exception {
+  const _UnsupportedBody();
+}
+
+/// Which header, if any, says who the client is when requests come through
+/// a reverse proxy or tunnel.
+enum ProxyTrust {
+  /// Use the connection's own address.
+  none,
+
+  /// The last address in X-Forwarded-For: the one the nearest proxy added.
+  /// Earlier ones were sent by the client and can say anything.
+  forwardedFor,
+
+  /// CF-Connecting-IP, which a Cloudflare tunnel sets and visitors can't.
+  cloudflare;
+
+  /// From the TRUST_PROXY setting: "true" or "cloudflare".
+  static ProxyTrust parse(String? value) => switch (value?.toLowerCase()) {
+    'true' || 'yes' || '1' => forwardedFor,
+    'cloudflare' => cloudflare,
+    _ => none,
+  };
+}
+
+/// The client address a trusted proxy reported, if any.
+String? clientFromHeaders(Map<String, String> headers, ProxyTrust trust) {
+  final value = switch (trust) {
+    ProxyTrust.none => null,
+    ProxyTrust.forwardedFor => headers['x-forwarded-for']?.split(',').last,
+    ProxyTrust.cloudflare => headers['cf-connecting-ip'],
+  }?.trim();
+  return value == null || value.isEmpty ? null : value;
+}

@@ -83,6 +83,17 @@ class RemoteAccess {
   final DirectoryClient? directory;
   Timer? _renew;
 
+  /// Turning on, turning off and checking the router run one at a time, in
+  /// order. Otherwise a check that started before "off" could finish after
+  /// it and switch remote access back on.
+  Future<void> _queue = Future.value();
+
+  Future<T> _serially<T>(Future<T> Function() action) {
+    final result = _queue.then((_) => action());
+    _queue = result.then((_) {}, onError: (_) {});
+    return result;
+  }
+
   late RemoteStatus status =
       settings.remoteEnabled && settings.lastRemoteUrl != null
       // After a restart, keep offering the last working address while the
@@ -119,20 +130,16 @@ class RemoteAccess {
     return refresh();
   }
 
-  Future<RemoteStatus> disable() async {
+  Future<RemoteStatus> disable() => _serially(() async {
     settings.remoteEnabled = false;
-    try {
-      final gw = await _upnp.discover();
-      if (gw != null) await _upnp.deletePortMapping(gw, settings.remotePort);
-    } catch (_) {
-      // The mapping expires on its own.
-    }
+    await _closeOldPorts(keep: null);
     status = RemoteStatus(RemoteState.off, 'Remote access is off.');
+    settings.lastRemoteUrl = null;
     await _publish();
     return status;
-  }
+  });
 
-  Future<RemoteStatus> refresh() async {
+  Future<RemoteStatus> refresh() => _serially(() async {
     try {
       status = await _check();
       if (status.state == RemoteState.on) settings.lastRemoteUrl = status.url;
@@ -144,6 +151,32 @@ class RemoteAccess {
         RemoteState.error,
         'Something went wrong: $e',
       );
+    }
+  });
+
+  /// Removes router forwards this server made earlier and no longer uses:
+  /// all of them when remote access is turned off, or the old ones after
+  /// the port changed. Some routers keep forwards forever otherwise.
+  Future<void> _closeOldPorts({required int? keep, UpnpGateway? gw}) async {
+    final old = {
+      ...settings.mappedPorts,
+      // Forwards made before ports were tracked.
+      if (keep == null) settings.remotePort,
+    }.where((p) => p != keep).toList();
+    if (old.isEmpty) return;
+    try {
+      gw ??= await _upnp.discover();
+      if (gw == null) return;
+      for (final port in old) {
+        try {
+          await _upnp.deletePortMapping(gw, port);
+        } on UpnpException {
+          // Already gone.
+        }
+      }
+      settings.mappedPorts = [?keep];
+    } catch (_) {
+      // Tried again at the next check.
     }
   }
 
@@ -164,6 +197,7 @@ class RemoteAccess {
           internalPort: httpsPort,
         );
         if (port != preferred) settings.remotePort = port;
+        settings.mappedPorts = {...settings.mappedPorts, port}.toList();
         return port;
       } on UpnpException catch (e) {
         if (e.code != 718) rethrow;
@@ -239,6 +273,7 @@ class RemoteAccess {
     }
 
     port = await _mapFreePort(gw, port);
+    await _closeOldPorts(keep: port, gw: gw);
     final routerIp = await _upnp.externalAddress(gw);
     final publicIp = await _publicIp();
 
@@ -273,15 +308,22 @@ class RemoteAccess {
   void dispose() => _renew?.cancel();
 }
 
-/// This network's address as seen from the internet.
+/// This network's IPv4 address as seen from the internet. Both services
+/// only answer over IPv4, so a network that also has IPv6 doesn't get an
+/// IPv6 address back, which would never match the router's and look like
+/// CGNAT.
 Future<String?> lookupPublicIp() async {
-  for (final service in ['https://api.ipify.org', 'https://ifconfig.me/ip']) {
+  for (final service in [
+    'https://api.ipify.org',
+    'https://ipv4.icanhazip.com',
+  ]) {
     try {
       final response = await http
           .get(Uri.parse(service))
           .timeout(const Duration(seconds: 5));
       final ip = response.body.trim();
-      if (response.statusCode == 200 && InternetAddress.tryParse(ip) != null) {
+      if (response.statusCode == 200 &&
+          InternetAddress.tryParse(ip)?.type == InternetAddressType.IPv4) {
         return ip;
       }
     } catch (_) {
