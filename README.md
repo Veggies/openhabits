@@ -1,128 +1,96 @@
-# OpenHabits
+<p align="center">
+  <img src="docs/images/icon.png" width="128" height="128" alt="OpenHabits icon">
+</p>
 
-A self-hosted habit tracker built around Atomic Habits. Build habits or break them, start small and grow them over time, see how each week went, and use a focus timer to help. Your data lives on your own server, and every device stays in sync with it.
+<h1 align="center">OpenHabits</h1>
 
-- **iPhone, iPad and Mac:** a native SwiftUI app.
-- **Windows and Linux:** a Flutter app.
-- **The server:** one small Docker image for TrueNAS, Unraid, Synology, QNAP, a Raspberry Pi or any Linux machine.
+<p align="center">
+  <strong>Build better habits, one small step at a time.</strong><br>
+  A habit tracker built around <em>Atomic Habits</em>, that keeps your data on a server you own.
+</p>
 
-> **Beta.** 0.1 is the first public release. Expect rough edges, and keep a backup of the server's data folder.
+<p align="center">
+  iPhone · iPad · Mac · Windows · Linux
+</p>
 
-## Set up the server
+<p align="center">
+  <img src="docs/images/mac-habits.png" width="820" alt="OpenHabits on a Mac, showing today's habits">
+</p>
 
-The image is `ghcr.io/veggies/openhabits-server` (Intel and ARM). Pick whichever fits what you run:
+> **This is a beta.** OpenHabits 0.1 is the first public release, so expect a few rough edges. Ideas and bug reports are very welcome in [Issues](https://github.com/Veggies/openhabits/issues).
 
-- **TrueNAS:** until OpenHabits is in the catalog, go to *Apps → Discover Apps → ⋮ → Install via YAML* and paste [`deploy/truenas/openhabits.yaml`](deploy/truenas/openhabits.yaml) (set the dataset path first).
-- **Unraid:** add [`deploy/unraid/openhabits.xml`](deploy/unraid/openhabits.xml) as a template (*Docker → Add Container → Template*), or wait for it in Community Apps.
-- **Synology, QNAP, Portainer, or any machine with Docker:** download [`deploy/docker-compose.yml`](deploy/docker-compose.yml) and run `docker compose up -d` (or paste it into your NAS's "Project" or "Stack" page). It pulls the ready-made image, so there's nothing to build.
-- **From source:** `docker compose up -d --build` in this folder.
+## What it does
 
-[`apps/server/README.md`](apps/server/README.md) lists every setting.
+**Check in each day.** Tick off what you did. Habits you're trying to break work the other way round: ticking them off means you stayed clear that day.
 
-Then open `http://<your-server>:8080` in a browser. The setup page asks you to create your account, and afterwards is where the owner manages the server.
+**Start small, then grow.** Begin with a tiny version of a habit, like "read one page". Every couple of weeks the app checks in: if it's sticking, it asks whether you're ready for a bit more; if it's been hard, it suggests making it smaller.
 
-**Remote access.** On the setup page, turn on *Remote access*. The server asks your router to open a port (UPnP), checks it can be reached, and secures the connection with its own certificate, which devices learn to trust when they're signed in. Nothing extra is installed on phones or computers. If your home's internet address changes, devices find the new one through the OpenHabits directory.
+**Never miss twice.** Missing a single day won't break your streak. Missing two in a row will, and the app gives you a gentle nudge before that happens.
 
-- If your router doesn't respond, the page explains how to forward the port by hand.
-- If your internet provider shares one address between customers (CGNAT), nothing outside can connect in directly. The page says so and points you to a relay such as Tailscale Funnel, installed on the server only.
-- Already have a domain or reverse proxy? Enter it as the reverse proxy address.
+**See how it's going.** Every habit gets one square per week showing how many days you did it, plus a plain summary: going strong, getting there, or struggling.
 
-**Signing in.** Each person has their own account and private data; the owner adds people on the setup page. A new device signs in with the server address and a password, or by scanning the QR code from *Add a device* (on the setup page or in the app's Settings), which also teaches it the remote address.
+**Look back each week.** A short weekly review asks how the week went, and a habits scorecard helps you notice what you already do.
 
-## Get the app
+**Focus when it counts.** A built-in focus timer, with breaks, that you can link to a habit.
 
-Downloads for each release are on the [Releases page](https://github.com/Veggies/openhabits/releases).
+**Reminders and your calendar.** Get a nudge at each habit's time, or a daily check-in. Habits with a time can show up in your calendar app too.
 
-- **Windows:** download the Windows zip, unzip it anywhere, and run `openhabits.exe`. Windows may warn that the publisher is unknown; choose *More info → Run anyway*.
-- **Linux** (64-bit Intel and AMD): download the Linux archive, unpack it, and run `openhabits`.
-- **iPhone, iPad and Mac:** coming to the App Store, with the Mac app also on Homebrew. Until then, build it yourself (below).
+<p align="center">
+  <img src="docs/images/iphone-habits.png" width="190" alt="Today's habits on iPhone">
+  <img src="docs/images/iphone-progress.png" width="190" alt="Progress, week by week">
+  <img src="docs/images/iphone-reflect.png" width="190" alt="The weekly review">
+  <img src="docs/images/iphone-focus.png" width="190" alt="The focus timer">
+</p>
 
-## Build the apps yourself
+## Built around Atomic Habits
 
-### iPhone, iPad and Mac
+Every habit can carry the ideas from James Clear's book:
 
-The Apple app is native SwiftUI, in `apps/apple`. The Xcode project is generated from `project.yml` with [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`). It needs Xcode 26 or newer and runs on iOS 26 and macOS 26 or newer.
+- **Who you want to become.** "I am a reader." Each check-in counts as a vote for that person.
+- **The four laws.** Make it obvious (when and where, "After I…"), attractive (pair it with something you enjoy), easy (the tiny version) and satisfying (a reward right after). For habits you're breaking, they're turned around, with an optional habit contract.
 
-```sh
-cd apps/apple
-xcodegen                         # makes OpenHabits.xcodeproj
-open OpenHabits.xcodeproj        # then run the OpenHabits scheme
-```
+<p align="center">
+  <img src="docs/images/mac-progress.png" width="410" alt="Progress on a Mac">
+  <img src="docs/images/mac-focus.png" width="410" alt="The focus timer on a Mac">
+</p>
 
-In debug builds, launching with `-sampleData YES` fills an empty app with sample habits, and `-startTab progress` opens on a tab.
+## Your data, your server
 
-### Windows and Linux
+OpenHabits doesn't have an account with us, because there's no "us". Your habits live on a small server you run at home, on a NAS or any always-on computer, and every device keeps in sync with it. Each person in your household gets their own private account.
 
-The Flutter app is in `apps/client`, with Flutter pinned by [FVM](https://fvm.app) (`.fvmrc`). Each build has to be made on its own operating system.
+The apps work offline too: changes wait on the device and sync when it's back in touch.
 
-```sh
-cd apps/client
-fvm flutter run -d windows       # or: linux
-fvm flutter build windows        # release builds: windows, linux
-```
+**Away from home?** Turn on *Remote access* on the server's settings page and it handles the rest: it asks your router to open a port and keeps a secure connection your devices trust. If your home's internet address changes, your devices find it again automatically.
 
-The first launch walks through connecting to your server and building a first habit.
+## Get started
 
-## Features
+### 1. Set up the server
 
-### Habits
+Pick whatever you already run:
 
-- **Build or break.** Check a habit off when you've done it. For a habit you're breaking, checking it off means you stayed clear that day.
-- **Progress.** One row per habit and one square per week, with the number of days you did it. Each habit also gets a plain summary of the last four weeks: going strong, getting there, or struggling.
-- **A time and a length.** Any habit can have a time of day and say how long it takes.
+| | How |
+|---|---|
+| **TrueNAS** | *Apps → Discover Apps → ⋮ → Install via YAML*, and paste [this file](deploy/truenas/openhabits.yaml). It's on its way to the official catalog. |
+| **Unraid** | Add [this template](deploy/unraid/openhabits.xml) under *Docker → Add Container*. |
+| **Synology, QNAP, Portainer, or anything with Docker** | Use [this Compose file](deploy/docker-compose.yml): paste it into your NAS's "Project" or "Stack" page, or run `docker compose up -d`. |
 
-### The Atomic Habits method
+Then open `http://<your-server>:8080` in a browser and create your account. The [server guide](docs/SERVER.md) has more detail.
 
-Every habit can have:
+### 2. Get the app
 
-- who you want to become ("I am a reader"), with each check-in counted as a vote for it
-- the four laws: when and where, "After I…", pairing it with something you enjoy, and a reward right after; turned around for habits you're breaking, with an optional habit contract
-- start small and grow it: begin with a tiny version, and every two weeks the app checks in. If it's sticking, it asks whether it's starting to feel too easy; if you've been missing it a lot, it offers to make it smaller
-- streaks that forgive a single missed day, with a nudge to not miss two in a row
-- a habits scorecard and a weekly review
+| | |
+|---|---|
+| **Windows** | Download the Windows zip from [Releases](https://github.com/Veggies/openhabits/releases), unzip it, and open `openhabits.exe`. If Windows warns about an unknown publisher, choose *More info → Run anyway*. |
+| **Linux** | Download the Linux archive from [Releases](https://github.com/Veggies/openhabits/releases), unpack it, and open `openhabits`. |
+| **iPhone, iPad and Mac** | Coming soon to the App Store, and to Homebrew for the Mac. |
 
-### Focus
+### 3. Connect
 
-A focus timer with a break in between. A session can be linked to one of your habits.
+Open the app and enter your server's address, or scan the QR code from *Add a device* on the server's settings page.
 
-## How sync works
+## For developers
 
-Every edit is a field-level `Change` (table, row, field, value, timestamp). The
-timestamp is a hybrid logical clock, so edits are ordered correctly even when
-device clocks disagree. Devices keep a full local SQLite copy and work offline;
-edits are queued and sent to `POST /sync`, which returns everything newer than
-the device's cursor in the same round trip.
-
-Conflicts resolve per field with last-write-wins (`packages/core/lib/src/merge.dart`):
-renaming a habit on one device while changing its color on another keeps both
-edits. Deleting sets a `_deleted` field, so deleting and restoring sync like any
-other edit.
-
-## Layout
-
-```
-packages/core   Shared by client and server: sync clock, merge rule, models,
-                habit logic
-apps/server     Server (Dart, SQLite): setup page, accounts, sync, remote
-                access
-apps/apple      iPhone, iPad and Mac app (SwiftUI); HabitsCore is the Swift
-                version of packages/core and the client's sync
-apps/client     Flutter app (Windows, Linux)
-deploy/truenas  TrueNAS app config and catalog plan
-```
-
-## Tests
-
-```sh
-(cd packages/core && fvm dart test)
-(cd apps/server && fvm dart test)
-(cd apps/client && fvm flutter test)
-(cd apps/apple/Packages/HabitsCore && swift test)
-```
-
-The Swift tests can also sync with a real server: start one with
-`PORT=18080 DB_PATH=/tmp/test.sqlite OWNER_USERNAME=tester OWNER_PASSWORD=testpass123 fvm dart run bin/server.dart`
-in `apps/server`, then run `HABITS_TEST_SERVER=http://localhost:18080 swift test`.
+How it's built, how sync works and how to run the tests: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 ## Licence
 

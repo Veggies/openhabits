@@ -87,7 +87,15 @@ final class AppModel {
     init() {
         let folder = URL.applicationSupportDirectory
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let path = folder.appending(path: "data.sqlite").path
+        var path = folder.appending(path: "data.sqlite").path
+        #if DEBUG
+        // -sampleData uses its own database, made fresh each launch, so
+        // sample habits never mix with real ones (e.g. for screenshots).
+        if UserDefaults.standard.bool(forKey: "sampleData") {
+            path = folder.appending(path: "sample.sqlite").path
+            try? FileManager.default.removeItem(atPath: path)
+        }
+        #endif
         let store: LocalStore
         do {
             store = try LocalStore(path: path)

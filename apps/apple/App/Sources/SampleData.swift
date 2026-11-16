@@ -3,7 +3,8 @@ import HabitsCore
 import SwiftUI
 
 /// For trying the app out during development. Launch with
-/// `-sampleData YES` to fill an empty app with sample habits and skip
+/// `-sampleData YES` to start from a fresh, separate database of sample
+/// habits (see AppModel.init) and skip
 /// setup, and `-startTab progress` (habits, progress, reflect, focus,
 /// settings) to open on a tab. Not part of release builds.
 extension AppModel {
