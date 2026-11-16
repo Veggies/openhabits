@@ -1,4 +1,5 @@
-# Builds and tests the server on every push and pull request. When a version
+# Builds and tests the server on every push and pull request. The apps and
+# the directory are tested by apps.yml. When a version
 # tag (e.g. v1.0.0) is pushed, it also publishes the image to GitHub
 # Container Registry as ghcr.io/<owner>/openhabits-server, for linux/amd64
 # and linux/arm64. TrueNAS and the Docker Compose file install from there.
