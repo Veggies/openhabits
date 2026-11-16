@@ -250,12 +250,16 @@ const setupPageHtml = r'''<!doctype html>
 const $ = (id) => document.getElementById(id);
 const show = (id, on = true) => { $(id).hidden = !on; };
 let token = null;
-try { token = localStorage.getItem("tasksToken"); } catch (_) {}
+// "tasksToken" is the name an earlier version used.
+try { token = localStorage.getItem("openhabitsToken") ?? localStorage.getItem("tasksToken"); } catch (_) {}
 let me = null;
 
 function saveToken(t) {
   token = t;
-  try { t ? localStorage.setItem("tasksToken", t) : localStorage.removeItem("tasksToken"); } catch (_) {}
+  try {
+    localStorage.removeItem("tasksToken");
+    t ? localStorage.setItem("openhabitsToken", t) : localStorage.removeItem("openhabitsToken");
+  } catch (_) {}
 }
 
 async function api(method, path, body) {

@@ -47,7 +47,7 @@ class SettingsStore {
   set mappedPorts(List<int> v) => set('mappedPorts', v.isEmpty ? null : v);
 
   /// What was last sent to the directory: addresses and when, so it's only
-  /// updated when they change (and weekly, to stay listed).
+  /// updated when they change (and every [republishEvery], to stay listed).
   ({List<String> urls, DateTime at})? get directoryPublished {
     final v = get('directoryPublished') as Map?;
     if (v == null) return null;

@@ -13,12 +13,14 @@ apps only look up after a connection fails.
 
 - Per server: a random-looking ID and up to four `https://` addresses. No
   names, emails or habits. Entries vanish 45 days after a server stops
-  checking in, or straight away when remote access is turned off.
+  checking in. Turning remote access off empties the entry straight away
+  (an empty placeholder is kept so an old update can't be replayed).
 - Each server signs its updates with its own key, and its ID is derived from
   that key, so nobody can claim or change another server's entry.
-- Devices still check the server's certificate fingerprint before sending
-  anything. A wrong or hacked directory can make a connection fail, never
-  send it to a different server.
+- Lookups hand back the server's own signed update, and devices check that
+  signature with the key they learned when they signed in. A wrong or
+  hacked directory can make a connection fail, never send it to a different
+  server.
 - You can only look up an ID you already know, and only paired devices know
   it.
 

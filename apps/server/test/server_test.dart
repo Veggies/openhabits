@@ -12,6 +12,8 @@ import 'package:shelf/shelf.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:test/test.dart';
 
+import 'support/requests.dart';
+
 Change set(String field, Object? value, int millis, String node) => Change(
   table: 'tasks',
   rowId: 't1',
@@ -30,24 +32,7 @@ class Api {
     String path, {
     Object? body,
     String? token,
-  }) async {
-    final response = await handler(
-      Request(
-        method,
-        Uri.parse('http://localhost$path'),
-        headers: {
-          'authorization': ?(token == null ? null : 'Bearer $token'),
-          if (body != null) 'content-type': 'application/json',
-        },
-        body: body == null ? null : jsonEncode(body),
-      ),
-    );
-    final text = await response.readAsString();
-    final decoded = text.startsWith('{')
-        ? jsonDecode(text) as Map<String, Object?>
-        : {'body': text};
-    return (response.statusCode, decoded);
-  }
+  }) => send(handler, method, path, body: body, token: token);
 
   Future<String> login(String username, String password) async {
     final (status, b) = await call(
@@ -341,6 +326,11 @@ void main() {
         'duration': 10,
         'createdAt': '2026-11-01T10:00:00.000Z',
       });
+      await habit('long', {
+        'name': '毎朝の散歩と日記と瞑想とストレッチと読書の時間を大切にする習慣',
+        'time': '06:30',
+        'createdAt': '2026-11-01T10:00:00.000Z',
+      });
       await habit('water', {'name': 'Drink water'}); // no time
       await habit('old', {
         'name': 'Old habit',
@@ -372,6 +362,10 @@ void main() {
       // Made on Sunday 1 November; the first scheduled day is Monday the 2nd.
       expect(ics, contains('DTSTART:20261102T210000\r\n'));
       expect(ics, contains('DURATION:PT30M\r\n'));
+      // No line is longer than calendar apps allow, in any script.
+      for (final line in ics.split('\r\n')) {
+        expect(utf8.encode(line).length, lessThanOrEqualTo(75), reason: line);
+      }
       expect(ics, contains('RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR\r\n'));
       expect(
         ics,
@@ -464,7 +458,7 @@ void main() {
           expect(request.bodyFields['code_verifier'], isNotEmpty);
           expect(
             request.bodyFields['redirect_uri'],
-            'https://tasks.example.com/auth/oidc/callback',
+            'https://habits.example.com/auth/oidc/callback',
           );
           return http.Response(
             jsonEncode({
@@ -496,7 +490,7 @@ void main() {
           clientId: 'client-1',
           clientSecret: 'secret',
           label: 'Google',
-          publicUrl: Uri.parse('https://tasks.example.com'),
+          publicUrl: Uri.parse('https://habits.example.com'),
         ),
         client: provider,
       );

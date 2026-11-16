@@ -70,8 +70,9 @@ Future<void> main(List<String> args) async {
     directory: directory,
   )..start();
 
-  // Single sign-on: from the environment if set, otherwise from the setup
-  // page. Rebuilt whenever the owner changes it.
+  // Single sign-on: from the environment if set, otherwise from settings
+  // saved through /admin/sso (no screen offers that yet). Rebuilt whenever
+  // the owner changes it.
   OidcProvider? oidc;
   void configureSso() {
     final s = settings.sso;

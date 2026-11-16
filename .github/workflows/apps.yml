@@ -1,12 +1,28 @@
-# Tests the two apps and the directory on every push and pull request. The
-# server has its own workflow (release.yml). The shared files in fixtures/
-# are read by all of them, so a change there runs everything.
+# Tests the two apps and the directory whenever they, or anything they
+# depend on, change. The server has its own workflow (release.yml). The
+# shared files in fixtures/ are read by all of them.
 name: Apps
 
 on:
   push:
     branches: [main]
+    paths:
+      - "apps/client/**"
+      - "apps/apple/**"
+      - "apps/server/**" # the Flutter tests run against the real server code
+      - "packages/core/**"
+      - "services/directory/**"
+      - "fixtures/**"
+      - ".github/workflows/apps.yml"
   pull_request:
+    paths:
+      - "apps/client/**"
+      - "apps/apple/**"
+      - "apps/server/**" # the Flutter tests run against the real server code
+      - "packages/core/**"
+      - "services/directory/**"
+      - "fixtures/**"
+      - ".github/workflows/apps.yml"
   workflow_dispatch:
 
 permissions:

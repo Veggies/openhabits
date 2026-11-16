@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:core/core.dart';
 
 /// Turns a person's habits into an iCalendar file that calendar apps
@@ -87,9 +89,11 @@ String _escape(String s) => s
     .replaceAll(';', r'\;')
     .replaceAll('\n', r'\n');
 
-/// Lines longer than 75 bytes continue on the next line after a space.
+/// Lines longer than the 75 bytes calendar apps allow continue on the next
+/// line after a space. Counted in UTF-8 bytes, so names in other scripts
+/// fold too. (74 per line, to stay safely under.)
 String _fold(String line) {
-  if (line.length <= 73) return line;
+  if (utf8.encode(line).length <= 74) return line;
   final out = StringBuffer();
   var count = 0;
   for (final rune in line.runes) {

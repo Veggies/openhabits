@@ -45,8 +45,9 @@ publish ports 8080 and 8443 instead and forward 8443 on your router by hand.
 Your home's internet address changes from time to time. The server tells the
 OpenHabits directory its new address, and a device away from home that can't
 reach the old one asks the directory where to go, the way Plex apps ask
-plex.tv. Devices still check the server's certificate, so the directory never
-has to be trusted. Nothing to set up.
+plex.tv. The server signs each address it publishes, and devices only use
+addresses with its signature, so the directory never has to be trusted.
+Nothing to set up.
 
 ### Your own domain
 

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:server/api.dart';
@@ -13,6 +12,8 @@ import 'package:server/sync_store.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart';
 import 'package:test/test.dart';
+
+import 'support/requests.dart';
 
 /// A router for tests: answers UPnP (or not) with a chosen address.
 class FakeUpnp extends UpnpClient {
@@ -79,9 +80,8 @@ class FakeDirectory extends DirectoryClient {
   }
 }
 
-final _identity = DirectoryIdentity.loadOrCreate(
-  Directory.systemTemp.createTempSync('directory-key'),
-);
+final _identityDir = Directory.systemTemp.createTempSync('directory-key');
+final _identity = DirectoryIdentity.loadOrCreate(_identityDir);
 
 class Api {
   final Handler handler;
@@ -92,29 +92,11 @@ class Api {
     String method,
     String path, [
     Object? body,
-  ]) async {
-    final response = await handler(
-      Request(
-        method,
-        Uri.parse('http://localhost$path'),
-        headers: {
-          'authorization': ?(token == null ? null : 'Bearer $token'),
-          if (body != null) 'content-type': 'application/json',
-        },
-        body: body == null ? null : jsonEncode(body),
-      ),
-    );
-    final text = await response.readAsString();
-    return (
-      response.statusCode,
-      text.startsWith('{')
-          ? jsonDecode(text) as Map<String, Object?>
-          : {'body': text},
-    );
-  }
+  ]) => send(handler, method, path, body: body, token: token);
 }
 
 void main() {
+  tearDownAll(() => _identityDir.deleteSync(recursive: true));
   late SyncStore store;
   late AuthStore auth;
   late SettingsStore settings;
@@ -418,11 +400,11 @@ void main() {
     test('single sign-on needs a public address with a domain', () async {
       expect((await api.call('GET', '/admin/sso')).$2['callbackUrl'], isNull);
       await api.call('PUT', '/admin/remote', {
-        'publicUrl': 'https://tasks.example.com',
+        'publicUrl': 'https://habits.example.com',
       });
       expect(
         (await api.call('GET', '/admin/sso')).$2['callbackUrl'],
-        'https://tasks.example.com/auth/oidc/callback',
+        'https://habits.example.com/auth/oidc/callback',
       );
 
       await api.call('PUT', '/admin/sso', {
@@ -441,18 +423,19 @@ void main() {
       expect(settings.sso['clientSecret'], 's3cret');
       expect((await api.call('GET', '/admin/sso')).$2['hasSecret'], isTrue);
     });
+  });
 
-    test('QR codes are drawn as SVG', () async {
-      final response = await api.handler(
-        Request(
-          'GET',
-          Uri.parse('http://localhost/qr.svg?data=tasks%3A%2F%2Fpair'),
-          headers: {'authorization': 'Bearer ${api.token}'},
-        ),
-      );
-      expect(response.headers['content-type'], 'image/svg+xml');
-      expect(await response.readAsString(), startsWith('<svg'));
-    });
+  test('QR codes are drawn as SVG', () async {
+    await setUpOwner();
+    final response = await api.handler(
+      Request(
+        'GET',
+        Uri.parse('http://localhost/qr.svg?data=openhabits%3A%2F%2Fpair'),
+        headers: {'authorization': 'Bearer ${api.token}'},
+      ),
+    );
+    expect(response.headers['content-type'], 'image/svg+xml');
+    expect(await response.readAsString(), startsWith('<svg'));
   });
 
   test('the self-signed certificate is served and can be pinned', () async {

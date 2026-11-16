@@ -18,8 +18,8 @@ import 'web/setup_page.dart';
 
 /// Builds the HTTP handler.
 ///
-/// Public routes: `/`, `/health`, `/auth/info`, `/auth/login`,
-/// `/auth/redeem` and the OIDC routes. Everything else needs
+/// Public routes are listed in [_publicPaths], plus `/calendar/…` (the
+/// link carries its own secret). Everything else needs
 /// `Authorization: Bearer <session token>`.
 Handler buildHandler(
   SyncStore store,
@@ -306,7 +306,6 @@ Handler buildHandler(
       (Request r) => _json({
         'code': auth.createCode(userOf(r).id),
         'expiresInSeconds': AuthStore.codeLifetime.inSeconds,
-        'publicUrl': remoteInfo()?['url'],
         'remoteUrl': remoteInfo()?['url'],
         'fingerprint': remoteInfo()?['fingerprint'],
       }),
@@ -603,7 +602,7 @@ Future<Response> _ownerOnly(
   FutureOr<Response> Function() action,
 ) async {
   if (!(r.context['user'] as User).isOwner) {
-    return _jsonError(403, 'Only the server owner can manage people.');
+    return _jsonError(403, 'Only the server owner can do that.');
   }
   return await action();
 }

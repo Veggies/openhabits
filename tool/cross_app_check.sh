@@ -23,7 +23,7 @@ trap cleanup EXIT
 echo "› Building the server image"
 docker build -q -f apps/server/Dockerfile -t openhabits-server:check . >/dev/null
 cleanup
-docker run -d --name "$NAME" -p "$PORT:$PORT" \
+docker run -d --name "$NAME" -p "127.0.0.1:$PORT:$PORT" \
   -e PORT="$PORT" -e OWNER_USERNAME="$HABITS_TEST_USER" -e OWNER_PASSWORD="$HABITS_TEST_PASSWORD" \
   openhabits-server:check >/dev/null
 

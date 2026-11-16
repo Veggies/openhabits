@@ -46,8 +46,9 @@ class ServerCertificate {
     dir.createSync(recursive: true);
     keyFile.writeAsStringSync(keyPem);
     certFile.writeAsStringSync(certPem);
-    // The key is protected by the data folder's permissions (it's private
-    // to the app's user); the minimal container has no chmod to tighten it.
+    // The file is created with the default permissions (usually readable by
+    // everyone on the host); what protects the key is who can open the data
+    // folder. The minimal container has no chmod to tighten it.
     return ServerCertificate(certPem, keyPem);
   }
 

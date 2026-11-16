@@ -1,7 +1,5 @@
 // Sign-in limits, sessions and first-run setup: the parts of the server
 // that face people who aren't signed in.
-import 'dart:convert';
-import 'dart:io';
 
 import 'package:server/api.dart';
 import 'package:server/auth/auth_store.dart';
@@ -10,16 +8,7 @@ import 'package:server/sync_store.dart';
 import 'package:shelf/shelf.dart';
 import 'package:test/test.dart';
 
-/// What shelf's server puts in a request's context: who connected.
-class FakeConnection implements HttpConnectionInfo {
-  @override
-  final InternetAddress remoteAddress;
-  FakeConnection(String ip) : remoteAddress = InternetAddress(ip);
-  @override
-  int get localPort => 8080;
-  @override
-  int get remotePort => 50000;
-}
+import 'support/requests.dart';
 
 /// Calls the handler as a given address would.
 class Client {
@@ -34,28 +23,16 @@ class Client {
     String path, [
     Object? body,
     String contentType = 'application/json',
-  ]) async {
-    final response = await handler(
-      Request(
-        method,
-        Uri.parse('http://localhost$path'),
-        headers: {
-          ...headers,
-          'authorization': ?(token == null ? null : 'Bearer $token'),
-          if (body != null) 'content-type': contentType,
-        },
-        body: body == null ? null : (body is String ? body : jsonEncode(body)),
-        context: {'shelf.io.connection_info': FakeConnection(ip)},
-      ),
-    );
-    final text = await response.readAsString();
-    return (
-      response.statusCode,
-      text.startsWith('{')
-          ? jsonDecode(text) as Map<String, Object?>
-          : <String, Object?>{'body': text},
-    );
-  }
+  ]) => send(
+    handler,
+    method,
+    path,
+    body: body,
+    token: token,
+    contentType: contentType,
+    headers: headers,
+    ip: ip,
+  );
 
   Future<(int, Map<String, Object?>)> login(String user, String password) =>
       call('POST', '/auth/login', {'username': user, 'password': password});
@@ -157,6 +134,18 @@ void main() {
                   ip: '198.51.100.9')
               .login('ryan', 'correct horse')).$2['error'],
           startsWith("That's too many tries"));
+
+      // From a proxy on the home network, each visitor is told apart by
+      // the address it adds, so one visitor's guesses don't lock another.
+      for (var i = 0; i < 6; i++) {
+        await Client(handler(trust: ProxyTrust.forwardedFor),
+            ip: '192.168.1.2',
+            headers: {'x-forwarded-for': '203.0.113.66'}).login('ryan', 'wrong');
+      }
+      expect((await Client(handler(trust: ProxyTrust.forwardedFor),
+                  ip: '192.168.1.2',
+                  headers: {'x-forwarded-for': '203.0.113.77'})
+              .login('ryan', 'correct horse')).$1, 200);
     });
 
     test('behind a proxy, the address the proxy added is used', () {

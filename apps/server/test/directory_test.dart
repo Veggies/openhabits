@@ -32,7 +32,9 @@ void main() {
     expect(first.publicKey, hasLength(65));
     expect(DirectoryIdentity.loadOrCreate(dir).id, first.id);
     expect(
-      DirectoryIdentity.loadOrCreate(Directory.systemTemp.createTempSync()).id,
+      DirectoryIdentity.loadOrCreate(
+        Directory('${dir.path}/other')..createSync(),
+      ).id,
       isNot(first.id),
     );
   });

@@ -10,10 +10,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-PORT=18091 HTTPS_PORT=18454 DIR_PORT=8787
+# ROUTER_PORT is the outside port asked of the router. It's kept away from
+# 8443 so a real OpenHabits server on this network keeps its own forward.
+PORT=18091 HTTPS_PORT=18454 DIR_PORT=8787 ROUTER_PORT=18443
 WORK=$(mktemp -d)
-if lsof -ti "tcp:$PORT,$DIR_PORT" -sTCP:LISTEN >/dev/null; then
-  echo "Something is already using port $PORT or $DIR_PORT. Stop it and try again." >&2
+if lsof -ti "tcp:$PORT,$HTTPS_PORT,$DIR_PORT" -sTCP:LISTEN >/dev/null; then
+  echo "Something is already using port $PORT, $HTTPS_PORT or $DIR_PORT. Stop it and try again." >&2
   exit 1
 fi
 cleanup() {
@@ -22,7 +24,7 @@ cleanup() {
       -H 'content-type: application/json' -d '{"action":"disable"}' >/dev/null || true
   fi
   # By port: `fvm dart run` starts the real server as a child process.
-  for p in $(lsof -ti "tcp:$PORT,$DIR_PORT" -sTCP:LISTEN); do kill "$p" 2>/dev/null || true; done
+  for p in $(lsof -ti "tcp:$PORT,$HTTPS_PORT,$DIR_PORT" -sTCP:LISTEN); do kill "$p" 2>/dev/null || true; done
   [[ "${KEEP:-}" ]] && echo "logs: $WORK" || rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -38,10 +40,12 @@ echo "→ Throwaway server on :$PORT"
 for _ in $(seq 60); do curl -sf "http://127.0.0.1:$PORT/health" >/dev/null && break; sleep 1; done
 
 TOKEN=$(curl -sf "http://127.0.0.1:$PORT/auth/login" -H 'content-type: application/json' \
-  -d '{"username":"tester","password":"testpass123","deviceName":"check"}' |
+  -d '{"username":"tester","password":"testpass123","device":"check"}' |
   python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
 
-echo "→ Turning on remote access (asks your router for a port)"
+echo "→ Turning on remote access (asks your router for port $ROUTER_PORT)"
+curl -sf -X PUT "http://127.0.0.1:$PORT/admin/remote" -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' -d "{\"port\":$ROUTER_PORT}" >/dev/null
 STATUS=$(curl -sf -X POST "http://127.0.0.1:$PORT/admin/remote" -H "authorization: Bearer $TOKEN" \
   -H 'content-type: application/json' -d '{"action":"enable"}')
 echo "$STATUS" | python3 -c 'import json,sys; s=json.load(sys.stdin)["status"]; print("  ", s["state"], s.get("url") or s["message"]); sys.exit(s["state"]!="on")'

@@ -65,6 +65,11 @@ bool isPrivateAddress(String ip) {
       (a == 100 && b >= 64 && b <= 127);
 }
 
+/// How often an unchanged address is sent to the directory again. The
+/// directory only rewrites an unchanged entry once a week, and drops it
+/// after 45 days without hearing from the server.
+const republishEvery = Duration(days: 3);
+
 typedef PublicIpLookup = Future<String?> Function();
 
 /// Makes the server reachable from anywhere, the way Plex's "Enable remote
@@ -230,7 +235,7 @@ class RemoteAccess {
     final same =
         last != null &&
         last.urls.join(' ') == urls.join(' ') &&
-        (urls.isEmpty || now.difference(last.at) < const Duration(days: 3));
+        (urls.isEmpty || now.difference(last.at) < republishEvery);
     if (same || (last == null && urls.isEmpty)) return;
     try {
       await directory.publish(urls);
