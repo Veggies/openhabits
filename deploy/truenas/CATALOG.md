@@ -25,12 +25,12 @@ Until it's accepted, people can install with *Install via YAML* using
 1. **Make the repository public** and, ideally, rename it to `openhabits`.
    The links in `app.yaml`, `item.yaml` and `README.md` assume
    `github.com/Veggies/openhabits`.
-2. **Publish a release:** push a tag like `v1.0.0`. The `Server` workflow
+2. **Publish a release:** push a tag like `v0.1.0`. The `Server` workflow
    tests the code and pushes `ghcr.io/veggies/openhabits-server` for amd64
    and arm64. On GitHub, open the package's settings and make it public.
 3. **Pin the image** in `ix_values.yaml` to the version and its digest:
-   `docker buildx imagetools inspect ghcr.io/veggies/openhabits-server:1.0.0`
-   prints the digest; the tag becomes `"1.0.0@sha256:…"`. Make `app_version`
+   `docker buildx imagetools inspect ghcr.io/veggies/openhabits-server:0.1.0`
+   prints the digest; the tag becomes `"0.1.0@sha256:…"`. Make `app_version`
    in `app.yaml` match.
 4. **Test a real install** on TrueNAS with *Install via YAML*: setup page,
    remote access through a real router, a phone on mobile data.

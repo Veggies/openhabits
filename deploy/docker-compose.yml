@@ -7,7 +7,9 @@
 # Then open http://<this-machine>:8080 in a browser to create your account.
 services:
   openhabits:
-    image: ghcr.io/veggies/openhabits-server:1
+    # "latest" follows each release. Pin a version (e.g. :0.1.0) to update
+    # only when you choose.
+    image: ghcr.io/veggies/openhabits-server:latest
     container_name: openhabits
     # Host networking lets "Enable remote access" ask your router to open a
     # port for you (UPnP). It works on Linux. On Docker Desktop for macOS or

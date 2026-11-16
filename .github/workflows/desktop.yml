@@ -1,0 +1,76 @@
+# Builds the Windows and Linux apps. Pushing a version tag (e.g. v0.1.0)
+# also attaches them to a GitHub Release, marked as a pre-release while the
+# version starts with 0. Run it by hand (Actions → Desktop → Run workflow)
+# to get test builds without releasing anything; they're kept as artifacts.
+name: Desktop
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # Same version as .fvmrc.
+  FLUTTER_VERSION: 3.50.0
+  VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'dev' }}
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+      - run: flutter pub get
+      - run: flutter build windows --release
+        working-directory: apps/client
+      - name: Package
+        shell: pwsh
+        run: Compress-Archive -Path apps/client/build/windows/x64/runner/Release/* -DestinationPath "OpenHabits-$env:VERSION-windows-x64.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: OpenHabits-*-windows-x64.zip
+
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+      - run: flutter pub get
+      - run: flutter build linux --release
+        working-directory: apps/client
+      - name: Package
+        run: |
+          tar -C apps/client/build/linux/x64/release/bundle -czf "OpenHabits-$VERSION-linux-x64.tar.gz" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: OpenHabits-*-linux-x64.tar.gz
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, linux]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: OpenHabits-*
+          prerelease: ${{ startsWith(github.ref_name, 'v0.') }}
+          generate_release_notes: true

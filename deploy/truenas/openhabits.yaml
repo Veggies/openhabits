@@ -5,7 +5,7 @@
 # Then open http://<your-nas>:8080 to finish setup.
 services:
   openhabits:
-    image: ghcr.io/veggies/openhabits-server:1
+    image: ghcr.io/veggies/openhabits-server:latest
     # Lets "Enable remote access" ask your router to open a port (UPnP).
     network_mode: host
     # TrueNAS's "apps" user, so files in the dataset belong to it.

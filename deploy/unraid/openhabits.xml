@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<!-- OpenHabits server for Unraid. Add it with Docker → Add Container →
+     Template, or submit it to Community Apps. Host networking lets
+     "Remote access" ask your router to open a port (UPnP). -->
+<Container version="2">
+  <Name>OpenHabits</Name>
+  <Repository>ghcr.io/veggies/openhabits-server:latest</Repository>
+  <Registry>https://github.com/Veggies/openhabits/pkgs/container/openhabits-server</Registry>
+  <Network>host</Network>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/Veggies/openhabits/issues</Support>
+  <Project>https://github.com/Veggies/openhabits</Project>
+  <Overview>A self-hosted habit tracker built around Atomic Habits. This is the server: it keeps the OpenHabits apps for iPhone, iPad, Mac, Windows and Linux in sync. After it starts, open the web page to create your account. Beta.</Overview>
+  <Category>Productivity: Tools:</Category>
+  <WebUI>http://[IP]:[PORT:8080]/</WebUI>
+  <Icon>https://raw.githubusercontent.com/Veggies/openhabits/main/deploy/truenas/catalog/openhabits/icon.png</Icon>
+  <Config Name="App data" Target="/data" Default="/mnt/user/appdata/openhabits" Mode="rw" Description="Accounts, habits and the server's keys. Back this folder up." Type="Path" Display="always" Required="true">/mnt/user/appdata/openhabits</Config>
+  <Config Name="Port" Target="PORT" Default="8080" Description="The app and the setup page, on your home network." Type="Variable" Display="always" Required="true">8080</Config>
+  <Config Name="Remote access port" Target="HTTPS_PORT" Default="8443" Description="Secure connection for using the app away from home." Type="Variable" Display="always" Required="true">8443</Config>
+  <Config Name="Time zone" Target="TZ" Default="Etc/UTC" Description="For the calendar feed, e.g. Europe/London." Type="Variable" Display="always" Required="false">Etc/UTC</Config>
+  <Config Name="Reverse proxy address" Target="PUBLIC_URL" Default="" Description="Only if you reach this server through your own domain, e.g. https://habits.example.com." Type="Variable" Display="advanced" Required="false"/>
+  <Config Name="Trust proxy" Target="TRUST_PROXY" Default="false" Description="true behind a reverse proxy on your network; cloudflare for a Cloudflare tunnel." Type="Variable" Display="advanced" Required="false">false</Config>
+</Container>

@@ -1,46 +1,47 @@
 # OpenHabits
 
-A self-hostable habit tracker. Build habits or break them, start small and grow them over time, see how each week went, and use a focus timer to help. The Atomic Habits method is built in, and it's optional. Your data lives on your own server. One Flutter codebase builds for iOS, Android, macOS, Windows and Linux, and a small Dart server keeps your devices in sync.
+A self-hosted habit tracker built around Atomic Habits. Build habits or break them, start small and grow them over time, see how each week went, and use a focus timer to help. Your data lives on your own server, and every device stays in sync with it.
+
+- **iPhone, iPad and Mac:** a native SwiftUI app.
+- **Windows and Linux:** a Flutter app.
+- **The server:** one small Docker image for TrueNAS, Unraid, Synology, QNAP, a Raspberry Pi or any Linux machine.
+
+> **Beta.** 0.1 is the first public release. Expect rough edges, and keep a backup of the server's data folder.
 
 ## Set up the server
 
-**TrueNAS:** until OpenHabits is in the catalog, go to *Apps → Discover Apps → ⋮ →
-Install via YAML* and paste [`deploy/truenas/openhabits.yaml`](deploy/truenas/openhabits.yaml)
-(set the dataset path first).
-**Anywhere else with Docker** (Linux, Unraid, Synology, a Raspberry Pi, Portainer):
-download [`deploy/docker-compose.yml`](deploy/docker-compose.yml) and run
-`docker compose up -d`. It pulls the ready-made image, so there's nothing to build.
-**From source:** `docker compose up -d --build` in this folder.
+The image is `ghcr.io/veggies/openhabits-server` (Intel and ARM). Pick whichever fits what you run:
+
+- **TrueNAS:** until OpenHabits is in the catalog, go to *Apps → Discover Apps → ⋮ → Install via YAML* and paste [`deploy/truenas/openhabits.yaml`](deploy/truenas/openhabits.yaml) (set the dataset path first).
+- **Unraid:** add [`deploy/unraid/openhabits.xml`](deploy/unraid/openhabits.xml) as a template (*Docker → Add Container → Template*), or wait for it in Community Apps.
+- **Synology, QNAP, Portainer, or any machine with Docker:** download [`deploy/docker-compose.yml`](deploy/docker-compose.yml) and run `docker compose up -d` (or paste it into your NAS's "Project" or "Stack" page). It pulls the ready-made image, so there's nothing to build.
+- **From source:** `docker compose up -d --build` in this folder.
 
 [`apps/server/README.md`](apps/server/README.md) lists every setting.
 
-Then open `http://<your-server>:8080` in a browser. The setup page asks you to
-create your account, and afterwards is where the owner manages the server.
+Then open `http://<your-server>:8080` in a browser. The setup page asks you to create your account, and afterwards is where the owner manages the server.
 
-**Remote access.** On the setup page, click *Enable remote access*. The server
-asks your router to open a port (UPnP), checks it can be reached, and secures
-the connection with its own certificate, which devices learn to trust when
-they're signed in. Nothing extra is installed on phones or computers.
+**Remote access.** On the setup page, turn on *Remote access*. The server asks your router to open a port (UPnP), checks it can be reached, and secures the connection with its own certificate, which devices learn to trust when they're signed in. Nothing extra is installed on phones or computers. If your home's internet address changes, devices find the new one through the OpenHabits directory.
 
 - If your router doesn't respond, the page explains how to forward the port by hand.
-- If your internet provider shares one address between customers (CGNAT),
-  nothing outside can connect in directly. The page says so and walks you
-  through a free relay with Tailscale Funnel, installed on the server only.
-- Already have a domain or reverse proxy? Enter it as a custom public address.
+- If your internet provider shares one address between customers (CGNAT), nothing outside can connect in directly. The page says so and points you to a relay such as Tailscale Funnel, installed on the server only.
+- Already have a domain or reverse proxy? Enter it as the reverse proxy address.
 
-**Signing in.** Each person has their own account and private data; the owner
-adds people on the setup page. A new device signs in with the server address
-and a password, or by scanning the QR code from *Add a device* (on the setup
-page or in the app's Settings), which also teaches it the remote address.
+**Signing in.** Each person has their own account and private data; the owner adds people on the setup page. A new device signs in with the server address and a password, or by scanning the QR code from *Add a device* (on the setup page or in the app's Settings), which also teaches it the remote address.
 
-## Run the app
+## Get the app
+
+Downloads for each release are on the [Releases page](https://github.com/Veggies/openhabits/releases).
+
+- **Windows:** download the Windows zip, unzip it anywhere, and run `openhabits.exe`. Windows may warn that the publisher is unknown; choose *More info → Run anyway*.
+- **Linux** (64-bit Intel and AMD): download the Linux archive, unpack it, and run `openhabits`.
+- **iPhone, iPad and Mac:** coming to the App Store, with the Mac app also on Homebrew. Until then, build it yourself (below).
+
+## Build the apps yourself
 
 ### iPhone, iPad and Mac
 
-The Apple app is native SwiftUI, in `apps/apple`. The Xcode project is
-generated from `project.yml` with [XcodeGen](https://github.com/yonaskolb/XcodeGen)
-(`brew install xcodegen`). It needs Xcode 26 or newer and runs on iOS 26 and
-macOS 26 or newer.
+The Apple app is native SwiftUI, in `apps/apple`. The Xcode project is generated from `project.yml` with [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`). It needs Xcode 26 or newer and runs on iOS 26 and macOS 26 or newer.
 
 ```sh
 cd apps/apple
@@ -48,22 +49,19 @@ xcodegen                         # makes OpenHabits.xcodeproj
 open OpenHabits.xcodeproj        # then run the OpenHabits scheme
 ```
 
-In debug builds, launching with `-sampleData YES` fills an empty app with
-sample habits, and `-startTab progress` opens on a tab.
+In debug builds, launching with `-sampleData YES` fills an empty app with sample habits, and `-startTab progress` opens on a tab.
 
-### Android, Windows and Linux
+### Windows and Linux
 
-Flutter is pinned with [FVM](https://fvm.app) (`.fvmrc`).
+The Flutter app is in `apps/client`, with Flutter pinned by [FVM](https://fvm.app) (`.fvmrc`). Each build has to be made on its own operating system.
 
 ```sh
 cd apps/client
-fvm flutter run -d macos        # or: ios, android, windows, linux
-fvm flutter build macos         # release builds: ios, apk, windows, linux
+fvm flutter run -d windows       # or: linux
+fvm flutter build windows        # release builds: windows, linux
 ```
 
-Windows and Linux builds must be made on those operating systems. The first
-launch walks through connecting to your server and, optionally, setting up
-habits with the Atomic Habits framework.
+The first launch walks through connecting to your server and building a first habit.
 
 ## Features
 
@@ -73,9 +71,9 @@ habits with the Atomic Habits framework.
 - **Progress.** One row per habit and one square per week, with the number of days you did it. Each habit also gets a plain summary of the last four weeks: going strong, getting there, or struggling.
 - **A time and a length.** Any habit can have a time of day and say how long it takes.
 
-### The Atomic Habits method (optional)
+### The Atomic Habits method
 
-Turn it on in the setup wizard or Settings, and habits gain:
+Every habit can have:
 
 - who you want to become ("I am a reader"), with each check-in counted as a vote for it
 - the four laws: when and where, "After I…", pairing it with something you enjoy, and a reward right after; turned around for habits you're breaking, with an optional habit contract
@@ -109,7 +107,7 @@ apps/server     Server (Dart, SQLite): setup page, accounts, sync, remote
                 access
 apps/apple      iPhone, iPad and Mac app (SwiftUI); HabitsCore is the Swift
                 version of packages/core and the client's sync
-apps/client     Flutter app (Android, Windows, Linux)
+apps/client     Flutter app (Windows, Linux)
 deploy/truenas  TrueNAS app config and catalog plan
 ```
 
