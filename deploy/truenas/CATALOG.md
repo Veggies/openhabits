@@ -45,8 +45,8 @@ python3 .github/scripts/ci.py --app openhabits --train community --test-file bri
 ```
 
 The CI script renders the template and starts the container, so it catches
-form or template mistakes before reviewers do. The icon is moved to
-TrueNAS's media host during review; the `icon` links then change to theirs.
+form or template mistakes before reviewers do. The `icon` links already point at TrueNAS's media host (their checks require
+it); staff upload `icon.png` from this folder there during review.
 Expect feedback on naming and defaults. Note there's already an unrelated
 `openhabittracker` app in the catalog, so the description should make the
 difference clear.
