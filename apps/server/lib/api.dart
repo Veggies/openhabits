@@ -117,7 +117,7 @@ Handler buildHandler(
   }
 
   Future<Map<String, Object?>> body(Request r) async {
-    final text = await r.readAsString();
+    final text = await readLimited(r);
     if (text.isEmpty) return {};
     // Browsers can send plain-text forms to any site without asking, but
     // not JSON. Insisting on JSON stops another web page from submitting
@@ -589,6 +589,8 @@ Middleware _errors() =>
         return _jsonError(400, e.message);
       } on _UnsupportedBody {
         return _jsonError(415, 'Send the request as JSON.');
+      } on _TooLarge {
+        return _jsonError(413, 'That request is too large.');
       } on FormatException catch (e) {
         return _jsonError(400, 'Invalid request: ${e.message}');
       } on TypeError catch (_) {
@@ -675,3 +677,29 @@ String? clientFromHeaders(Map<String, String> headers, ProxyTrust trust) {
   }?.trim();
   return value == null || value.isEmpty ? null : value;
 }
+
+class _TooLarge implements Exception {
+  const _TooLarge();
+}
+
+/// The most a request body may hold. A sync sends at most 500 changes at a
+/// time, far below this; anything bigger is refused before it's read into
+/// memory, so one huge request can't take the server down.
+const maxBodyBytes = 2 * 1024 * 1024;
+
+/// Reads a request body as text, refusing anything over [maxBodyBytes].
+Future<String> readLimited(Request r, {int limit = maxBodyBytes}) async {
+  if ((r.contentLength ?? 0) > limit) throw const _TooLarge();
+  final bytes = <int>[];
+  await for (final chunk in r.read()) {
+    bytes.addAll(chunk);
+    if (bytes.length > limit) throw const _TooLarge();
+  }
+  return utf8.decode(bytes);
+}
+
+/// A request log line with secrets taken out: private calendar links and
+/// the pairing codes inside QR code requests.
+String redactLogLine(String line) => line
+    .replaceAll(RegExp(r'/calendar/[^\s?]+'), '/calendar/…')
+    .replaceAll(RegExp(r'/qr\.svg\?\S*'), '/qr.svg?…');

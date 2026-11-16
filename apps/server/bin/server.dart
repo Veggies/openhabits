@@ -51,13 +51,8 @@ Future<void> main(List<String> args) async {
     print('Created owner account "${owner.username}".');
   }
 
-  // An address configured outside the setup page (e.g. in the TrueNAS app
-  // form) becomes the custom public address.
-  final envPublicUrl = env['PUBLIC_URL'] ?? '';
-  if (envPublicUrl.isNotEmpty) {
-    settings.publicUrl = envPublicUrl;
-    settings.remoteEnabled = true;
-  }
+  // An address set outside the setup page (e.g. in the TrueNAS app form).
+  settings.applyEnvPublicUrl(env['PUBLIC_URL'] ?? '');
 
   final certificate = ServerCertificate.loadOrCreate(dataDir);
   // The server's own signing key. Its id is how devices recognise this
@@ -100,7 +95,13 @@ Future<void> main(List<String> args) async {
   configureSso();
 
   final handler = const Pipeline()
-      .addMiddleware(logRequests())
+      .addMiddleware(
+        logRequests(
+          logger: (message, isError) => isError
+              ? stderr.writeln(redactLogLine(message))
+              : print(redactLogLine(message)),
+        ),
+      )
       .addHandler(
         buildHandler(
           store,

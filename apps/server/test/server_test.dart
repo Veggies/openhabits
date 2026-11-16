@@ -369,7 +369,8 @@ void main() {
       final ics = feed['body'] as String;
       expect(ics, startsWith('BEGIN:VCALENDAR\r\n'));
       expect(ics, contains('SUMMARY:Read\r\n'));
-      expect(ics, contains('DTSTART:20261101T210000\r\n'));
+      // Made on Sunday 1 November; the first scheduled day is Monday the 2nd.
+      expect(ics, contains('DTSTART:20261102T210000\r\n'));
       expect(ics, contains('DURATION:PT30M\r\n'));
       expect(ics, contains('RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR\r\n'));
       expect(

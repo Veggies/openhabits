@@ -73,6 +73,17 @@ class SettingsStore {
         : v.trim().replaceAll(RegExp(r'/+$'), ''),
   );
 
+  /// Applies PUBLIC_URL from the environment (e.g. the TrueNAS app form):
+  /// it becomes the custom address and turns remote access on. Only when
+  /// it's new or has changed, so what the owner later sets on the setup
+  /// page, including turning remote access off, sticks across restarts.
+  void applyEnvPublicUrl(String url) {
+    if (url.isEmpty || get('envPublicUrl') == url) return;
+    publicUrl = url;
+    remoteEnabled = true;
+    set('envPublicUrl', url);
+  }
+
   /// Single sign-on: issuer, clientId, clientSecret, label.
   Map<String, String> get sso => {
     for (final MapEntry(:key, :value)

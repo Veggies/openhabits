@@ -5,6 +5,7 @@ import 'dart:io';
 
 import 'package:server/api.dart';
 import 'package:server/auth/auth_store.dart';
+import 'package:server/settings_store.dart';
 import 'package:server/sync_store.dart';
 import 'package:shelf/shelf.dart';
 import 'package:test/test.dart';
@@ -293,5 +294,43 @@ void main() {
     expect((await api.call('GET', '/auth/info')).$2['id'], 'server-1');
     expect(((await api.login('ryan', 'correct horse')).$2['server'] as Map)['id'],
         'server-1');
+  });
+
+  group('limits on what anyone can send', () {
+    test('a huge request is refused before it is read', () async {
+      final big = '{"username":"${'x' * (maxBodyBytes + 10)}"}';
+      final (status, _) = await Client(handler()).call('POST', '/auth/login', big);
+      expect(status, 413);
+    });
+
+    test('logs leave out calendar links and pairing codes', () {
+      expect(
+        redactLogLine('GET [200] /calendar/abcDEF_123-xyz.ics 2ms'),
+        'GET [200] /calendar/… 2ms',
+      );
+      expect(
+        redactLogLine('GET [200] /qr.svg?data=openhabits%3A%2F%2Fpair%3Fcode%3DK7QM-3XPT 1ms'),
+        'GET [200] /qr.svg?… 1ms',
+      );
+    });
+  });
+
+  group('PUBLIC_URL from the environment', () {
+    test("is applied once, so the owner's later choices stick", () {
+      final settings = SettingsStore(store.db);
+      settings.applyEnvPublicUrl('https://habits.example.com');
+      expect(settings.publicUrl, 'https://habits.example.com');
+      expect(settings.remoteEnabled, isTrue);
+
+      // The owner turns remote access off; the server restarts.
+      settings.remoteEnabled = false;
+      settings.applyEnvPublicUrl('https://habits.example.com');
+      expect(settings.remoteEnabled, isFalse);
+
+      // A new address in the environment is applied again.
+      settings.applyEnvPublicUrl('https://new.example.com');
+      expect(settings.publicUrl, 'https://new.example.com');
+      expect(settings.remoteEnabled, isTrue);
+    });
   });
 }

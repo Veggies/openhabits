@@ -34,7 +34,13 @@ String habitsCalendar(
     if (h.deleted || h.archived || h.isQuit || h.plan.time.isEmpty) continue;
     if (h.weekdays.isEmpty) continue;
     final t = parseTime(h.plan.time);
-    final start = h.createdAt.toUtc();
+    // The first event is the first scheduled day on or after the habit was
+    // made. Calendar apps always show the start date as an event, even if
+    // the repeat rule doesn't include that weekday.
+    var start = h.createdAt.toUtc();
+    while (!h.weekdays.contains(start.weekday)) {
+      start = start.add(const Duration(days: 1));
+    }
     final date =
         '${start.year.toString().padLeft(4, '0')}'
         '${_two(start.month)}${_two(start.day)}';
