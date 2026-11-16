@@ -6,7 +6,8 @@ import SwiftUI
 /// `-sampleData YES` to start from a fresh, separate database of sample
 /// habits (see AppModel.init) and skip
 /// setup, and `-startTab progress` (habits, progress, reflect, focus,
-/// settings) to open on a tab. Not part of release builds.
+/// settings) to open on a tab. On the habits tab, `-openScreen checkIn`
+/// or `-openScreen editor` opens that sheet. Not part of release builds.
 extension AppModel {
     func applyDebugLaunchOptions() {
         let defaults = UserDefaults.standard

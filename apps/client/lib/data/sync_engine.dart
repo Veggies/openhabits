@@ -5,9 +5,9 @@ import 'dart:io';
 import 'package:core/core.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'directory_record.dart';
 import 'local_store.dart';
@@ -257,22 +257,38 @@ class SyncEngine extends ChangeNotifier {
   }
 
   /// Signs in through the server's single sign-on provider in a browser.
+  /// The browser comes back to a small web server this app runs on this
+  /// computer for a few minutes, which picks up the one-time code.
   Future<Account> signInWithOidc(String url) async {
-    // Desktop Windows/Linux can't receive custom-scheme links, so the browser
-    // returns to a temporary local web server instead.
-    final desktop =
-        !kIsWeb &&
-        (defaultTargetPlatform == TargetPlatform.windows ||
-            defaultTargetPlatform == TargetPlatform.linux);
-    final callback = desktop ? 'http://localhost:43823' : 'openhabits';
-    final redirect = desktop ? 'http://localhost:43823/' : 'openhabits://auth';
-    final result = await FlutterWebAuth2.authenticate(
-      url: '$url/auth/oidc/start?redirect_uri=${Uri.encodeComponent(redirect)}',
-      callbackUrlScheme: callback,
-    );
-    final code = Uri.parse(result).queryParameters['code'];
-    if (code == null) throw const SyncException('Sign-in was cancelled.');
-    return redeemCode(url, code);
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 43823);
+    try {
+      const redirect = 'http://localhost:43823/';
+      final opened = await launchUrl(
+        Uri.parse(
+          '$url/auth/oidc/start?redirect_uri=${Uri.encodeComponent(redirect)}',
+        ),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!opened) throw const SyncException("Couldn't open your browser.");
+      final request = await server.first.timeout(
+        const Duration(minutes: 5),
+        onTimeout: () => throw const SyncException('Sign-in was cancelled.'),
+      );
+      final code = request.uri.queryParameters['code'];
+      request.response
+        ..headers.contentType = ContentType.html
+        ..write(
+          '<!doctype html><meta charset="utf-8"><title>OpenHabits</title>'
+          '<body style="font-family:system-ui;text-align:center;margin-top:20vh">'
+          "<h1>You're signed in</h1><p>You can close this window and go back "
+          'to OpenHabits.</p></body>',
+        );
+      await request.response.close();
+      if (code == null) throw const SyncException('Sign-in was cancelled.');
+      return await redeemCode(url, code);
+    } finally {
+      await server.close(force: true);
+    }
   }
 
   Future<Account> _finishSignIn(

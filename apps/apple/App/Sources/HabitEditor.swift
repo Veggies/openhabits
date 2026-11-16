@@ -27,6 +27,7 @@ struct HabitEditor: View {
         let repo = app.repo
 
         NavigationStack {
+            ScrollViewReader { scroller in
             Form {
                 Section {
                     Picker("Kind", selection: $kind) {
@@ -85,6 +86,7 @@ struct HabitEditor: View {
                 } footer: {
                     Text("Each time you do the habit, it's a vote for becoming this person. Everything from here on is optional, so just fill in what helps you.")
                 }
+                .id("plan")
                 if kind == .build { buildSections } else { breakSections }
 
                 if let existing {
@@ -99,6 +101,17 @@ struct HabitEditor: View {
                 }
             }
             .formStyle(.grouped)
+            #if DEBUG
+            // -openScreen editorPlan: opens scrolled to the Atomic Habits
+            // part, for screenshots.
+            .task {
+                if UserDefaults.standard.string(forKey: "openScreen") == "editorPlan" {
+                    try? await Task.sleep(for: .milliseconds(300))
+                    scroller.scrollTo("plan", anchor: .top)
+                }
+            }
+            #endif
+            }
             .navigationTitle(existing == nil ? "New Habit" : "Edit Habit")
             .inlineTitle()
             .toolbar {

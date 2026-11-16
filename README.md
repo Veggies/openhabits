@@ -21,46 +21,143 @@
 
 ## What it does
 
-**Check in each day.** Tick off what you did. Habits you're trying to break work the other way round: ticking them off means you stayed clear that day.
+<table>
+<tr>
+<td width="50%" align="center">
 
-**Start small, then grow.** Begin with a tiny version of a habit, like "read one page". Every couple of weeks the app checks in: if it's sticking, it asks whether you're ready for a bit more; if it's been hard, it suggests making it smaller.
+<img src="docs/images/iphone-habits.png" width="260" alt="Today's habits on iPhone">
 
-**Never miss twice.** Missing a single day won't break your streak. Missing two in a row will, and the app gives you a gentle nudge before that happens.
+</td>
+<td width="50%">
 
-**See how it's going.** Every habit gets one square per week showing how many days you did it, plus a plain summary: going strong, getting there, or struggling.
+<h3>Check in each day</h3>
 
-**Look back each week.** A short weekly review asks how the week went, and a habits scorecard helps you notice what you already do.
+Tick off what you did, right from the list. Habits you're trying to break work the other way round: ticking them off means you stayed clear that day.
 
-**Focus when it counts.** A built-in focus timer, with breaks, that you can link to a habit.
 
-**Reminders and your calendar.** Get a nudge at each habit's time, or a daily check-in. Habits with a time can show up in your calendar app too.
+</td>
+</tr>
+<tr>
+<td width="50%">
 
-<p align="center">
-  <img src="docs/images/iphone-habits.png" width="190" alt="Today's habits on iPhone">
-  <img src="docs/images/iphone-progress.png" width="190" alt="Progress, week by week">
-  <img src="docs/images/iphone-reflect.png" width="190" alt="The weekly review">
-  <img src="docs/images/iphone-focus.png" width="190" alt="The focus timer">
-</p>
+<h3>Start small, then grow</h3>
 
-## Built around Atomic Habits
+Begin with a tiny version of a habit, like "read one page". Every couple of weeks the app checks in: if it's sticking, it asks whether you're ready for a little more. If it's been hard, it suggests making it smaller.
 
-Every habit can carry the ideas from James Clear's book:
 
-- **Who you want to become.** "I am a reader." Each check-in counts as a vote for that person.
-- **The four laws.** Make it obvious (when and where, "After I…"), attractive (pair it with something you enjoy), easy (the tiny version) and satisfying (a reward right after). For habits you're breaking, they're turned around, with an optional habit contract.
+</td>
+<td width="50%" align="center">
 
-<p align="center">
-  <img src="docs/images/mac-progress.png" width="410" alt="Progress on a Mac">
-  <img src="docs/images/mac-focus.png" width="410" alt="The focus timer on a Mac">
-</p>
+<img src="docs/images/iphone-checkin.png" width="260" alt="A size check-in">
 
-## Your data, your server
+</td>
+</tr>
+<tr>
+<td width="50%" align="center">
 
-OpenHabits doesn't have an account with us, because there's no "us". Your habits live on a small server you run at home, on a NAS or any always-on computer, and every device keeps in sync with it. Each person in your household gets their own private account.
+<img src="docs/images/mac-missed.png" width="380" alt="A habit marked as missed last time">
 
-The apps work offline too: changes wait on the device and sync when it's back in touch.
+</td>
+<td width="50%">
 
-**Away from home?** Turn on *Remote access* on the server's settings page and it handles the rest: it asks your router to open a port and keeps a secure connection your devices trust. If your home's internet address changes, your devices find it again automatically.
+<h3>Never miss twice</h3>
+
+Missing one day won't break your streak, but missing two in a row will. When you missed a habit last time, the app says so gently, so you can get back on track.
+
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+<h3>See how it's going</h3>
+
+Every habit gets a square for each week showing how many days you did it, plus a plain summary: going strong, getting there, or struggling.
+
+
+</td>
+<td width="50%" align="center">
+
+<img src="docs/images/iphone-progress.png" width="260" alt="Progress, week by week">
+
+</td>
+</tr>
+<tr>
+<td width="50%" align="center">
+
+<img src="docs/images/iphone-reflect.png" width="260" alt="The weekly review">
+
+</td>
+<td width="50%">
+
+<h3>Look back each week</h3>
+
+A short weekly review shows how each habit went and asks what went well. A habits scorecard helps you notice the habits you already have.
+
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+<h3>Built around Atomic Habits</h3>
+
+Each habit can carry the ideas from James Clear's book: who you want to become ("I am a reader", with every check-in a vote for that person) and the four laws: make it obvious, attractive, easy and satisfying. For habits you're breaking, they're turned around.
+
+
+</td>
+<td width="50%" align="center">
+
+<img src="docs/images/iphone-plan.png" width="260" alt="A habit's Atomic Habits plan">
+
+</td>
+</tr>
+<tr>
+<td width="50%" align="center">
+
+<img src="docs/images/mac-focus.png" width="380" alt="The focus timer on a Mac">
+
+</td>
+<td width="50%">
+
+<h3>Focus when it counts</h3>
+
+A focus timer with breaks in between. Link a session to a habit, and see how many you've done today.
+
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+<h3>Reminders and your calendar</h3>
+
+Get a nudge at each habit's time, and mark it done right from the notification. Or get one daily check-in listing what's left. Habits with a time can show up in your calendar app too.
+
+
+</td>
+<td width="50%" align="center">
+
+<img src="docs/images/iphone-settings.png" width="260" alt="Reminder settings">
+
+</td>
+</tr>
+<tr>
+<td width="50%" align="center">
+
+<img src="docs/images/server-settings.png" width="380" alt="The server's settings page">
+
+</td>
+<td width="50%">
+
+<h3>Your data, on your own server</h3>
+
+Your habits live on a small server you run at home, on a NAS or any always-on computer, and every device keeps in sync with it. Each person in your household gets their own private account. Turn on <em>Remote access</em> and it works away from home too, with nothing extra to set up on your phone. The apps also work offline and catch up when they're back in touch.
+
+
+</td>
+</tr>
+</table>
 
 ## Get started
 

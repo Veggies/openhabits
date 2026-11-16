@@ -103,6 +103,17 @@ struct HabitsView: View {
         .sheet(item: $checkIns) { queue in
             SizeCheckInFlow(queue: queue)
         }
+        #if DEBUG
+        // -openScreen checkIn | editor: opens a sheet straight away, for
+        // screenshots (see SampleData.swift).
+        .onAppear {
+            switch UserDefaults.standard.string(forKey: "openScreen") {
+            case "checkIn" where !due.isEmpty: checkIns = CheckInQueue(ids: due.map(\.id))
+            case "editor", "editorPlan": editing = habits.first.map { .edit($0) }
+            default: break
+            }
+        }
+        #endif
         .confirmationDialog("Delete \(confirmingDelete?.name ?? "this habit")?",
             isPresented: Binding(get: { confirmingDelete != nil }, set: { if !$0 { confirmingDelete = nil } }),
             titleVisibility: .visible
