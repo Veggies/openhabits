@@ -76,6 +76,8 @@ void main() {
       );
       server.listen((request) {
         request.response
+          // A new connection, and so a new certificate check, every time.
+          ..persistentConnection = false
           ..headers.contentType = ContentType.json
           ..write(jsonEncode({'name': 'Home'}))
           ..close();
@@ -97,8 +99,34 @@ void main() {
           ),
         ),
       );
-      sync.trustCertificate(certificate.fingerprint);
+      sync.trustCertificate(certificate.fingerprint, url: url);
       expect((await sync.serverInfo(url)).name, 'Home');
+      sync.dispose();
+    });
+
+    test('an approval only counts for the address it was given for', () async {
+      final sync = SyncEngine(LocalStore.inMemory(), deviceName: 'Test');
+      sync.trustCertificate(
+        certificate.fingerprint,
+        url: 'https://somewhere-else.example',
+      );
+      await expectLater(
+        sync.serverInfo(url),
+        throwsA(isA<UntrustedServerException>()),
+      );
+      sync.dispose();
+    });
+
+    test("an approval is forgotten when sign-in doesn't work", () async {
+      final sync = SyncEngine(LocalStore.inMemory(), deviceName: 'Test');
+      sync.trustCertificate(certificate.fingerprint, url: url);
+      // This test server isn't a real one, so signing in fails.
+      await expectLater(sync.signIn(url, 'ryan', 'pw'), throwsA(anything));
+      await expectLater(
+        sync.serverInfo(url),
+        throwsA(isA<UntrustedServerException>()),
+      );
+      expect(sync.store.meta('fingerprint'), isNull);
       sync.dispose();
     });
 

@@ -112,7 +112,7 @@ class _ConnectFormState extends State<ConnectForm> {
       // The server's own remote-access certificate: ask the person to
       // compare its security code with the one on the setup page.
       if (!mounted || !await _confirmCertificate(e)) return;
-      _sync.trustCertificate(e.fingerprint);
+      _sync.trustCertificate(e.fingerprint, url: e.url);
       final info = await _sync.serverInfo(e.url);
       setState(() => server = info);
     }
@@ -178,7 +178,32 @@ class _ConnectFormState extends State<ConnectForm> {
       setState(() => error = "That QR code isn't an OpenHabits pairing code.");
       return;
     }
-    if (pairing == null) return;
+    if (pairing == null || !mounted) return;
+    // Say where the code leads before signing in, and what switching from
+    // another server could cost.
+    final warning = _sync.replacementWarning(pairing.server);
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Connect to ${pairing.server}?'),
+        content: Text(
+          warning ??
+              'This signs this device in to that server, so your habits '
+                  'stay in sync with your other devices.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(warning == null ? 'Connect' : 'Switch servers'),
+          ),
+        ],
+      ),
+    );
+    if (go != true) return;
     await _run(() async {
       _address.text = pairing.server;
       widget.onSignedIn(

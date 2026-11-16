@@ -21,6 +21,9 @@ struct ConnectView: View {
     @State private var error: String?
     @State private var untrusted: UntrustedServer?
     @State private var scanning = false
+    /// A scanned pairing code, waiting for the person to confirm where it
+    /// leads.
+    @State private var scanned: Pairing?
 
     var body: some View {
         Form {
@@ -98,12 +101,27 @@ struct ConnectView: View {
         }
         .formStyle(.grouped)
         .onAppear { if address.isEmpty { address = app.sync.serverUrl ?? "" } }
+        .alert("Connect to \(scanned?.server ?? "this server")?",
+            isPresented: Binding(get: { scanned != nil }, set: { if !$0 { scanned = nil } }),
+            presenting: scanned
+        ) { pairing in
+            Button("Cancel", role: .cancel) {}
+            Button(app.sync.replacementWarning(for: pairing.server) == nil ? "Connect" : "Switch Servers") {
+                run {
+                    try await app.sync.redeem(url: SyncEngine.normalize(pairing.server), code: pairing.code,
+                        remoteUrl: pairing.remote, fingerprint: pairing.fingerprint)
+                }
+            }
+        } message: { pairing in
+            Text(app.sync.replacementWarning(for: pairing.server)
+                ?? "This signs this device in to that server, so your habits stay in sync with your other devices.")
+        }
         .alert("Check the security code", isPresented: Binding(get: { untrusted != nil }, set: { if !$0 { untrusted = nil } }),
             presenting: untrusted
         ) { u in
             Button("Cancel", role: .cancel) {}
             Button("It Matches") {
-                app.sync.trustCertificate(u.fingerprint)
+                app.sync.trustCertificate(u.fingerprint, for: u.url)
                 lookUp(u.url)
             }
         } message: { u in
@@ -117,10 +135,7 @@ struct ConnectView: View {
                     error = "That QR code isn't an OpenHabits pairing code."
                     return
                 }
-                run {
-                    try await app.sync.redeem(url: SyncEngine.normalize(pairing.server), code: pairing.code,
-                        remoteUrl: pairing.remote, fingerprint: pairing.fingerprint)
-                }
+                scanned = pairing
             } onCancel: {
                 scanning = false
             }

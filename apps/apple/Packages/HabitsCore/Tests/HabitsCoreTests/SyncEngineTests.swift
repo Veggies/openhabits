@@ -50,15 +50,33 @@ func fixture(_ name: String) throws -> [String: JSONValue] {
     }
 }
 
+@Suite @MainActor struct FutureDates {
+    @Test func aFieldWrittenByADeviceWithItsDateAheadCanStillBeChanged() throws {
+        let store = try LocalStore()
+        let ahead = Int(Date().timeIntervalSince1970 * 1000) + 3 * 24 * 3600 * 1000
+        try store.applyRemote([
+            Change(table: "habits", rowId: "h1", field: "name", value: "From the future",
+                hlc: HLC(ahead, 0, "wrong-date"))
+        ], cursor: 1)
+        store.write("habits", "h1", ["name": "Read before bed"])
+        #expect(store.row("habits", "h1")?["name"]?.string == "Read before bed")
+        // And it's queued with a timestamp the server will accept too.
+        let queued = store.pending().changes.first { $0.field == "name" }
+        #expect(queued.map { $0.hlc > HLC(ahead, 0, "wrong-date") } == true)
+    }
+}
+
 @Suite struct Pinning {
     @Test func onlyThePinnedOrConfirmedCertificateIsAccepted() {
         let delegate = PinningDelegate()
-        #expect(!delegate.accepts("AA:BB"))
+        #expect(!delegate.accepts("AA:BB", host: "home"))
         delegate.pinned = "AA:BB"
-        #expect(delegate.accepts("AA:BB"))
-        #expect(!delegate.accepts("CC:DD"))
-        delegate.trustOnce = "CC:DD"
-        #expect(delegate.accepts("CC:DD"))
+        #expect(delegate.accepts("AA:BB", host: "home"))
+        #expect(!delegate.accepts("CC:DD", host: "home"))
+        // A confirmed certificate only counts for the address it was for.
+        delegate.trustOnce = (host: "home", fingerprint: "CC:DD")
+        #expect(delegate.accepts("CC:DD", host: "home"))
+        #expect(!delegate.accepts("CC:DD", host: "elsewhere"))
         #expect(PinningDelegate.fingerprint(of: Data([1, 2, 3])).hasPrefix("03:90:58:C6"))
     }
 }
@@ -74,6 +92,8 @@ final class StubServer: @unchecked Sendable {
     var cursor = 0
     var received: [JSONValue] = []
     var tokensSentTo: [String] = []
+    /// Every host the app tried, reachable or not.
+    var hostsAsked: [String] = []
     /// Hosts where something else answers: (status, content type, body).
     var impostors: [String: (Int, String, String)] = [:]
     /// Hosts that can't be reached.
@@ -84,13 +104,14 @@ final class StubServer: @unchecked Sendable {
     func reset() {
         lock.withLock {
             id = "home-server"; userId = "user-1"; cursor = 0
-            received = []; tokensSentTo = []; impostors = [:]; unreachable = []
+            received = []; tokensSentTo = []; hostsAsked = []; impostors = [:]; unreachable = []
         }
     }
 
     func answer(_ request: URLRequest, body: Data) -> (Int, [String: String], Data)? {
         lock.withLock {
             let host = request.url?.host() ?? ""
+            hostsAsked.append(host)
             if unreachable.contains(host) { return nil }
             if request.value(forHTTPHeaderField: "authorization") != nil { tokensSentTo.append(host) }
             if let (code, type, text) = impostors[host] {
@@ -265,7 +286,54 @@ final class StubProtocol: URLProtocol {
         #expect(names.contains("Before the backup") && names.contains("After the backup"))
     }
 
-    @Test func signingInToAnotherServerForgetsTheOldCertificate() async throws {
+    @Test func aPairingCodeForAnotherServerSaysWhatSwitchingCosts() async throws {
+        #expect(engine.replacementWarning(for: "http://home") == nil)  // not signed in yet
+        try await signIn()
+        #expect(engine.replacementWarning(for: "http://home") == nil)  // same server
+        server.unreachable = ["home"]
+        addHabit("Not sent yet")
+        let warning = engine.replacementWarning(for: "https://elsewhere.example")
+        #expect(warning?.contains("http://home") == true)
+        #expect(warning?.contains("as ryan") == true)
+        #expect(warning?.contains("1 change that hasn't been sent yet") == true)
+    }
+
+        @Test func anApprovalIsForgottenWhenSignInFails() async throws {
+        engine.trustCertificate("CC:DD", for: "http://home")
+        server.impostors["home"] = (400, "application/json", #"{"error":"That code doesn't work."}"#)
+        await #expect(throws: (any Error).self) { try await engine.redeem(url: "http://home", code: "X") }
+        #expect(engine.pinning.trustOnce == nil)
+        #expect(store.meta("fingerprint") == nil)
+    }
+
+    @Test func aReinstallAtANewAddressKeepsAndUploadsTheHabits() async throws {
+        try await signIn()
+        addHabit("Only copy is on the phone")
+        await engine.syncNow()
+        server.id = "new-box"
+        server.userId = "user-2"
+        server.cursor = 0
+        server.received = []
+        try await engine.signIn(url: "http://new-box", username: "ryan", password: "pw")
+        await engine.syncNow()
+        #expect(store.table("habits").values.contains { $0["name"]?.string == "Only copy is on the phone" })
+        #expect(server.received.contains { $0.object?["value"]?.string == "Only copy is on the phone" })
+    }
+
+    @Test func signingInDoesntFallBackToThePreviousServersDirectory() async throws {
+        try await signIn()
+        store.setMeta("directoryLookup", "https://directory.example/v1/servers/old")
+        store.setMeta("directoryKey", "x")
+        server.unreachable = ["new-box"]
+        server.hostsAsked = []
+        await #expect(throws: (any Error).self) {
+            try await engine.signIn(url: "http://new-box", username: "ryan", password: "pw")
+        }
+        #expect(!server.hostsAsked.contains("directory.example"))
+        #expect(engine.serverUrl == "http://home")
+    }
+
+        @Test func signingInToAnotherServerForgetsTheOldCertificate() async throws {
         store.setMeta("serverUrl", "https://old")
         store.setMeta("fingerprint", "AA:BB")
         engine.pinning.pinned = "AA:BB"

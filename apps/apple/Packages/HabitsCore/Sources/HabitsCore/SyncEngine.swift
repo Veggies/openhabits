@@ -198,8 +198,27 @@ public final class SyncEngine {
             oidcLabel: json["oidc"]?.object?["label"]?.string)
     }
 
-    /// Trusts a certificate the person confirmed, for signing in.
-    public func trustCertificate(_ fingerprint: String) { pinning.trustOnce = fingerprint }
+    /// What to tell the person before signing in to `server` from a pairing
+    /// link or QR code, if this device is already signed in somewhere
+    /// else: that it replaces that, and what could be lost. Nil when there's
+    /// nothing to warn about. Matches replacementWarning in sync_engine.dart.
+    public func replacementWarning(for server: String) -> String? {
+        guard isConfigured, let current = serverUrl, Self.normalize(server) != current else { return nil }
+        let who = account.map { " as \($0.username)" } ?? ""
+        let waiting = store.pendingCount
+        let unsent = waiting == 0 ? ""
+            : waiting == 1 ? ", including 1 change that hasn't been sent yet"
+            : ", including \(waiting) changes that haven't been sent yet"
+        return "This device is signed in to \(current)\(who). Connecting switches it to \(server). "
+            + "If that's a different account, the habits on this device will be removed from it\(unsent)."
+    }
+
+    /// Trusts a certificate the person confirmed, for signing in to `url`.
+    /// It's only accepted from that address, and is forgotten when the
+    /// sign-in finishes, whether or not it worked.
+    public func trustCertificate(_ fingerprint: String, for url: String) {
+        pinning.trustOnce = URL(string: url)?.host().map { (host: $0, fingerprint: fingerprint) }
+    }
 
     @discardableResult
     public func signIn(url: String, username: String, password: String) async throws -> Account {
@@ -214,7 +233,8 @@ public final class SyncEngine {
     public func redeem(url: String, code: String, remoteUrl: String? = nil, fingerprint: String? = nil)
         async throws -> Account
     {
-        if let fingerprint { pinning.trustOnce = fingerprint }
+        // The QR code's certificate is for the remote address.
+        if let fingerprint, let remoteUrl { trustCertificate(fingerprint, for: remoteUrl) }
         return try await finishSignIn(urls: [url] + (remoteUrl.map { [$0] } ?? []),
             path: "/auth/redeem", body: ["code": .string(code)])
     }
@@ -230,17 +250,23 @@ public final class SyncEngine {
     private func finishSignIn(urls: [String], path: String, body: Fields) async throws -> Account {
         var all = body
         all["device"] = .string(deviceName)
-        let (url, response) = try await sendFirst(urls: urls, method: "POST", path: path, body: all, auth: false)
+        // Accepted while this sign-in runs, then forgotten either way.
+        let trusted = pinning.trustOnce
+        defer { pinning.trustOnce = nil }
+        // Only the addresses being signed in to: not the previous server's
+        // directory, which could sign this device in to the wrong server.
+        let (url, response) = try await sendFirst(urls: urls, method: "POST", path: path, body: all,
+            auth: false, askDirectory: false)
         guard let user = response["user"], let tokenValue = response["token"]?.string,
             let account = try? JSONDecoder().decode(Account.self, from: JSONEncoder().encode(user))
         else { throw SyncError("The server sent back something unexpected. Try again.") }
         let sameServer = urls.first == serverUrl
         if let previous = self.account, previous.id != account.id {
-            if sameServer && previous.username.lowercased() == account.username.lowercased() {
-                // The same person on the same server, but their account is
-                // new: the server was reinstalled or reset. This device may
-                // hold the only copy of their habits, so send it all rather
-                // than deleting it.
+            if previous.username.lowercased() == account.username.lowercased() {
+                // The same person, but their account is new: the server was
+                // reinstalled or reset, perhaps at a new address. This
+                // device may hold the only copy of their habits, so send it
+                // all rather than deleting it.
                 store.requeueAll()
             } else {
                 // A different person on this device: don't mix their data
@@ -264,11 +290,15 @@ public final class SyncEngine {
         store.setMeta("token", tokenValue)
         store.setMeta("account", user.encoded())
         if urls.count > 1 { store.setMeta("remoteUrl", urls[1]) }
-        if let trusted = pinning.trustOnce { store.setMeta("fingerprint", trusted) }
+        // Pin the certificate the person confirmed or the QR code carried,
+        // for use away from home, but only if it was confirmed for one of
+        // the addresses signed in to.
+        if let trusted, urls.contains(where: { URL(string: $0)?.host() == trusted.host }) {
+            store.setMeta("fingerprint", trusted.fingerprint)
+        }
         // The previous server's certificate stops being trusted straight
         // away, not at the next launch.
         pinning.pinned = store.meta("fingerprint")
-        pinning.trustOnce = nil
         activeUrl = url
         status = .idle
         Task { await syncNow() }
@@ -572,14 +602,14 @@ public final class SyncEngine {
 final class PinningDelegate: NSObject, URLSessionDelegate, @unchecked Sendable {
     private let lock = NSLock()
     private var _pinned: String?
-    private var _trustOnce: String?
+    private var _trustOnce: (host: String, fingerprint: String)?
     private var _lastSeen: String?
 
     var pinned: String? {
         get { lock.withLock { _pinned } }
         set { lock.withLock { _pinned = newValue } }
     }
-    var trustOnce: String? {
+    var trustOnce: (host: String, fingerprint: String)? {
         get { lock.withLock { _trustOnce } }
         set { lock.withLock { _trustOnce = newValue } }
     }
@@ -600,14 +630,18 @@ final class PinningDelegate: NSObject, URLSessionDelegate, @unchecked Sendable {
         }
         let fingerprint = Self.fingerprint(of: SecCertificateCopyData(leaf) as Data)
         lastSeen = fingerprint
-        if accepts(fingerprint) { return (.useCredential, URLCredential(trust: trust)) }
+        if accepts(fingerprint, host: challenge.protectionSpace.host) {
+            return (.useCredential, URLCredential(trust: trust))
+        }
         return (.cancelAuthenticationChallenge, nil)
     }
 
     /// Whether a certificate that isn't otherwise trusted is this server's:
-    /// the pinned one, or one the person just confirmed.
-    func accepts(_ fingerprint: String) -> Bool {
-        fingerprint == pinned || fingerprint == trustOnce
+    /// the pinned one, or one the person just confirmed for this address.
+    func accepts(_ fingerprint: String, host: String) -> Bool {
+        if fingerprint == pinned { return true }
+        guard let once = trustOnce else { return false }
+        return fingerprint == once.fingerprint && host == once.host
     }
 
     /// SHA-256 of a certificate, formatted as the server shows it ("3F:A2:…").

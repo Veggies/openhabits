@@ -80,7 +80,13 @@ class LocalStore extends ChangeNotifier {
     final hlc = _clock = _clock.send(DateTime.now().millisecondsSinceEpoch);
     final changes = [
       for (final MapEntry(:key, :value) in fields.entries)
-        Change(table: table, rowId: rowId, field: key, value: value, hlc: hlc),
+        Change(
+          table: table,
+          rowId: rowId,
+          field: key,
+          value: value,
+          hlc: _after(_hlcs[(table, rowId, key)], hlc),
+        ),
     ];
     final staged = <(String, String, String), Change>{};
     _db.execute('BEGIN');
@@ -99,6 +105,14 @@ class LocalStore extends ChangeNotifier {
     _keep(staged);
     notifyListeners();
   }
+
+  /// [hlc], or just after [current] if that's later. A field last written
+  /// by a device whose date was set far ahead keeps that future timestamp;
+  /// without this, every later edit to it would lose until the real date
+  /// caught up.
+  Hlc _after(Hlc? current, Hlc hlc) => current == null || hlc > current
+      ? hlc
+      : Hlc(current.millis, current.counter + 1, nodeId);
 
   /// Applies changes received from the server and records the new cursor.
   void applyRemote(List<Change> changes, int cursor) {

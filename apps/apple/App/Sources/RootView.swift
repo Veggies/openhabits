@@ -85,16 +85,24 @@ struct PairingLinkView: View {
                     .foregroundStyle(.tint)
                 Text("Connect to your server?")
                     .font(.title2.bold())
-                Text("This signs this device in to \(pairing.server), so your habits stay in sync with your other devices.")
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
+                if let warning = app.sync.replacementWarning(for: pairing.server) {
+                    // Already signed in elsewhere: say what switching costs.
+                    Text(warning)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.orange)
+                } else {
+                    Text("This signs this device in to \(pairing.server), so your habits stay in sync with your other devices.")
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.secondary)
+                }
                 if let error {
                     Text(error).foregroundStyle(.red).multilineTextAlignment(.center)
                 }
                 Button {
                     Task { await connect() }
                 } label: {
-                    Text(working ? "Connecting…" : "Connect")
+                    Text(working ? "Connecting…"
+                        : app.sync.replacementWarning(for: pairing.server) == nil ? "Connect" : "Switch Servers")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.glassProminent)

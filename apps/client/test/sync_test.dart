@@ -129,6 +129,35 @@ void main() {
     expect(phone.store.pendingCount, 0);
   });
 
+  test('a field written by a device with its date set ahead can still be '
+      'changed', () async {
+    final id = phone.repo.createHabit({'name': 'Read'});
+    await phone.sync.syncNow();
+    // A third device, its date set three days ahead, renames it.
+    final owner = auth.userByName('ryan')!.id;
+    serverStore.apply(owner, [
+      Change(
+        table: Tables.habits,
+        rowId: id,
+        field: 'name',
+        value: 'From the future',
+        hlc: Hlc(
+          DateTime.now().add(const Duration(days: 3)).millisecondsSinceEpoch,
+          0,
+          'wrong-date',
+        ),
+      ),
+    ]);
+    await phone.sync.syncNow();
+    expect(phone.repo.habit(id)!.name, 'From the future');
+
+    phone.repo.updateHabit(id, {'name': 'Read before bed'});
+    expect(phone.repo.habit(id)!.name, 'Read before bed');
+    await phone.sync.syncNow();
+    await laptop.sync.syncNow();
+    expect(laptop.repo.habit(id)!.name, 'Read before bed');
+  });
+
   test('concurrent edits to different fields both survive', () async {
     final id = phone.repo.createHabit({'name': 'Read'});
     await phone.sync.syncNow();
@@ -578,6 +607,40 @@ void main() {
       );
     });
 
+    test('a reinstall at a new address also keeps and uploads the habits',
+        () async {
+      phone.repo.createHabit({'name': 'Only copy is on the phone'});
+      await phone.sync.syncNow();
+      final fresh = SyncStore.inMemory();
+      addTearDown(fresh.close);
+      final freshAuth = AuthStore(fresh)
+        ..createUser('ryan', password: 'correct horse');
+      phone.handler = buildHandler(fresh, freshAuth, serverId: 'new-box');
+
+      await phone.sync.signIn('http://new-box', 'ryan', 'correct horse');
+      await phone.sync.syncNow();
+      final owner = freshAuth.userByName('ryan')!.id;
+      expect(
+        fresh.rows(owner, Tables.habits).values.map((h) => h['name']),
+        contains('Only copy is on the phone'),
+      );
+    });
+
+    test("signing in doesn't fall back to the previous server's directory",
+        () async {
+      phone.store.setMeta(
+        'directoryLookup',
+        'https://directory.example/v1/servers/old',
+      );
+      phone.unreachable.add('new-box');
+      phone.hostsUsed.clear();
+      await expectLater(
+        phone.sync.signIn('http://new-box', 'ryan', 'correct horse'),
+        throwsA(isA<SyncException>()),
+      );
+      expect(phone.hostsUsed, isNot(contains('directory.example')));
+    });
+
     test('after a restore from backup, devices send what it lost', () async {
       final dir = Directory.systemTemp.createTempSync('restore');
       addTearDown(() => dir.deleteSync(recursive: true));
@@ -611,6 +674,16 @@ void main() {
       );
       device.sync.dispose();
     });
+  });
+
+  test('a pairing code for another server says what switching costs', () {
+    expect(phone.sync.replacementWarning(server), isNull); // same server
+    phone.repo.createHabit({'name': 'Not sent yet'});
+    final warning = phone.sync.replacementWarning('https://elsewhere.example');
+    expect(warning, contains(server));
+    expect(warning, contains('as ryan'));
+    expect(warning, contains("haven't been sent yet"));
+    expect(Device(handler).sync.replacementWarning('https://x.example'), isNull);
   });
 
   test('a queued change that can\'t be read doesn\'t block the rest', () async {

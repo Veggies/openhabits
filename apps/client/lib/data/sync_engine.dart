@@ -95,8 +95,10 @@ class SyncEngine extends ChangeNotifier {
   /// the server was reinstalled, for a clearer message.
   String? _otherServerAt;
 
-  /// A certificate the person just agreed to trust while signing in.
-  String? _trustOnce;
+  /// A certificate the person just agreed to trust while signing in, and
+  /// the address it's for. It's only accepted from that address, and is
+  /// forgotten when the sign-in finishes, whether or not it worked.
+  ({String host, String fingerprint})? _trustOnce;
   String? _lastSeenFingerprint;
 
   SyncStatus status = SyncStatus.notConfigured;
@@ -118,7 +120,7 @@ class SyncEngine extends ChangeNotifier {
       final fingerprint = fingerprintOf(cert.der);
       _lastSeenFingerprint = fingerprint;
       return fingerprint == store.meta('fingerprint') ||
-          fingerprint == _trustOnce;
+          (fingerprint == _trustOnce?.fingerprint && host == _trustOnce?.host);
     };
 
   static String _defaultDeviceName() => switch (defaultTargetPlatform) {
@@ -204,8 +206,31 @@ class SyncEngine extends ChangeNotifier {
       ? SyncException("Couldn't make a secure connection to $url.")
       : UntrustedServerException(url, _lastSeenFingerprint!);
 
-  /// Trusts a server certificate the person confirmed, for signing in.
-  void trustCertificate(String fingerprint) => _trustOnce = fingerprint;
+  /// What to tell the person before signing in to [server] from a pairing
+  /// QR code, if this device is already signed in somewhere else: that it
+  /// replaces that, and what could be lost. Null when there's nothing to
+  /// warn about. Matches replacementWarning in SyncEngine.swift.
+  String? replacementWarning(String server) {
+    final current = serverUrl;
+    if (!isConfigured || current == null || normalizeUrl(server) == current) {
+      return null;
+    }
+    final who = account == null ? '' : ' as ${account!.username}';
+    final waiting = store.pendingCount;
+    final unsent = switch (waiting) {
+      0 => '',
+      1 => ", including 1 change that hasn't been sent yet",
+      _ => ", including $waiting changes that haven't been sent yet",
+    };
+    return 'This device is signed in to $current$who. Connecting switches it '
+        "to $server. If that's a different account, the habits on this "
+        'device will be removed from it$unsent.';
+  }
+
+  /// Trusts a server certificate the person confirmed, for signing in to
+  /// [url].
+  void trustCertificate(String fingerprint, {required String url}) =>
+      _trustOnce = (host: Uri.parse(url).host, fingerprint: fingerprint);
 
   Future<Account> signIn(String url, String username, String password) =>
       _finishSignIn(
@@ -223,7 +248,10 @@ class SyncEngine extends ChangeNotifier {
     String? remoteUrl,
     String? fingerprint,
   }) {
-    if (fingerprint != null) _trustOnce = fingerprint;
+    // The QR code's certificate is for the remote address.
+    if (fingerprint != null && remoteUrl != null) {
+      trustCertificate(fingerprint, url: remoteUrl);
+    }
     return _finishSignIn([url, ?remoteUrl], '/auth/redeem', {'code': code});
   }
 
@@ -251,22 +279,33 @@ class SyncEngine extends ChangeNotifier {
     String path,
     Map<String, Object?> body,
   ) async {
-    final (url, response) = await _sendFirst(
-      urls,
-      'POST',
-      path,
-      body: {...body, 'device': deviceName},
-      auth: false,
-    );
+    // Accepted while this sign-in runs, then forgotten either way.
+    final trusted = _trustOnce;
+    final String url;
+    final Map<String, Object?> response;
+    try {
+      // Only the addresses being signed in to: not the previous server's
+      // directory, which could sign this device in to the wrong server.
+      (url, response) = await _sendFirst(
+        urls,
+        'POST',
+        path,
+        body: {...body, 'device': deviceName},
+        auth: false,
+        askDirectory: false,
+      );
+    } finally {
+      _trustOnce = null;
+    }
     final account = Account.fromJson(response['user'] as Map<String, Object?>);
     final sameServer = urls.first == serverUrl;
     final previous = this.account;
     if (previous != null && previous.id != account.id) {
-      if (sameServer &&
-          previous.username.toLowerCase() == account.username.toLowerCase()) {
-        // The same person on the same server, but their account is new: the
-        // server was reinstalled or reset. This device may hold the only
-        // copy of their habits, so send it all rather than deleting it.
+      if (previous.username.toLowerCase() == account.username.toLowerCase()) {
+        // The same person, but their account is new: the server was
+        // reinstalled or reset, perhaps at a new address. This device may
+        // hold the only copy of their habits, so send it all rather than
+        // deleting it.
         store.requeueAll();
       } else {
         // A different person on this device: don't mix their data with the
@@ -294,9 +333,12 @@ class SyncEngine extends ChangeNotifier {
     store.setMeta('account', jsonEncode(account.toJson()));
     if (urls.length > 1) store.setMeta('remoteUrl', urls[1]);
     // Pin the certificate the person confirmed or the QR code carried, even
-    // when signing in over the home network, for use when away.
-    if (_trustOnce != null) store.setMeta('fingerprint', _trustOnce);
-    _trustOnce = null;
+    // when signing in over the home network, for use when away. Only if it
+    // was confirmed for one of the addresses signed in to.
+    if (trusted != null &&
+        urls.any((u) => Uri.parse(u).host == trusted.host)) {
+      store.setMeta('fingerprint', trusted.fingerprint);
+    }
     _activeUrl = url;
     status = SyncStatus.idle;
     notifyListeners();

@@ -94,7 +94,8 @@ public final class LocalStore {
         do {
             try db.transaction {
                 for (field, value) in fields {
-                    let change = Change(table: table, rowId: rowId, field: field, value: value, hlc: hlc)
+                    let change = Change(table: table, rowId: rowId, field: field, value: value,
+                        hlc: Self.after(hlcs[Self.key(table, rowId, field)], hlc))
                     try persist(change, &staged)
                     let json = String(decoding: try encoder.encode(change), as: UTF8.self)
                     try db.run("INSERT INTO outbox (change) VALUES (?)", [json])
@@ -107,6 +108,15 @@ public final class LocalStore {
         revision += 1
         onLocalWrite?()
         onChange?()
+    }
+
+    /// `hlc`, or just after `current` if that's later. A field last written
+    /// by a device whose date was set far ahead keeps that future
+    /// timestamp; without this, every later edit to it would lose until
+    /// the real date caught up. Matches `_after` in local_store.dart.
+    static func after(_ current: HLC?, _ hlc: HLC) -> HLC {
+        guard let current, !(hlc > current) else { return hlc }
+        return HLC(current.millis, current.counter + 1, hlc.nodeId)
     }
 
     /// Applies changes from the server and records the new cursor.
