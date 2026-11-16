@@ -558,8 +558,9 @@ class _CalendarLinkDialogState extends State<_CalendarLinkDialog> {
                       ),
                       child: Text(
                         "Right now this link only works on your home network, so it won't "
-                        "work in Google Calendar or when you're out. To fix that, give your "
-                        "server a public address on its setup page, under Remote access → Advanced.",
+                        "work in Google Calendar or when you're out. Calendar apps need an "
+                        "address with a normal certificate, so on your server's setup page, "
+                        "add a reverse proxy or relay address under Remote access → Advanced.",
                         style: theme.textTheme.bodySmall,
                       ),
                     ),
