@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:core/core.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -40,11 +42,28 @@ class _HabitEditorState extends State<HabitEditor> {
       ),
   };
 
+  /// The fields as the editor opened, to save only what the person
+  /// changed. Saving everything would undo edits another device made to
+  /// other fields while this editor was open.
+  late final Map<String, Object?> _loaded;
+
   @override
   void initState() {
     super.initState();
     if (widget.existing == null) weekdays = {1, 2, 3, 4, 5, 6, 7};
+    _loaded = _fields();
   }
+
+  Map<String, Object?> _fields() => {
+    'name': _name.text.trim(),
+    'color': color,
+    'icon': icon,
+    'kind': kind.name,
+    'weekdays': weekdays.toList()..sort(),
+    'duration': duration,
+    'remind': remind,
+    for (final MapEntry(:key, :value) in _plan.entries) key: value.text.trim(),
+  };
 
   @override
   void dispose() {
@@ -59,26 +78,22 @@ class _HabitEditorState extends State<HabitEditor> {
     final name = _name.text.trim();
     if (name.isEmpty) return;
     final repo = AppScope.of(context).repo;
-    final fields = <String, Object?>{
-      'name': name,
-      'color': color,
-      'icon': icon,
-      'kind': kind.name,
-      'weekdays': weekdays.toList()..sort(),
-      'duration': duration,
-      'remind': remind,
-      for (final MapEntry(:key, :value) in _plan.entries)
-        key: value.text.trim(),
-    };
+    final fields = _fields();
     if (widget.existing == null) {
       repo.createHabit(fields);
     } else {
       final existing = repo.habit(widget.existing!.id)!;
-      final version = _plan['twoMinute']!.text.trim();
+      final changed = {
+        for (final MapEntry(:key, :value) in fields.entries)
+          if (jsonEncode(value) != jsonEncode(_loaded[key])) key: value,
+      };
+      final version = fields['twoMinute'] as String;
       repo.updateHabit(existing.id, {
-        ...fields,
+        ...changed,
         // A changed version joins the habit's history.
-        if (version.isNotEmpty && existing.plan.twoMinute.isNotEmpty)
+        if (changed.containsKey('twoMinute') &&
+            version.isNotEmpty &&
+            existing.plan.twoMinute.isNotEmpty)
           ...repo.resizeFields(existing, version),
       });
     }

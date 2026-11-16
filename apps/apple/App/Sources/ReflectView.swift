@@ -104,7 +104,13 @@ struct WeeklyReviewView: View {
             }
         }
         .formStyle(.grouped)
-        .onAppear { load(shown) }
+        .onAppear {
+            // Keep the week that opened. Saving last week's review makes it
+            // no longer "due", which would otherwise switch the screen to
+            // this week mid-sentence. (The Flutter app does the same.)
+            if day == nil { day = shown }
+            load(shown)
+        }
         .onChange(of: Days.key(start)) { _, _ in load(shown) }
         .onDisappear { saveTask?.cancel(); flush(shown) }
     }

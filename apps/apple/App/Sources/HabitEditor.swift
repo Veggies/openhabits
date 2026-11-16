@@ -21,6 +21,8 @@ struct HabitEditor: View {
     @State private var startSmall = false
     @State private var choosingIcon = false
     @State private var loaded = false
+    /// The form as it opened, to save only what changed.
+    @State private var loadedFields: Fields = [:]
 
     var body: some View {
         let repo = app.repo
@@ -208,12 +210,12 @@ struct HabitEditor: View {
         }
         for f in HabitPlan.fieldNames { plan[f] = h.plan.value(f) }
         startSmall = !h.plan.twoMinute.isEmpty
+        loadedFields = currentFields()
     }
 
-    private func save() {
-        let repo = app.repo
+    /// The form as fields, the way they're saved.
+    private func currentFields() -> Fields {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
         var fields: Fields = [
             "name": .string(trimmed),
             "color": .int(color),
@@ -228,13 +230,24 @@ struct HabitEditor: View {
         }
         if !startSmall { fields["twoMinute"] = "" }
         fields["time"] = .string(hasTime ? TimeOfDay(time).text : "")
+        return fields
+    }
+
+    private func save() {
+        let repo = app.repo
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let fields = currentFields()
         if let existing, let current = repo.habit(existing.id) {
+            // Only what the person changed: saving everything would undo
+            // edits another device made to other fields while this editor
+            // was open. (Matches habit_editor.dart.)
+            var changed = fields.filter { loadedFields[$0.key] != $0.value }
             // A changed version joins the habit's history.
             let version = fields["twoMinute"]?.string ?? ""
-            if !version.isEmpty && !current.plan.twoMinute.isEmpty {
-                fields.merge(repo.resizeFields(current, to: version)) { _, b in b }
+            if changed["twoMinute"] != nil && !version.isEmpty && !current.plan.twoMinute.isEmpty {
+                changed.merge(repo.resizeFields(current, to: version)) { _, b in b }
             }
-            repo.updateHabit(existing.id, fields)
+            repo.updateHabit(existing.id, changed)
         } else {
             repo.createHabit(fields)
         }

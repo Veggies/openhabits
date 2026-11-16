@@ -60,6 +60,14 @@ class Reminders extends ChangeNotifier {
       ),
       onDidReceiveNotificationResponse: _answered,
     );
+    // Tapping "Mark as done" while the app was closed starts the app, and
+    // then the tap only arrives here, not through the callback above.
+    final launch = await _plugin.getNotificationAppLaunchDetails();
+    if (launch?.didNotificationLaunchApp == true) {
+      if (launch?.notificationResponse case final response?) {
+        _answered(response);
+      }
+    }
     _ready = true;
     repo.store.addListener(refreshSoon);
     refreshSoon();
@@ -107,7 +115,10 @@ class Reminders extends ChangeNotifier {
     final habits = repo.habits;
     final requests = <(DateTime, int, String, String, String?, bool)>[];
 
-    for (var offset = 0; offset < 7; offset++) {
+    // As many days ahead as the 60 notifications kept below cover, so
+    // reminders keep coming for weeks even if the app isn't opened (it
+    // reschedules whenever it is). Matches Reminders.swift.
+    for (var offset = 0; offset < 60; offset++) {
       final day = addDays(today, offset);
       if (habitTimes) {
         for (final h in habits) {

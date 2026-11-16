@@ -5,6 +5,7 @@ import 'package:client/data/repo.dart';
 import 'package:client/data/sync_engine.dart';
 import 'package:client/main.dart';
 import 'package:client/ui/common.dart';
+import 'package:client/ui/habit_editor.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -407,6 +408,32 @@ void main() {
     expect(habit.plan.identity, 'a reader');
     expect(habit.plan.reward, 'A square of chocolate');
     expect(find.text('Read'), findsWidgets); // now in the app, in the list
+  });
+
+  testWidgets("saving the editor doesn't undo another device's edit", (
+    tester,
+  ) async {
+    final repo = await pumpApp(tester, const Size(1400, 2400));
+    final id = repo.createHabit({'name': 'Read', 'color': listColors[0]});
+    await tester.pumpAndSettle();
+    tester
+        .state<NavigatorState>(find.byType(Navigator).first)
+        .push(
+          MaterialPageRoute<void>(
+            builder: (_) => HabitEditor(existing: repo.habit(id)),
+          ),
+        );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Read'),
+      'Read before bed',
+    );
+    // While the editor is open, a sync brings a new colour from the laptop.
+    repo.updateHabit(id, {'color': listColors[5]});
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(repo.habit(id)!.name, 'Read before bed');
+    expect(repo.habit(id)!.color, listColors[5]);
   });
 
   testWidgets('the editor shows the four laws', (tester) async {

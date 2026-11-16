@@ -96,7 +96,10 @@ final class Reminders: NSObject, UNUserNotificationCenterDelegate {
         let today = Days.start(now)
         let habits = repo.habits
 
-        for offset in 0..<7 {
+        // As many days ahead as the 60 notifications kept below cover, so
+        // reminders keep coming for weeks even if the app isn't opened (it
+        // reschedules whenever it is). Matches reminders.dart.
+        for offset in 0..<60 {
             let day = Days.add(today, offset)
             if habitTimes {
                 for h in habits where !h.isQuit && h.remind && h.isScheduled(day) {
