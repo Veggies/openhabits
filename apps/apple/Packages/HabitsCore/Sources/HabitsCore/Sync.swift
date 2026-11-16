@@ -24,9 +24,18 @@ public struct HLC: Comparable, Hashable, Sendable, CustomStringConvertible {
         now > millis ? HLC(now, 0, nodeId) : HLC(millis, counter + 1, nodeId)
     }
 
+    /// How far ahead of this device's clock a received timestamp may be and
+    /// still move the clock forward.
+    public static let maxDriftMillis = 24 * 60 * 60 * 1000
+
     /// Moves this clock past a timestamp from another device, so the next
     /// local edit is ordered after everything this device has seen.
+    ///
+    /// A timestamp more than `maxDriftMillis` ahead (a device whose date is
+    /// set wrong) is still merged by the usual rule, but doesn't drag this
+    /// clock into the future with it.
     public func receive(_ remote: HLC, _ now: Int) -> HLC {
+        let remote = remote.millis - now > Self.maxDriftMillis ? self : remote
         let m = max(millis, remote.millis, now)
         let c: Int
         if m == millis && m == remote.millis {

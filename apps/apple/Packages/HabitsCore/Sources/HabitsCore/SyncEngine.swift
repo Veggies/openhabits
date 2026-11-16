@@ -97,10 +97,14 @@ public final class SyncEngine {
     public private(set) var lastError: String?
     public private(set) var lastSynced: Date?
 
-    @ObservationIgnored private let pinning = PinningDelegate()
+    @ObservationIgnored let pinning = PinningDelegate()
+    @ObservationIgnored private let protocolClasses: [AnyClass]
     @ObservationIgnored private lazy var session: URLSession = {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 30
+        if !protocolClasses.isEmpty {
+            config.protocolClasses = protocolClasses + (config.protocolClasses ?? [])
+        }
         return URLSession(configuration: config, delegate: pinning, delegateQueue: nil)
     }()
     @ObservationIgnored private var timer: Task<Void, Never>?
@@ -109,9 +113,19 @@ public final class SyncEngine {
     @ObservationIgnored private var again = false
     @ObservationIgnored private var activeUrl: String?
 
-    public init(store: LocalStore, deviceName: String) {
+    /// Addresses that have shown they're this device's server. The sign-in
+    /// token is only sent to these.
+    @ObservationIgnored private var verified: Set<String> = []
+
+    /// An address where a different OpenHabits server answered, e.g. after
+    /// the server was reinstalled, for a clearer message.
+    @ObservationIgnored private var otherServerAt: String?
+
+    /// `protocolClasses` lets tests answer requests without a network.
+    public init(store: LocalStore, deviceName: String, protocolClasses: [AnyClass] = []) {
         self.store = store
         self.deviceName = deviceName
+        self.protocolClasses = protocolClasses
         pinning.pinned = store.meta("fingerprint")
         if isConfigured { status = .idle }
         store.onLocalWrite = { [weak self] in self?.localChange() }
@@ -220,23 +234,40 @@ public final class SyncEngine {
         guard let user = response["user"], let tokenValue = response["token"]?.string,
             let account = try? JSONDecoder().decode(Account.self, from: JSONEncoder().encode(user))
         else { throw SyncError("The server sent back something unexpected. Try again.") }
-        // A different person on this device: don't mix their data with the
-        // previous person's. Data made before any sign-in is kept.
-        if let previous = self.account, previous.id != account.id { store.reset() }
-        if urls.first != serverUrl {
+        let sameServer = urls.first == serverUrl
+        if let previous = self.account, previous.id != account.id {
+            if sameServer && previous.username.lowercased() == account.username.lowercased() {
+                // The same person on the same server, but their account is
+                // new: the server was reinstalled or reset. This device may
+                // hold the only copy of their habits, so send it all rather
+                // than deleting it.
+                store.requeueAll()
+            } else {
+                // A different person on this device: don't mix their data
+                // with the previous person's. Data made before any sign-in
+                // is kept.
+                store.reset()
+            }
+        }
+        if !sameServer {
             store.setMeta("cursor", "0")
             store.setMeta("remoteUrl", nil)
             store.setMeta("fingerprint", nil)
             store.setMeta("directoryLookup", nil)
+            store.setMeta("directoryKey", nil)
+            store.setMeta("directoryTs", nil)
         }
+        store.setMeta("serverId", response["server"]?.object?["id"]?.string)
+        verified = [url]
+        otherServerAt = nil
         store.setMeta("serverUrl", urls.first)
         store.setMeta("token", tokenValue)
         store.setMeta("account", user.encoded())
         if urls.count > 1 { store.setMeta("remoteUrl", urls[1]) }
-        if let trusted = pinning.trustOnce {
-            store.setMeta("fingerprint", trusted)
-            pinning.pinned = trusted
-        }
+        if let trusted = pinning.trustOnce { store.setMeta("fingerprint", trusted) }
+        // The previous server's certificate stops being trusted straight
+        // away, not at the next launch.
+        pinning.pinned = store.meta("fingerprint")
         pinning.trustOnce = nil
         activeUrl = url
         status = .idle
@@ -308,6 +339,7 @@ public final class SyncEngine {
     private func send(_ method: String, _ path: String, body: Fields? = nil) async throws -> Fields {
         var urls: [String] = []
         for u in [activeUrl, serverUrl, remoteUrl] { if let u, !urls.contains(u) { urls.append(u) } }
+        otherServerAt = nil
         let (url, result) = try await sendFirst(urls: urls, method: method, path: path, body: body)
         activeUrl = url
         return result
@@ -323,6 +355,7 @@ public final class SyncEngine {
         var timedOut = false
         for url in urls {
             do {
+                if auth { try await verify(url, quick: urls.count > 1) }
                 return (url, try await sendTo(url + path, method: method, body: body, auth: auth,
                     quick: urls.count > 1))
             } catch let e as Unreachable {
@@ -331,8 +364,9 @@ public final class SyncEngine {
         }
         // None of the known addresses answer. The home's internet address
         // may have changed while this device was away: ask the directory
-        // where the server is now. The certificate is still checked, so a
-        // wrong answer can't lead anywhere else.
+        // where the server is now. Only addresses the server signed are
+        // tried, and each must still show it's this server before the token
+        // is sent.
         if askDirectory {
             let moved = await directoryUrls().filter { !urls.contains($0) }
             if !moved.isEmpty,
@@ -343,9 +377,34 @@ public final class SyncEngine {
                 return found
             }
         }
+        if let other = otherServerAt {
+            throw SyncError("A different OpenHabits server answered at \(other). If you reinstalled "
+                + "your server, sign in again to send it the habits on this device.")
+        }
         throw SyncError(timedOut
             ? "The server's taking too long to answer. Make sure it's running, then try again."
             : "Couldn't reach your server. Check that it's running and that you're online.")
+    }
+
+    /// Checks that `url` is this device's server before the sign-in token
+    /// goes there. Away from home, the home address may belong to some
+    /// other device on whatever network this one has joined, and a hotel or
+    /// café network may answer every address with its own sign-in page.
+    private func verify(_ url: String, quick: Bool) async throws {
+        // Signed in before servers had ids: learned at the next sync.
+        guard let id = store.meta("serverId"), !verified.contains(url) else { return }
+        let info: Fields
+        do {
+            info = try await sendTo(url + "/auth/info", method: "GET", body: nil, auth: false, quick: quick)
+        } catch is SyncError {
+            // An error page from something that isn't this server.
+            throw Unreachable()
+        }
+        guard info["id"]?.string == id else {
+            if info["id"]?.string != nil { otherServerAt = url }
+            throw Unreachable()
+        }
+        verified.insert(url)
     }
 
     private func sendTo(_ address: String, method: String, body: Fields?, auth: Bool, quick: Bool)
@@ -365,18 +424,37 @@ public final class SyncEngine {
         } catch let error as URLError {
             throw Unreachable(timedOut: error.code == .timedOut)
         }
-        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-        let decoded = try? JSONDecoder().decode(Fields.self, from: data)
+        let http = response as? HTTPURLResponse
+        let code = http?.statusCode ?? 0
+        // Every answer from this device's server says which server it is.
+        // Something else answering at the address (after moving to another
+        // network) is treated as if nothing answered: its errors don't sign
+        // this device out and its answers aren't trusted. (Signing in is
+        // exempt: the person is choosing a server then.)
+        let base = url.scheme.map { "\($0)://" + (url.host(percentEncoded: false) ?? "") } ?? ""
+        let origin = base + (url.port.map { ":\($0)" } ?? "")
+        if auth, let expected = store.meta("serverId") {
+            let answeredBy = http?.value(forHTTPHeaderField: "x-openhabits-server")
+            if answeredBy != expected {
+                verified.remove(origin)
+                if answeredBy != nil { otherServerAt = origin }
+                throw Unreachable()
+            }
+        }
+        // Every answer from the server is JSON. Anything else came from
+        // something else at this address (a hotel sign-in page, a proxy's
+        // error page), so carry on as if nothing answered.
+        guard let decoded = try? JSONDecoder().decode(Fields.self, from: data) else { throw Unreachable() }
         if code == 401 && auth && isConfigured {
             // The session was ended elsewhere, or the account was removed.
             store.setMeta("token", nil)
             status = .signedOut
         }
         guard code == 200 else {
-            throw SyncError(decoded?["error"]?.string
+            throw SyncError(decoded["error"]?.string
                 ?? "Something went wrong on the server (error \(code)). Try again in a little while.")
         }
-        return decoded ?? [:]
+        return decoded
     }
 
     // MARK: Sync
@@ -397,6 +475,11 @@ public final class SyncEngine {
 
     private func sync() async {
         status = .syncing
+        // Plain http addresses are checked again on every sync: this device
+        // may have moved to another network since, where the same home
+        // address is something else. (https addresses prove themselves with
+        // their certificate.)
+        verified = verified.filter { !$0.hasPrefix("http://") }
         do {
             repeat {
                 again = false
@@ -413,34 +496,64 @@ public final class SyncEngine {
 
     private func roundTrip() async throws {
         let pending = store.pending()
+        let since = store.cursor
         let changes = try JSONDecoder().decode([JSONValue].self, from: JSONEncoder().encode(pending.changes))
-        let body = try await post("/sync", ["since": .int(store.cursor), "changes": .array(changes)])
+        let body = try await post("/sync", ["since": .int(since), "changes": .array(changes)])
+        // Check the answer before forgetting what was sent: if it isn't a
+        // real sync answer, the queued edits stay queued and go again.
+        guard let cursor = body["cursor"]?.int, let received = body["changes"]?.array else {
+            throw SyncError("The server sent back something unexpected. Your changes are safe on "
+                + "this device and will be sent again.")
+        }
+        // One unreadable change shouldn't stop all the others.
+        let decoder = JSONDecoder()
+        let incoming = received.compactMap { value in
+            (try? JSONEncoder().encode(value)).flatMap { try? decoder.decode(Change.self, from: $0) }
+        }
         if pending.lastId > 0 { store.markSent(upTo: pending.lastId) }
         followRemote(body["server"])
-        let incoming = try JSONDecoder().decode([Change].self,
-            from: JSONEncoder().encode(body["changes"] ?? .array([])))
-        try store.applyRemote(incoming, cursor: body["cursor"]?.int ?? store.cursor)
+        if cursor < since {
+            // The server has gone back in time: restored from a backup. It
+            // may be missing changes this device already sent, so send
+            // everything again and fetch everything it has.
+            store.requeueAll()
+            return
+        }
+        try store.applyRemote(incoming, cursor: cursor)
     }
 
-    /// Where the directory says this server can be reached now.
+    /// Where the directory says this server can be reached now. Only
+    /// addresses the server itself signed are used: the directory just
+    /// passes them on, and a directory that was tampered with can't add its
+    /// own.
     private func directoryUrls() async -> [String] {
-        guard let lookup = store.meta("directoryLookup"), let url = URL(string: lookup) else { return [] }
+        guard let lookup = store.meta("directoryLookup"), let url = URL(string: lookup),
+            let key = store.meta("directoryKey")
+        else { return [] }
         var request = URLRequest(url: url)
         request.timeoutInterval = 8
         guard let (data, response) = try? await session.data(for: request),
             (response as? HTTPURLResponse)?.statusCode == 200,
             let json = try? JSONDecoder().decode([String: JSONValue].self, from: data),
-            let urls = json["urls"]?.array
+            let record = DirectoryRecord.verify(json, key: key, id: url.lastPathComponent,
+                notBefore: Int(store.meta("directoryTs") ?? "") ?? 0)
         else { return [] }
-        return urls.compactMap(\.string).filter { $0.hasPrefix("https://") }
+        // An older record can't be replayed later to send this device to an
+        // address the server has since given up.
+        store.setMeta("directoryTs", String(record.ts))
+        return record.urls
     }
 
     /// Keeps the remote address current, e.g. after the home internet
     /// address changes or remote access is turned on or off.
     private func followRemote(_ server: JSONValue?) {
         guard let server = server?.object else { return }
+        // Signed in before servers had ids: learn it from the server this
+        // device is already talking to.
+        if store.meta("serverId") == nil, let id = server["id"]?.string { store.setMeta("serverId", id) }
         if let directory = server["directory"] {
             store.setMeta("directoryLookup", directory.object?["lookup"]?.string)
+            store.setMeta("directoryKey", directory.object?["key"]?.string)
         }
         if let remote = server["remote"]?.object, let url = remote["url"]?.string {
             store.setMeta("remoteUrl", url)
@@ -485,12 +598,20 @@ final class PinningDelegate: NSObject, URLSessionDelegate, @unchecked Sendable {
         guard let leaf = (SecTrustCopyCertificateChain(trust) as? [SecCertificate])?.first else {
             return (.cancelAuthenticationChallenge, nil)
         }
-        let der = SecCertificateCopyData(leaf) as Data
-        let fingerprint = SHA256.hash(data: der).map { String(format: "%02X", $0) }.joined(separator: ":")
+        let fingerprint = Self.fingerprint(of: SecCertificateCopyData(leaf) as Data)
         lastSeen = fingerprint
-        if fingerprint == pinned || fingerprint == trustOnce {
-            return (.useCredential, URLCredential(trust: trust))
-        }
+        if accepts(fingerprint) { return (.useCredential, URLCredential(trust: trust)) }
         return (.cancelAuthenticationChallenge, nil)
+    }
+
+    /// Whether a certificate that isn't otherwise trusted is this server's:
+    /// the pinned one, or one the person just confirmed.
+    func accepts(_ fingerprint: String) -> Bool {
+        fingerprint == pinned || fingerprint == trustOnce
+    }
+
+    /// SHA-256 of a certificate, formatted as the server shows it ("3F:A2:…").
+    static func fingerprint(of der: Data) -> String {
+        SHA256.hash(data: der).map { String(format: "%02X", $0) }.joined(separator: ":")
     }
 }

@@ -17,38 +17,58 @@ import 'package:server/remote/upnp.dart';
 import 'package:server/settings_store.dart';
 import 'package:server/sync_store.dart';
 import 'package:shelf/shelf.dart' as shelf;
+import 'package:sqlite3/sqlite3.dart';
 
 const server = 'http://server';
 
 /// A device: its own local database, repo and sync engine, talking to the
 /// real server handler in memory.
 class Device {
-  final LocalStore store = LocalStore.inMemory();
+  final LocalStore store;
   late final Repo repo = Repo(store);
   late final SyncEngine sync;
+
+  /// The server this device reaches; swapped to simulate a reinstall.
+  shelf.Handler handler;
 
   /// Hosts this device can't reach right now (e.g. home, while away).
   final unreachable = <String>{};
   final hostsUsed = <String>[];
 
-  /// The directory's entries (server ID → addresses), shared by everyone.
-  static final directory = <String, List<String>>{};
+  /// Something other than the server answering at a host, e.g. a hotel's
+  /// sign-in page, or another device that happens to have the home
+  /// server's address on someone else's network.
+  final impostors = <String, http.Response>{};
 
-  Device(shelf.Handler handler) {
+  /// Every sign-in token sent to each host.
+  final tokensSentTo = <String>[];
+
+  /// The directory's entries (server ID → what the server published, as
+  /// the real directory hands it back), shared by everyone.
+  static final directory = <String, Map<String, Object?>>{};
+
+  Device(this.handler, {LocalStore? store})
+    : store = store ?? LocalStore.inMemory() {
     sync = SyncEngine(
-      store,
+      this.store,
       deviceName: 'Test',
       client: MockClient((request) async {
         if (unreachable.contains(request.url.host)) {
           throw const SocketException('No route to host');
         }
         hostsUsed.add(request.url.host);
-        if (request.url.host == 'directory.example') {
-          final urls = directory[request.url.pathSegments.last];
-          return urls == null
-              ? http.Response('{"error":"No server with that ID."}', 404)
-              : http.Response(jsonEncode({'urls': urls}), 200);
+        if (request.headers['authorization'] case final auth?
+            when auth != 'Bearer null') {
+          tokensSentTo.add(request.url.host);
         }
+        if (impostors[request.url.host] case final response?) return response;
+        if (request.url.host == 'directory.example') {
+          final entry = directory[request.url.pathSegments.last];
+          return entry == null
+              ? http.Response('{"error":"No server with that ID."}', 404)
+              : http.Response(jsonEncode(entry), 200);
+        }
+        // The current server, which a test may swap out.
         final response = await handler(
           shelf.Request(
             request.method,
@@ -88,7 +108,7 @@ void main() {
     auth = AuthStore(serverStore);
     auth.createUser('ryan', password: 'correct horse');
     auth.createUser('sam', password: 'sam password');
-    handler = buildHandler(serverStore, auth);
+    handler = buildHandler(serverStore, auth, serverId: 'home-server');
     phone = Device(handler);
     laptop = Device(handler);
     await phone.signIn();
@@ -292,6 +312,7 @@ void main() {
         settings: settings,
         remote: remote,
         fingerprint: 'AA:BB',
+        serverId: 'home-server',
       );
     });
 
@@ -365,11 +386,13 @@ void main() {
             Uri.parse('https://directory.example'),
             identity,
             client: MockClient((request) async {
-              final payload = jsonDecode(
-                (jsonDecode(request.body) as Map)['payload'] as String,
-              );
-              Device.directory[identity.id] = (payload['urls'] as List)
-                  .cast<String>();
+              final body = jsonDecode(request.body) as Map<String, Object?>;
+              final payload = jsonDecode(body['payload'] as String) as Map;
+              Device.directory[identity.id] = {
+                'urls': payload['urls'],
+                'payload': body['payload'],
+                'sig': body['sig'],
+              };
               return http.Response('{"ok":true}', 200);
             }),
           ),
@@ -381,6 +404,8 @@ void main() {
           settings: settings,
           remote: remote,
           fingerprint: 'AA:BB',
+          serverId: identity.id,
+          serverKey: identity.publicKeyBase64Url,
         );
 
         final phone = Device(handler);
@@ -405,7 +430,75 @@ void main() {
         phone.hostsUsed.clear();
         await phone.sync.syncNow();
         expect(phone.hostsUsed, everyElement('198.51.100.30'));
+
+        // A directory that's been tampered with points somewhere else. The
+        // address isn't signed by the server, so the phone ignores it.
+        final forger = DirectoryIdentity.loadOrCreate(
+          Directory.systemTemp.createTempSync('forger'),
+        );
+        final forged = jsonEncode({
+          'id': identity.id,
+          'urls': ['https://evil.example'],
+          'ts': DateTime.now().millisecondsSinceEpoch,
+        });
+        Device.directory[identity.id] = {
+          'urls': ['https://evil.example'],
+          'payload': forged,
+          'sig': base64Url
+              .encode(forger.sign(utf8.encode(forged)))
+              .replaceAll('=', ''),
+        };
+        phone.unreachable.add('198.51.100.30');
+        phone.repo.createHabit({'name': 'Kept safe'});
+        await phone.sync.syncNow();
+        expect(phone.hostsUsed, isNot(contains('evil.example')));
+        expect(phone.sync.status, SyncStatus.error);
+        expect(phone.store.pendingCount, greaterThan(0));
         phone.sync.dispose();
+      },
+    );
+
+    test(
+      "something else at an already trusted remote address can't sign the "
+      'phone out',
+      () async {
+        final device = Device(remoteHandler);
+        await device.signIn();
+        device.unreachable.add('server');
+        await device.sync.syncNow(); // the remote address checks out
+        expect(device.sync.status, SyncStatus.idle);
+
+        device.impostors['203.0.113.7'] = http.Response(
+          '{"error":"Please sign in again."}',
+          401,
+        );
+        device.repo.createHabit({'name': 'Kept'});
+        await device.sync.syncNow();
+        expect(device.sync.status, isNot(SyncStatus.signedOut));
+        expect(device.store.pendingCount, greaterThan(0));
+        device.sync.dispose();
+      },
+    );
+
+    test(
+      "away from home, another device at the home address doesn't get the "
+      "token and can't sign the phone out",
+      () async {
+        final device = Device(remoteHandler);
+        await device.signIn();
+        // On someone else's network, something else has the same address as
+        // the home server and refuses everything.
+        device.impostors['server'] = http.Response(
+          '{"error":"Please sign in again."}',
+          401,
+        );
+        device.tokensSentTo.clear();
+        device.repo.createHabit({'name': 'At a friend\'s house'});
+        await device.sync.syncNow();
+        expect(device.sync.status, SyncStatus.idle);
+        expect(device.tokensSentTo, isNot(contains('server')));
+        expect(device.store.pendingCount, 0); // went via the remote address
+        device.sync.dispose();
       },
     );
 
@@ -421,6 +514,121 @@ void main() {
         device.sync.dispose();
       },
     );
+  });
+
+  group('things that answer but are not the server', () {
+    test("a hotel's sign-in page doesn't swallow queued changes", () async {
+      phone.impostors['server'] = http.Response(
+        '<html>Welcome! Accept the terms to get online.</html>',
+        200,
+        headers: {'content-type': 'text/html'},
+      );
+      phone.repo.createHabit({'name': 'Made at the hotel'});
+      await phone.sync.syncNow();
+      expect(phone.sync.status, SyncStatus.error);
+      expect(phone.store.pendingCount, greaterThan(0));
+
+      // Back online properly: everything arrives.
+      phone.impostors.clear();
+      await phone.sync.syncNow();
+      await laptop.sync.syncNow();
+      expect(
+        laptop.repo.habits.map((h) => h.name),
+        contains('Made at the hotel'),
+      );
+    });
+
+    test('a 200 that isn\'t a sync answer keeps the queue too', () async {
+      // Even from a device signed in before servers had ids, so the address
+      // isn't checked first.
+      phone.store.setMeta('serverId', null);
+      phone.impostors['server'] = http.Response('{"ok":true}', 200);
+      phone.repo.createHabit({'name': 'Still queued'});
+      await phone.sync.syncNow();
+      expect(phone.store.pendingCount, greaterThan(0));
+    });
+  });
+
+  group('when the server loses data', () {
+    test('after a reinstall, signing in again uploads this device\'s habits '
+        'instead of deleting them', () async {
+      phone.repo.createHabit({'name': 'Only copy is on the phone'});
+      await phone.sync.syncNow();
+
+      // The server is wiped and set up again, same address, same name.
+      final fresh = SyncStore.inMemory();
+      addTearDown(fresh.close);
+      final freshAuth = AuthStore(fresh)
+        ..createUser('ryan', password: 'correct horse');
+      phone.handler = buildHandler(fresh, freshAuth, serverId: 'reinstalled');
+
+      await phone.sync.syncNow();
+      expect(phone.sync.status, SyncStatus.error);
+      expect(phone.sync.lastError, contains('sign in again'));
+
+      await phone.signIn();
+      expect(
+        phone.repo.habits.map((h) => h.name),
+        contains('Only copy is on the phone'),
+      );
+      final owner = freshAuth.userByName('ryan')!.id;
+      expect(
+        fresh.rows(owner, Tables.habits).values.map((h) => h['name']),
+        contains('Only copy is on the phone'),
+      );
+    });
+
+    test('after a restore from backup, devices send what it lost', () async {
+      final dir = Directory.systemTemp.createTempSync('restore');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final path = '${dir.path}/data.sqlite';
+      final live = SyncStore.open(path);
+      final liveAuth = AuthStore(live)
+        ..createUser('ryan', password: 'correct horse');
+      final device = Device(buildHandler(live, liveAuth, serverId: 'home'));
+      await device.signIn();
+      device.repo.createHabit({'name': 'Before the backup'});
+      await device.sync.syncNow();
+
+      File(path).copySync('${dir.path}/backup.sqlite');
+      device.repo.createHabit({'name': 'After the backup'});
+      device.repo.createHabit({'name': 'Also after'});
+      await device.sync.syncNow();
+      live.close();
+
+      // The disk fails; the owner restores last night's backup.
+      final restored = SyncStore.open('${dir.path}/backup.sqlite');
+      addTearDown(restored.close);
+      device.handler = buildHandler(restored, AuthStore(restored),
+          serverId: 'home');
+      await device.sync.syncNow();
+      await device.sync.syncNow();
+      expect(device.sync.status, SyncStatus.idle);
+      final owner = AuthStore(restored).userByName('ryan')!.id;
+      expect(
+        restored.rows(owner, Tables.habits).values.map((h) => h['name']),
+        containsAll(['Before the backup', 'After the backup', 'Also after']),
+      );
+      device.sync.dispose();
+    });
+  });
+
+  test('a queued change that can\'t be read doesn\'t block the rest', () async {
+    final db = sqlite3.openInMemory();
+    final store = LocalStore(db);
+    final device = Device(handler, store: store);
+    await device.signIn();
+    db.execute("INSERT INTO outbox (change) VALUES ('not json')");
+    device.repo.createHabit({'name': 'After the bad one'});
+    await device.sync.syncNow();
+    expect(device.sync.status, SyncStatus.idle);
+    expect(store.pendingCount, 0);
+    await laptop.sync.syncNow();
+    expect(
+      laptop.repo.habits.map((h) => h.name),
+      contains('After the bad one'),
+    );
+    device.sync.dispose();
   });
 
   test('local data and queued changes survive an app restart', () {

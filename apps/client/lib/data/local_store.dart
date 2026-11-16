@@ -44,7 +44,7 @@ class LocalStore extends ChangeNotifier {
         jsonDecode(row['value'] as String),
         hlc,
       );
-      if (hlc > clock) clock = Hlc(hlc.millis, hlc.counter, nodeId);
+      clock = clock.receive(hlc, DateTime.now().millisecondsSinceEpoch);
     }
     _clock = clock;
   }
@@ -82,11 +82,12 @@ class LocalStore extends ChangeNotifier {
       for (final MapEntry(:key, :value) in fields.entries)
         Change(table: table, rowId: rowId, field: key, value: value, hlc: hlc),
     ];
+    final staged = <(String, String, String), Change>{};
     _db.execute('BEGIN');
     try {
       final queue = _db.prepare('INSERT INTO outbox (change) VALUES (?)');
       for (final c in changes) {
-        _applyAndPersist(c);
+        _persist(c, staged);
         queue.execute([jsonEncode(c.toJson())]);
       }
       queue.close();
@@ -95,18 +96,19 @@ class LocalStore extends ChangeNotifier {
       _db.execute('ROLLBACK');
       rethrow;
     }
+    _keep(staged);
     notifyListeners();
   }
 
   /// Applies changes received from the server and records the new cursor.
   void applyRemote(List<Change> changes, int cursor) {
     final now = DateTime.now().millisecondsSinceEpoch;
-    var changed = false;
+    final staged = <(String, String, String), Change>{};
     _db.execute('BEGIN');
     try {
       for (final c in changes) {
         _clock = _clock.receive(c.hlc, now);
-        changed |= _applyAndPersist(c);
+        _persist(c, staged);
       }
       setMeta('cursor', '$cursor');
       _db.execute('COMMIT');
@@ -114,12 +116,16 @@ class LocalStore extends ChangeNotifier {
       _db.execute('ROLLBACK');
       rethrow;
     }
-    if (changed) notifyListeners();
+    _keep(staged);
+    if (staged.isNotEmpty) notifyListeners();
   }
 
-  bool _applyAndPersist(Change c) {
+  /// Writes [c] to the database if it wins, and notes it in [staged]. The
+  /// in-memory copy is only updated by [_keep], after the database has
+  /// committed, so a failed save can't leave the two disagreeing.
+  void _persist(Change c, Map<(String, String, String), Change> staged) {
     final key = (c.table, c.rowId, c.field);
-    final currentHlc = _hlcs[key];
+    final currentHlc = staged[key]?.hlc ?? _hlcs[key];
     final current = currentHlc == null
         ? null
         : Change(
@@ -129,13 +135,18 @@ class LocalStore extends ChangeNotifier {
             value: null,
             hlc: currentHlc,
           );
-    if (!shouldApply(c, current)) return false;
-    _put(c.table, c.rowId, c.field, c.value, c.hlc);
+    if (!shouldApply(c, current)) return;
     _db.execute(
       'INSERT OR REPLACE INTO fields (tbl, row_id, field, value, hlc) VALUES (?, ?, ?, ?, ?)',
       [c.table, c.rowId, c.field, jsonEncode(c.value), c.hlc.pack()],
     );
-    return true;
+    staged[key] = c;
+  }
+
+  void _keep(Map<(String, String, String), Change> staged) {
+    for (final c in staged.values) {
+      _put(c.table, c.rowId, c.field, c.value, c.hlc);
+    }
   }
 
   void _put(String table, String rowId, String field, Object? value, Hlc hlc) {
@@ -159,21 +170,61 @@ class LocalStore extends ChangeNotifier {
   int get pendingCount =>
       _db.select('SELECT COUNT(*) AS n FROM outbox').first['n'] as int;
 
-  /// The oldest queued changes, with the outbox id of the last one.
+  /// The oldest queued changes, with the outbox id of the last one. A
+  /// queued change that can't be read is skipped (and removed when the
+  /// batch is sent), so it can't hold up everything after it.
   ({List<Change> changes, int lastId}) pending({int limit = 500}) {
     final rows = _db.select(
       'SELECT id, change FROM outbox ORDER BY id LIMIT ?',
       [limit],
     );
-    return (
-      changes: [
-        for (final r in rows)
+    final changes = <Change>[];
+    for (final r in rows) {
+      try {
+        changes.add(
           Change.fromJson(
             jsonDecode(r['change'] as String) as Map<String, Object?>,
           ),
-      ],
+        );
+      } catch (_) {
+        // Unreadable: dropped.
+      }
+    }
+    return (
+      changes: changes,
       lastId: rows.isEmpty ? 0 : rows.last['id'] as int,
     );
+  }
+
+  /// Queues every field this device has, to send it all to the server
+  /// again: after the server was restored from a backup or reinstalled, it
+  /// may be missing things it once had. The server ignores what it already
+  /// has, so sending too much is harmless.
+  void requeueAll() {
+    _db.execute('BEGIN');
+    try {
+      final queue = _db.prepare('INSERT INTO outbox (change) VALUES (?)');
+      for (final MapEntry(key: (table, rowId, field), value: hlc)
+          in _hlcs.entries) {
+        queue.execute([
+          jsonEncode(
+            Change(
+              table: table,
+              rowId: rowId,
+              field: field,
+              value: _tables[table]?[rowId]?[field],
+              hlc: hlc,
+            ).toJson(),
+          ),
+        ]);
+      }
+      queue.close();
+      setMeta('cursor', '0');
+      _db.execute('COMMIT');
+    } catch (_) {
+      _db.execute('ROLLBACK');
+      rethrow;
+    }
   }
 
   void markSent(int lastId) =>

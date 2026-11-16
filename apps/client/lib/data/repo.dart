@@ -154,9 +154,10 @@ class Repo {
     if (!atomicHabits || habit.isQuit || plan.twoMinute.isEmpty) return null;
     if (plan.sizeSettled) return null;
     final today = dateOnly(clock());
-    final since = plan.steppedUpAt.isNotEmpty
-        ? parseDateKey(plan.steppedUpAt)
-        : dateOnly(habit.createdAt.toLocal());
+    // A date that can't be read counts from the start, as in the Apple app.
+    final since =
+        _tryParseDateKey(plan.steppedUpAt) ??
+        dateOnly(habit.createdAt.toLocal());
     if (daysBetween(since, today) < 14) return null;
     final (:done, :scheduled) = record(habit, today, 14);
     if (scheduled == 0) return null;
@@ -272,4 +273,15 @@ class Repo {
     'minutes': minutes,
     'habitId': habitId,
   });
+}
+
+DateTime? _tryParseDateKey(String key) {
+  if (key.isEmpty) return null;
+  try {
+    return parseDateKey(key);
+  } on FormatException {
+    return null;
+  } on RangeError {
+    return null;
+  }
 }

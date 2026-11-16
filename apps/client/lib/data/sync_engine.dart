@@ -9,6 +9,7 @@ import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 
+import 'directory_record.dart';
 import 'local_store.dart';
 
 enum SyncStatus { notConfigured, idle, syncing, error, signedOut }
@@ -85,6 +86,14 @@ class SyncEngine extends ChangeNotifier {
   Future<void>? _inFlight;
   bool _again = false;
   String? _activeUrl;
+
+  /// Addresses that have shown they're this device's server since the app
+  /// started. The sign-in token is only sent to these.
+  final _verified = <String>{};
+
+  /// An address where a different OpenHabits server answered, e.g. after
+  /// the server was reinstalled, for a clearer message.
+  String? _otherServerAt;
 
   /// A certificate the person just agreed to trust while signing in.
   String? _trustOnce;
@@ -250,18 +259,36 @@ class SyncEngine extends ChangeNotifier {
       auth: false,
     );
     final account = Account.fromJson(response['user'] as Map<String, Object?>);
-    // A different person on this device: don't mix their data with the
-    // previous person's. (Data made offline before any sign-in is kept and
-    // uploaded to the new account.)
+    final sameServer = urls.first == serverUrl;
     final previous = this.account;
-    if (previous != null && previous.id != account.id) store.reset();
-    if (urls.first != serverUrl) {
+    if (previous != null && previous.id != account.id) {
+      if (sameServer &&
+          previous.username.toLowerCase() == account.username.toLowerCase()) {
+        // The same person on the same server, but their account is new: the
+        // server was reinstalled or reset. This device may hold the only
+        // copy of their habits, so send it all rather than deleting it.
+        store.requeueAll();
+      } else {
+        // A different person on this device: don't mix their data with the
+        // previous person's. (Data made offline before any sign-in is kept
+        // and uploaded to the new account.)
+        store.reset();
+      }
+    }
+    if (!sameServer) {
       // A different server: forget the old one's cursor and addresses.
       store.setMeta('cursor', '0');
       store.setMeta('remoteUrl', null);
       store.setMeta('fingerprint', null);
       store.setMeta('directoryLookup', null);
+      store.setMeta('directoryKey', null);
+      store.setMeta('directoryTs', null);
     }
+    store.setMeta('serverId', (response['server'] as Map?)?['id'] as String?);
+    _verified
+      ..clear()
+      ..add(url);
+    _otherServerAt = null;
     store.setMeta('serverUrl', urls.first);
     store.setMeta('token', response['token'] as String);
     store.setMeta('account', jsonEncode(account.toJson()));
@@ -364,6 +391,7 @@ class SyncEngine extends ChangeNotifier {
     Map<String, Object?>? body,
   }) async {
     final urls = <String>{?_activeUrl, ?serverUrl, ?remoteUrl}.toList();
+    _otherServerAt = null;
     final (url, result) = await _sendFirst(urls, method, path, body: body);
     _activeUrl = url;
     return result;
@@ -383,6 +411,7 @@ class SyncEngine extends ChangeNotifier {
     Object? lastError;
     for (final url in urls) {
       try {
+        if (auth) await _verify(url, quick: urls.length > 1);
         return (
           url,
           await _sendTo(
@@ -399,8 +428,8 @@ class SyncEngine extends ChangeNotifier {
     }
     // None of the known addresses answer. The home's internet address may
     // have changed while this device was away: ask the directory where the
-    // server is now. The certificate is still checked, so a wrong answer
-    // can't lead anywhere else.
+    // server is now. Only addresses the server signed are tried, and each
+    // must still show it's this server before the token is sent.
     if (askDirectory) {
       final moved = [
         for (final url in await _directoryUrls())
@@ -423,6 +452,12 @@ class SyncEngine extends ChangeNotifier {
         }
       }
     }
+    if (_otherServerAt case final other?) {
+      throw SyncException(
+        "A different OpenHabits server answered at $other. If you reinstalled "
+        'your server, sign in again to send it the habits on this device.',
+      );
+    }
     throw lastError is _Unreachable && lastError.timedOut
         ? const SyncException(
             "The server's taking too long to answer. Make sure it's running, then try again.",
@@ -430,6 +465,33 @@ class SyncEngine extends ChangeNotifier {
         : const SyncException(
             "Couldn't reach your server. Check that it's running and that you're online.",
           );
+  }
+
+  /// Checks that [url] is this device's server before the sign-in token
+  /// goes there. Away from home, the home address may belong to some other
+  /// device on whatever network this one has joined, and a hotel or café
+  /// network may answer every address with its own sign-in page.
+  Future<void> _verify(String url, {required bool quick}) async {
+    final id = store.meta('serverId');
+    // Signed in before servers had ids; learned at the next sync.
+    if (id == null || _verified.contains(url)) return;
+    final Map<String, Object?> info;
+    try {
+      info = await _sendTo(
+        Uri.parse('$url/auth/info'),
+        'GET',
+        auth: false,
+        quick: quick,
+      );
+    } on SyncException {
+      // An error page from something that isn't this server.
+      throw const _Unreachable();
+    }
+    if (info['id'] != id) {
+      if (info['id'] is String) _otherServerAt = url;
+      throw const _Unreachable();
+    }
+    _verified.add(url);
   }
 
   Future<Map<String, Object?>> _sendTo(
@@ -447,14 +509,30 @@ class SyncEngine extends ChangeNotifier {
     if (body != null) request.body = jsonEncode(body);
     final http.Response response;
     try {
-      // With another address to fall back on, don't wait long for this one.
-      response = await _http
+      // With another address to fall back on, don't wait long for this one
+      // to start answering. Once it does, give it time to send everything:
+      // a first sync of years of check-ins can be large on a slow link.
+      final streamed = await _http
           .send(request)
-          .then(http.Response.fromStream)
           .timeout(Duration(seconds: quick ? 6 : 30));
+      response = await http.Response.fromStream(
+        streamed,
+      ).timeout(const Duration(minutes: 2));
     } on TimeoutException {
       throw const _Unreachable(timedOut: true);
     } catch (_) {
+      throw const _Unreachable();
+    }
+    // Every answer from this device's server says which server it is.
+    // Something else answering at the address (after moving to another
+    // network) is treated as if nothing answered: its errors don't sign
+    // this device out and its answers aren't trusted.
+    // (Signing in is exempt: the person is choosing a server then.)
+    final expected = auth ? store.meta('serverId') : null;
+    final answeredBy = response.headers['x-openhabits-server'];
+    if (expected != null && answeredBy != expected) {
+      _verified.remove('${url.scheme}://${url.authority}');
+      if (answeredBy != null) _otherServerAt = '${url.scheme}://${url.authority}';
       throw const _Unreachable();
     }
     Map<String, Object?>? decoded;
@@ -462,6 +540,10 @@ class SyncEngine extends ChangeNotifier {
       decoded =
           jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, Object?>;
     } catch (_) {}
+    // Every answer from the server is JSON. Anything else came from
+    // something else at this address (a hotel sign-in page, a proxy's error
+    // page), so carry on as if nothing answered.
+    if (decoded == null) throw const _Unreachable();
     if (response.statusCode == 401 && auth && isConfigured) {
       // The session was revoked: signed out elsewhere, or account removed.
       store.setMeta('token', null);
@@ -470,11 +552,11 @@ class SyncEngine extends ChangeNotifier {
     }
     if (response.statusCode != 200) {
       throw SyncException(
-        decoded?['error'] as String? ??
+        decoded['error'] as String? ??
             'Something went wrong on the server (error ${response.statusCode}). Try again in a little while.',
       );
     }
-    return decoded ?? const {};
+    return decoded;
   }
 
   /// Syncs now. If a sync is already running, another pass is queued and
@@ -490,6 +572,11 @@ class SyncEngine extends ChangeNotifier {
 
   Future<void> _sync() async {
     status = SyncStatus.syncing;
+    // Plain http addresses are checked again on every sync: this device may
+    // have moved to another network since, where the same home address is
+    // something else. (https addresses prove themselves with their
+    // certificate.)
+    _verified.removeWhere((url) => url.startsWith('http://'));
     notifyListeners();
     try {
       do {
@@ -509,32 +596,64 @@ class SyncEngine extends ChangeNotifier {
 
   Future<void> _roundTrip() async {
     final pending = store.pending();
+    final since = store.cursor;
     final body = await _post('/sync', {
-      'since': store.cursor,
+      'since': since,
       'changes': [for (final c in pending.changes) c.toJson()],
     });
+    // Check the answer before forgetting what was sent: if it isn't a real
+    // sync answer, the queued edits stay queued and go again next time.
+    final cursor = body['cursor'];
+    final changes = body['changes'];
+    if (cursor is! int || changes is! List) {
+      throw const SyncException(
+        "The server sent back something unexpected. Your changes are safe on "
+        'this device and will be sent again.',
+      );
+    }
+    final incoming = <Change>[];
+    for (final c in changes) {
+      try {
+        incoming.add(Change.fromJson(c as Map<String, Object?>));
+      } catch (_) {
+        // One unreadable change shouldn't stop all the others.
+      }
+    }
     if (pending.lastId > 0) store.markSent(pending.lastId);
     _followRemote(body['server']);
-    store.applyRemote([
-      for (final c in body['changes'] as List)
-        Change.fromJson(c as Map<String, Object?>),
-    ], body['cursor'] as int);
+    if (cursor < since) {
+      // The server has gone back in time: restored from a backup. It may be
+      // missing changes this device already sent, so send everything again
+      // and fetch everything it has.
+      store.requeueAll();
+      return;
+    }
+    store.applyRemote(incoming, cursor);
   }
 
-  /// Where the directory says this server can be reached now.
+  /// Where the directory says this server can be reached now. Only
+  /// addresses the server itself signed are used: the directory just passes
+  /// them on, and a directory that was tampered with can't add its own.
   Future<List<String>> _directoryUrls() async {
     final lookup = store.meta('directoryLookup');
-    if (lookup == null) return const [];
+    final key = store.meta('directoryKey');
+    if (lookup == null || key == null) return const [];
     try {
       final response = await _http
           .get(Uri.parse(lookup))
           .timeout(const Duration(seconds: 8));
       if (response.statusCode != 200) return const [];
-      final urls = (jsonDecode(response.body) as Map)['urls'] as List;
-      return [
-        for (final url in urls)
-          if (url is String && url.startsWith('https://')) url,
-      ];
+      final record = DirectoryRecord.verify(
+        jsonDecode(response.body) as Map<String, Object?>,
+        key: key,
+        id: Uri.parse(lookup).pathSegments.last,
+        notBefore: int.tryParse(store.meta('directoryTs') ?? '') ?? 0,
+      );
+      if (record == null) return const [];
+      // An older record can't be replayed later to send this device to an
+      // address the server has since given up.
+      store.setMeta('directoryTs', '${record.ts}');
+      return record.urls;
     } catch (_) {
       return const [];
     }
@@ -544,11 +663,20 @@ class SyncEngine extends ChangeNotifier {
   /// changes or remote access is turned on or off.
   void _followRemote(Object? server) {
     if (server is! Map) return;
+    // Signed in before servers had ids: learn it from the server this
+    // device is already talking to.
+    if (store.meta('serverId') == null && server['id'] is String) {
+      store.setMeta('serverId', server['id'] as String);
+    }
     if (server.containsKey('directory')) {
       final directory = server['directory'];
       store.setMeta(
         'directoryLookup',
         directory is Map ? directory['lookup'] as String? : null,
+      );
+      store.setMeta(
+        'directoryKey',
+        directory is Map ? directory['key'] as String? : null,
       );
     }
     final remote = server['remote'];

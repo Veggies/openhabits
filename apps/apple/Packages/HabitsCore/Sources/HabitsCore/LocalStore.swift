@@ -62,7 +62,7 @@ public final class LocalStore {
             else { continue }
             loaded[table, default: [:]][id, default: [:]][field] = JSONValue.decode(row[3] ?? "null")
             hlcs[Self.key(table, id, field)] = hlc
-            if hlc > latest { latest = HLC(hlc.millis, hlc.counter, node) }
+            latest = latest.receive(hlc, Self.nowMillis())
         }
         tables = loaded
         clock = latest
@@ -90,15 +90,17 @@ public final class LocalStore {
         clock = clock.send(Self.nowMillis())
         let hlc = clock
         let encoder = JSONEncoder()
+        var staged: [String: Change] = [:]
         do {
             try db.transaction {
                 for (field, value) in fields {
                     let change = Change(table: table, rowId: rowId, field: field, value: value, hlc: hlc)
-                    try applyAndPersist(change)
+                    try persist(change, &staged)
                     let json = String(decoding: try encoder.encode(change), as: UTF8.self)
                     try db.run("INSERT INTO outbox (change) VALUES (?)", [json])
                 }
             }
+            keep(staged)
         } catch {
             assertionFailure("Couldn't save: \(error)")
         }
@@ -110,29 +112,65 @@ public final class LocalStore {
     /// Applies changes from the server and records the new cursor.
     public func applyRemote(_ changes: [Change], cursor: Int) throws {
         let now = Self.nowMillis()
+        var staged: [String: Change] = [:]
         try db.transaction {
             for c in changes {
                 clock = clock.receive(c.hlc, now)
-                try applyAndPersist(c)
+                try persist(c, &staged)
             }
             try db.run("INSERT OR REPLACE INTO meta (key, value) VALUES ('cursor', ?)", [String(cursor)])
         }
-        if !changes.isEmpty {
+        keep(staged)
+        if !staged.isEmpty {
             revision += 1
             onChange?()
         }
     }
 
-    @discardableResult
-    private func applyAndPersist(_ c: Change) throws -> Bool {
+    /// Writes `c` to the database if it wins, and notes it in `staged`. The
+    /// in-memory copy is only updated by `keep`, after the database has
+    /// committed, so a failed save can't leave the two disagreeing (and the
+    /// change looking like one already saved when it arrives again).
+    private func persist(_ c: Change, _ staged: inout [String: Change]) throws {
         let k = Self.key(c.table, c.rowId, c.field)
-        guard shouldApply(c.hlc, over: hlcs[k]) else { return false }
-        tables[c.table, default: [:]][c.rowId, default: [:]][c.field] = c.value
-        hlcs[k] = c.hlc
+        guard shouldApply(c.hlc, over: staged[k]?.hlc ?? hlcs[k]) else { return }
         try db.run(
             "INSERT OR REPLACE INTO fields (tbl, row_id, field, value, hlc) VALUES (?, ?, ?, ?, ?)",
             [c.table, c.rowId, c.field, c.value.encoded(), c.hlc.pack()])
-        return true
+        staged[k] = c
+    }
+
+    private func keep(_ staged: [String: Change]) {
+        for c in staged.values {
+            tables[c.table, default: [:]][c.rowId, default: [:]][c.field] = c.value
+            hlcs[Self.key(c.table, c.rowId, c.field)] = c.hlc
+        }
+    }
+
+    /// Queues every field this device has, to send it all to the server
+    /// again: after the server was restored from a backup or reinstalled,
+    /// it may be missing things it once had. The server ignores what it
+    /// already has, so sending too much is harmless.
+    public func requeueAll() {
+        let encoder = JSONEncoder()
+        do {
+            try db.transaction {
+                for (table, rows) in tables {
+                    for (rowId, fields) in rows {
+                        for (field, value) in fields {
+                            guard let hlc = hlcs[Self.key(table, rowId, field)] else { continue }
+                            let change = Change(table: table, rowId: rowId, field: field, value: value, hlc: hlc)
+                            let json = String(decoding: try encoder.encode(change), as: UTF8.self)
+                            try db.run("INSERT INTO outbox (change) VALUES (?)", [json])
+                        }
+                    }
+                }
+                try db.run("INSERT OR REPLACE INTO meta (key, value) VALUES ('cursor', '0')")
+            }
+            metaRevision += 1
+        } catch {
+            assertionFailure("Couldn't queue everything again: \(error)")
+        }
     }
 
     /// Deletes all synced data and queued changes, e.g. when someone else
