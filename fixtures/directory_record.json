@@ -1,0 +1,8 @@
+{
+  "about": "A directory record signed by the Dart server. The server, the directory and both apps check it the same way. Test-only key.",
+  "privateKeyPem": "-----BEGIN EC PRIVATE KEY-----\nMHcCAQEEID23oIVVSEno01ctXFa/cKMkz8e5jQzDNy7sbxlC8p2loAoGCCqGSM49\nAwEHoUQDQgAEu1SlbNajqFI5LDYFlZfkoaHpSoiToHDFCzcsG4OhkAwuhB/+i7/C\nURrSWdC5GLoe5Dq0/rhErmo4IhxckpTZJg==\n-----END EC PRIVATE KEY-----",
+  "key": "BLtUpWzWo6hSOSw2BZWX5KGh6UqIk6BwxQs3LBuDoZAMLoQf_ou_wlEa0lnQuRi6HuQ6tP64RK5qOCIcXJKU2SY",
+  "id": "nkjnoh247k6jo27go2gyu5apm4",
+  "payload": "{\"id\":\"nkjnoh247k6jo27go2gyu5apm4\",\"urls\":[\"https://203.0.113.7:8443\"],\"ts\":1794816000000}",
+  "sig": "3HFXMv7DGM35J6qjETWeTuDyU4O4O5nlEgco4fmRQxxMcW3-wBr6l1aWk1BIWHHp012X0jUYdCFGfAyuHq1djw"
+}

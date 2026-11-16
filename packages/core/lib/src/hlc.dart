@@ -21,9 +21,18 @@ class Hlc implements Comparable<Hlc> {
     return Hlc(millis, counter + 1, nodeId);
   }
 
+  /// How far ahead of this device's clock a received timestamp may be and
+  /// still move the clock forward.
+  static const maxDriftMillis = 24 * 60 * 60 * 1000;
+
   /// Advances this clock past a timestamp received from another device, so
   /// the next local edit is ordered after everything this device has seen.
+  ///
+  /// A timestamp more than [maxDriftMillis] ahead (a device whose date is
+  /// set wrong) is still merged by the usual rule, but doesn't drag this
+  /// clock into the future with it.
   Hlc receive(Hlc remote, int nowMillis) {
+    if (remote.millis - nowMillis > maxDriftMillis) remote = this;
     final m = max(max(millis, remote.millis), nowMillis);
     final int c;
     if (m == millis && m == remote.millis) {
