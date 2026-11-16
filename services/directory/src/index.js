@@ -5,15 +5,18 @@
 // home can't reach the address it knows, it asks the directory for the
 // current one. It's the same job plex.tv does for Plex servers.
 //
-// It never sees anyone's habits, and it doesn't need to be trusted: devices
-// still check the server's certificate fingerprint before sending anything,
-// so a wrong answer can only fail to connect, never connect somewhere else.
+// It never sees anyone's habits, and it doesn't need to be trusted. Each
+// server signs its updates with its own key (ECDSA P-256), and the lookup
+// hands back that signed update as it was received. Devices learned the
+// server's key when they signed in, so they check the signature themselves
+// and ignore any address the server didn't publish, even one that comes
+// from this directory.
 //
-// Each server signs its updates with its own key (ECDSA P-256). Its ID is
-// derived from that key, so nobody else can claim or change its entry.
+// The server's ID is derived from its key, so nobody else can claim or
+// change its entry.
 //
 //   PUT /v1/servers/:id  {key, payload, sig}  payload = '{"id","urls","ts"}'
-//   GET /v1/servers/:id  -> {urls}
+//   GET /v1/servers/:id  -> {urls, payload, sig}
 
 const MAX_BODY = 2048;
 const MAX_URLS = 4;
@@ -56,18 +59,17 @@ async function handle(request, env) {
   if (!match) throw new Refusal(404, "Not found.");
   const id = match[1];
 
+  const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
   if (request.method === "GET") {
+    await limit(env.READ_LIMITER, ip, "Too many lookups. Try again later.");
     const entry = await env.SERVERS.get(`s:${id}`, "json");
-    if (!entry) throw new Refusal(404, "No server with that ID.");
-    return json({ urls: entry.urls });
+    // An entry with no addresses is a server that turned remote access off.
+    if (!entry || entry.urls.length === 0) throw new Refusal(404, "No server with that ID.");
+    return json({ urls: entry.urls, payload: entry.payload, sig: entry.sig });
   }
   if (request.method !== "PUT") throw new Refusal(405, "Use GET or PUT.");
 
-  if (env.LIMITER) {
-    const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
-    const { success } = await env.LIMITER.limit({ key: ip });
-    if (!success) throw new Refusal(429, "Too many updates. Try again later.");
-  }
+  await limit(env.LIMITER, ip, "Too many updates. Try again later.");
 
   const text = await request.text();
   if (text.length > MAX_BODY) throw new Refusal(413, "Too large.");
@@ -122,23 +124,32 @@ async function handle(request, env) {
   const stored = await env.SERVERS.get(`s:${id}`, "json");
   // Older than what we have: a replayed or delayed update.
   if (stored && update.ts <= stored.ts) throw new Refusal(409, "A newer update was already received.");
+  // Nothing to remove.
+  if (!stored && urls.length === 0) return json({ ok: true });
+  // Writes are the scarce resource (1,000 a day on Cloudflare's free plan).
+  // A new ID is the only kind of write that can be made up endlessly, so
+  // new IDs get a much smaller allowance than updates to existing ones.
+  if (!stored) await limit(env.NEW_LIMITER, ip, "Too many new servers from this address. Try again later.");
 
-  if (urls.length === 0) {
-    await env.SERVERS.delete(`s:${id}`);
-    return json({ ok: true });
-  }
   const unchanged =
     stored &&
     JSON.stringify(stored.urls) === JSON.stringify(urls) &&
     update.ts - stored.ts < REFRESH_MS;
-  // Writes are the scarce resource (1,000 a day on Cloudflare's free plan),
-  // so an update that changes nothing isn't written.
+  // An update that changes nothing isn't written. Turning remote access
+  // off keeps the entry, with no addresses, so an older signed update
+  // can't be replayed to bring it back.
   if (!unchanged) {
-    await env.SERVERS.put(`s:${id}`, JSON.stringify({ urls, ts: update.ts }), {
+    await env.SERVERS.put(`s:${id}`, JSON.stringify({ urls, ts: update.ts, payload, sig }), {
       expirationTtl: EXPIRE_SECONDS,
     });
   }
   return json({ ok: true });
+}
+
+async function limit(limiter, key, message) {
+  if (!limiter) return;
+  const { success } = await limiter.limit({ key });
+  if (!success) throw new Refusal(429, message);
 }
 
 function isServerUrl(value) {

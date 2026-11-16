@@ -14,9 +14,27 @@ routes = [{ pattern = "directory.ryanruddock.com", custom_domain = true }]
 binding = "SERVERS"
 id = "1da3de10f8cf4b9abe19b1b597789318"
 
-# Limits updates per IP address, so nobody can use up the daily write
-# allowance by inventing new server keys.
+# Rate limits per IP address. Cloudflare only allows periods of 10 or 60
+# seconds, and counts per location, so these are approximate.
+#
+# Updates to an existing entry. A server sends at most a few a day.
 [[ratelimits]]
 name = "LIMITER"
 namespace_id = "1001"
-simple = { limit = 20, period = 60 }
+simple = { limit = 10, period = 60 }
+
+# New server IDs: the only write that can be invented endlessly, and KV
+# allows 1,000 writes a day on the free plan. One a minute per address
+# still lets a single address use up a day's writes in about 17 hours, so
+# on a busy directory move to the paid plan (a million writes a month).
+[[ratelimits]]
+name = "NEW_LIMITER"
+namespace_id = "1002"
+simple = { limit = 1, period = 60 }
+
+# Lookups, which have their own daily allowance (100,000 on the free plan).
+# Devices only look up when they can't reach their server.
+[[ratelimits]]
+name = "READ_LIMITER"
+namespace_id = "1003"
+simple = { limit = 30, period = 60 }
