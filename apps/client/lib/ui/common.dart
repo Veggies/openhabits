@@ -79,6 +79,11 @@ class AppNav extends ChangeNotifier {
     store.meta('accent') ?? 'system',
   )..addListener(() => store.setMeta('accent', accent.value));
 
+  /// "system", "light" or "dark". Rebuilds the whole app, like [accent].
+  late final ValueNotifier<String> appearance = ValueNotifier(
+    store.meta('appearance') ?? 'system',
+  )..addListener(() => store.setMeta('appearance', appearance.value));
+
   /// Starts a pomodoro for [habit] and shows the timer.
   void focusOn(Habit habit, FocusController focus) {
     if (focus.running || focus.paused) {

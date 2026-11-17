@@ -165,6 +165,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         builder: (_) => const _CalendarLinkDialog(),
                       ),
                     ),
+                    const _AppearancePicker(),
                     const _AccentPicker(),
                     ListTile(
                       leading: const Icon(Icons.auto_awesome_outlined),
@@ -255,7 +256,6 @@ Future<void> _guard(
     messenger.showSnackBar(SnackBar(content: Text('$e')));
   }
 }
-
 
 /// The owner's household list: add and remove people.
 class _People extends StatefulWidget {
@@ -560,6 +560,39 @@ class _CalendarLinkDialogState extends State<_CalendarLinkDialog> {
           child: const Text('Done'),
         ),
       ],
+    );
+  }
+}
+
+/// Light, dark, or "System" to follow the device.
+class _AppearancePicker extends StatelessWidget {
+  const _AppearancePicker();
+
+  @override
+  Widget build(BuildContext context) {
+    final nav = AppScope.of(context).nav;
+    return ValueListenableBuilder(
+      valueListenable: nav.appearance,
+      builder: (context, mode, _) => ListTile(
+        leading: const Icon(Icons.contrast),
+        title: const Text('Appearance'),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'system', label: Text('System')),
+                ButtonSegment(value: 'light', label: Text('Light')),
+                ButtonSegment(value: 'dark', label: Text('Dark')),
+              ],
+              selected: {mode},
+              showSelectedIcon: false,
+              onSelectionChanged: (s) => nav.appearance.value = s.first,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -72,6 +72,36 @@ final class AppModel {
     }
 
     var accent: Color { accentChoices.first { $0.name == accentName }?.color ?? .accentColor }
+
+    /// Light, dark, or "system" to follow the device. Kept per device.
+    /// (`-appearance light` at launch also works, handy for screenshots.)
+    var appearance = UserDefaults.standard.string(forKey: "appearance") ?? "system" {
+        didSet {
+            UserDefaults.standard.set(appearance, forKey: "appearance")
+            applyAppearance()
+        }
+    }
+
+    /// Set on the windows rather than with SwiftUI's preferredColorScheme,
+    /// which doesn't always switch back when "System" is chosen again.
+    func applyAppearance() {
+        #if os(macOS)
+        NSApp?.appearance = switch appearance {
+        case "light": NSAppearance(named: .aqua)
+        case "dark": NSAppearance(named: .darkAqua)
+        default: nil
+        }
+        #else
+        let style: UIUserInterfaceStyle = switch appearance {
+        case "light": .light
+        case "dark": .dark
+        default: .unspecified
+        }
+        for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
+            for window in scene.windows { window.overrideUserInterfaceStyle = style }
+        }
+        #endif
+    }
     /// Set by the New Habit menu command (⌘N).
     var newHabitRequested = false
     /// Shows the setup wizard again, from Settings.

@@ -9,6 +9,7 @@ struct SettingsView: View {
     @State private var changingPassword = false
 
     var body: some View {
+        @Bindable var app = app
         let sync = app.sync
         let repo = app.repo
         let account = sync.account
@@ -80,11 +81,17 @@ struct SettingsView: View {
             RemindersSection()
 
             Section {
+                Picker("Mode", selection: $app.appearance) {
+                    Text("System").tag("system")
+                    Text("Light").tag("light")
+                    Text("Dark").tag("dark")
+                }
+                .pickerStyle(.segmented)
                 AccentPicker()
             } header: {
                 Text("Appearance")
             } footer: {
-                Text("System uses your device's accent colour\(isMac ? ", from System Settings → Appearance" : "")")
+                Text("System follows your device's light or dark mode and accent colour\(isMac ? ", from System Settings → Appearance" : "")")
             }
 
             Section {

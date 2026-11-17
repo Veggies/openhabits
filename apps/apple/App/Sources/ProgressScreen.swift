@@ -52,43 +52,28 @@ struct ProgressScreen: View {
             .prefix { $0 <= to }
         let shown = habits.filter { !hidden.contains($0.id) }
 
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                #if os(macOS)
-                HStack(spacing: 12) {
-                    Text("Progress").font(.largeTitle.bold())
-                    Spacer()
-                    datePicker
-                    if habits.count > 1 { habitFilter(habits) }
-                }
-                #else
-                // Two separate, labelled buttons, so it's clear each does
-                // its own thing.
-                if !habits.isEmpty {
-                    HStack(spacing: 10) {
-                        datePicker
-                        if habits.count > 1 { habitFilter(habits) }
-                        Spacer(minLength: 0)
+        Group {
+            if habits.isEmpty {
+                // Centred in the whole screen, with a way to get started,
+                // rather than tucked under the explanation.
+                ContentUnavailableView {
+                    Label("Nothing to show yet", systemImage: "square.grid.3x3")
+                } description: {
+                    Text("Once you've started a habit, you'll see how each week went here.")
+                } actions: {
+                    Button("New Habit") {
+                        app.tab = .habits
+                        #if os(macOS)
+                        app.macTab = .today
+                        #endif
+                        app.newHabitRequested = true
                     }
+                    .buttonStyle(.glassProminent)
                 }
-                #endif
-                Text("Here's how each habit has gone, week by week. The number in each square is how many days you did it that week. For habits you're trying to break, it's how many days you went without it.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                if habits.isEmpty {
-                    ContentUnavailableView("Nothing to show yet", systemImage: "square.grid.3x3",
-                        description: Text("Once you've started a habit, you'll see how each week went here."))
-                } else if shown.isEmpty {
-                    ContentUnavailableView("No habits chosen", systemImage: "line.3.horizontal.decrease.circle",
-                        description: Text("Choose which habits to show with the filter button."))
-                } else {
-                    Legend()
-                    WeekGrid(habits: shown, weeks: Array(weeks), today: today)
-                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                grid(habits: habits, shown: shown, weeks: Array(weeks), today: today)
             }
-            .padding()
-            .frame(maxWidth: 1100, alignment: .leading)
-            .frame(maxWidth: .infinity)
         }
         .navigationTitle("Progress")
         .largeTitle()
@@ -111,6 +96,43 @@ struct ProgressScreen: View {
                 }
             }
             .presentationDetents([.medium])
+        }
+    }
+
+    /// The page once there are habits: filters, the key, and the grid.
+    private func grid(habits: [Habit], shown: [Habit], weeks: [Date], today: Date) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                #if os(macOS)
+                HStack(spacing: 12) {
+                    Text("Progress").font(.largeTitle.bold())
+                    Spacer()
+                    datePicker
+                    if habits.count > 1 { habitFilter(habits) }
+                }
+                #else
+                // Two separate, labelled buttons, so it's clear each does
+                // its own thing.
+                HStack(spacing: 10) {
+                    datePicker
+                    if habits.count > 1 { habitFilter(habits) }
+                    Spacer(minLength: 0)
+                }
+                #endif
+                Text("Here's how each habit has gone, week by week. The number in each square is how many days you did it that week. For habits you're trying to break, it's how many days you went without it.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                if shown.isEmpty {
+                    ContentUnavailableView("No habits chosen", systemImage: "line.3.horizontal.decrease.circle",
+                        description: Text("Choose which habits to show with the filter button."))
+                } else {
+                    Legend()
+                    WeekGrid(habits: shown, weeks: weeks, today: today)
+                }
+            }
+            .padding()
+            .frame(maxWidth: 1100, alignment: .leading)
+            .frame(maxWidth: .infinity)
         }
     }
 
@@ -180,9 +202,9 @@ struct Legend: View {
     var body: some View {
         let color = app.accent
         let samples = Group {
-            item(RoundedRectangle(cornerRadius: 4).fill(color), "Done every scheduled day")
-            item(RoundedRectangle(cornerRadius: 4).fill(color.opacity(0.2)), "Some days")
-            item(RoundedRectangle(cornerRadius: 4).strokeBorder(.quaternary), "No days")
+            item(RoundedRectangle(cornerRadius: 4).fill(color).padding(3), "Done every scheduled day")
+            item(RoundedRectangle(cornerRadius: 4).fill(color.opacity(0.2)).padding(3), "Some days")
+            item(RoundedRectangle(cornerRadius: 4).strokeBorder(.quaternary).padding(3), "No days")
         }
         VStack(alignment: .leading, spacing: 8) {
             Text("Each square shows:").fontWeight(.semibold)
@@ -190,21 +212,25 @@ struct Legend: View {
                 HStack(spacing: 16) { samples }
                 VStack(alignment: .leading, spacing: 6) { samples }
             }
+            // Same proportions as the grid: a whole-point gap and line, so
+            // the ring lands on exact pixels and stays centred.
             item(
                 RoundedRectangle(cornerRadius: 4, style: .continuous).fill(color)
+                    .padding(3)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 6.5, style: .continuous)
-                            .strokeBorder(.primary, lineWidth: 1.2)
-                            .padding(-2.5)),
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .strokeBorder(.primary, lineWidth: 1)),
                 "A ring means you changed your version of the habit that week")
         }
         .font(.caption)
         .foregroundStyle(.secondary)
     }
 
+    /// Every sample sits in the same 20-point slot, so the labels line up
+    /// whether or not the sample has a ring around it.
     private func item(_ sample: some View, _ text: String) -> some View {
         HStack(spacing: 6) {
-            sample.frame(width: 16, height: 16)
+            sample.frame(width: 20, height: 20)
             Text(text)
         }
     }
@@ -222,7 +248,7 @@ struct WeekGrid: View {
     /// The ring around a week where the version changed: its width and the
     /// gap between it and the square. Its corners follow the square's.
     private let squareRadius: CGFloat = 8
-    private let ringWidth: CGFloat = 1.5, ringGap: CGFloat = 1.5
+    private let ringWidth: CGFloat = 1, ringGap: CGFloat = 2
     private var ringInset: CGFloat { ringWidth + ringGap }
 
     private let cell: CGFloat = 34, gap: CGFloat = 6, header: CGFloat = 40, section: CGFloat = 34
@@ -277,6 +303,23 @@ struct WeekGrid: View {
                 .onAppear { proxy.scrollTo(weeks.count - 1, anchor: .trailing) }
                 .onChange(of: weeks.count) { _, n in proxy.scrollTo(n - 1, anchor: .trailing) }
             }
+        }
+        // Every other row gets a faint band, so each habit's name is easy
+        // to follow across to its weeks. One layer behind both columns, so
+        // a band runs the full width even while the weeks scroll.
+        .background(alignment: .topLeading) {
+            VStack(spacing: 0) {
+                Color.clear.frame(height: header)
+                ForEach(sections, id: \.0) { _, list in
+                    Color.clear.frame(height: section)
+                    ForEach(Array(list.enumerated()), id: \.element.id) { i, _ in
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(i.isMultiple(of: 2) ? Color.primary.opacity(0.05) : .clear)
+                            .frame(height: row)
+                    }
+                }
+            }
+            .padding(.horizontal, -8)
         }
     }
 

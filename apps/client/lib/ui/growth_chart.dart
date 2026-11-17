@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../data/repo.dart';
 import 'common.dart';
+import 'habit_editor.dart';
 
 /// The Progress grid: one row per habit, one column per week. Each square
 /// holds the number of days you did the habit that week (or, for habits
@@ -74,19 +75,39 @@ class _GrowthViewState extends State<GrowthView> {
         color: theme.colorScheme.outline,
       );
 
+      // Nothing yet: centred in the whole page, with a way to get started.
+      if (habits.isEmpty) {
+        return Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const _Nothing(
+                icon: Icons.grid_view,
+                title: 'Nothing to show yet',
+                text: "Once you've started a habit, you'll see how each week went here.",
+              ),
+              FilledButton.icon(
+                icon: const Icon(Icons.add),
+                label: const Text('New habit'),
+                onPressed: () => editHabit(context),
+              ),
+            ],
+          ),
+        );
+      }
+
       return CenteredListView(
         maxWidth: 1100,
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
         children: [
-          if (habits.isNotEmpty)
-            Wrap(
-              spacing: 10,
-              runSpacing: 8,
-              children: [
-                _rangeMenu(context, started, from, to, today),
-                if (habits.length > 1) _habitFilter(habits),
-              ],
-            ),
+          Wrap(
+            spacing: 10,
+            runSpacing: 8,
+            children: [
+              _rangeMenu(context, started, from, to, today),
+              if (habits.length > 1) _habitFilter(habits),
+            ],
+          ),
           const SizedBox(height: 14),
           Text(
             "Here's how each habit has gone, week by week. The number in each square is "
@@ -95,13 +116,7 @@ class _GrowthViewState extends State<GrowthView> {
             style: muted,
           ),
           const SizedBox(height: 16),
-          if (habits.isEmpty)
-            _Nothing(
-              icon: Icons.grid_view,
-              title: 'Nothing to show yet',
-              text: "Once you've started a habit, you'll see how each week went here.",
-            )
-          else if (shown.isEmpty)
+          if (shown.isEmpty)
             const _Nothing(
               icon: Icons.filter_list,
               title: 'No habits chosen',
@@ -521,16 +536,49 @@ class _WeekGridState extends State<_WeekGrid> {
         // The key sits above the habits, so it's in view however many there are.
         _Legend(color: theme.colorScheme.primary),
         const SizedBox(height: 8),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        Stack(
+          clipBehavior: Clip.none,
           children: [
-            SizedBox(width: names, child: left),
-            Expanded(
-              child: SingleChildScrollView(
-                controller: _scroll,
-                scrollDirection: Axis.horizontal,
-                child: right,
+            // Every other row gets a faint band, so each habit's name is
+            // easy to follow across to its weeks. One layer behind both
+            // columns, so a band runs the full width while the weeks scroll.
+            Positioned(
+              left: -8,
+              right: -8,
+              top: 0,
+              child: Column(
+                children: [
+                  const SizedBox(height: header),
+                  for (final (_, list) in sections) ...[
+                    const SizedBox(height: section),
+                    for (var i = 0; i < list.length; i++)
+                      Container(
+                        height: row,
+                        decoration: BoxDecoration(
+                          color: i.isEven
+                              ? theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.05,
+                                )
+                              : null,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                  ],
+                ],
               ),
+            ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(width: names, child: left),
+                Expanded(
+                  child: SingleChildScrollView(
+                    controller: _scroll,
+                    scrollDirection: Axis.horizontal,
+                    child: right,
+                  ),
+                ),
+              ],
             ),
           ],
         ),

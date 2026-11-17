@@ -31,6 +31,7 @@ struct HabitsView: View {
                     Button("New Habit") { editing = .new }
                         .buttonStyle(.glassProminent)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List {
                     #if os(macOS)

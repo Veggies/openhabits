@@ -20,6 +20,8 @@ struct RootView: View {
                 OnboardingView(replay: false)
             }
         }
+        // Each new window (or iPad scene) picks up the chosen appearance.
+        .onAppear { app.applyAppearance() }
         .sheet(isPresented: $app.replayingSetup) {
             OnboardingView(replay: true)
                 #if os(macOS)

@@ -16,6 +16,17 @@ extension AppModel {
             onboarded = true
         }
         #if os(macOS)
+        // -cycleTabs YES: flips between Today and Progress a few times, to
+        // measure tab switching under a profiler.
+        if defaults.bool(forKey: "cycleTabs") {
+            Task { @MainActor in
+                for i in 0..<12 {
+                    try? await Task.sleep(for: .seconds(1.2))
+                    macTab = i.isMultiple(of: 2) ? .progress : .today
+                }
+                NSApp.terminate(nil)
+            }
+        }
         switch defaults.string(forKey: "startTab") {
         case "progress": macTab = .progress
         case "reflect": macTab = .reflect

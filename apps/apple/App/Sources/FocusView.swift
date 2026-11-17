@@ -180,7 +180,7 @@ struct TimerPanel: View {
             .labelsHidden()
             .frame(maxWidth: 280)
 
-            TimelineView(.periodic(from: .now, by: 0.25)) { context in
+            TimelineView(TickWhileRunning(running: focus.running)) { context in
                 let left = focus.remaining(at: context.date)
                 let progress = 1 - left / focus.total
                 ZStack {
@@ -366,5 +366,28 @@ struct TomatoRow: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(earned) of \(goal) pomodoros today")
+    }
+}
+
+/// Ticks four times a second while the timer counts down, and not at all
+/// otherwise. A plain periodic schedule kept redrawing (and animating) the
+/// ring even when nothing was running, which kept the Mac busy whenever the
+/// Focus screen existed.
+private struct TickWhileRunning: TimelineSchedule {
+    let running: Bool
+
+    func entries(from startDate: Date, mode: TimelineScheduleMode) -> AnyIterator<Date> {
+        if running {
+            var next = startDate
+            return AnyIterator {
+                defer { next += 0.25 }
+                return next
+            }
+        }
+        var done = false
+        return AnyIterator {
+            defer { done = true }
+            return done ? nil : startDate
+        }
     }
 }

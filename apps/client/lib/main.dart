@@ -80,7 +80,7 @@ class _AppState extends State<App> {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: nav.accent,
+    listenable: Listenable.merge([nav.accent, nav.appearance]),
     builder: (context, _) {
       final chosen = accentChoices.where((c) => c.$1 == nav.accent.value);
       final seed = chosen.isNotEmpty
@@ -97,6 +97,11 @@ class _AppState extends State<App> {
           debugShowCheckedModeBanner: false,
           theme: _theme(seed, Brightness.light),
           darkTheme: _theme(seed, Brightness.dark),
+          themeMode: switch (nav.appearance.value) {
+            'light' => ThemeMode.light,
+            'dark' => ThemeMode.dark,
+            _ => ThemeMode.system,
+          },
           home: _Root(store: widget.repo.store),
         ),
       );
