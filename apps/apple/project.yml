@@ -14,8 +14,8 @@ packages:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MARKETING_VERSION: "0.1.0"
-    CURRENT_PROJECT_VERSION: "1"
+    MARKETING_VERSION: "0.1.1"
+    CURRENT_PROJECT_VERSION: "2"
 targets:
   OpenHabits:
     type: application
@@ -29,6 +29,10 @@ targets:
       path: App/Info.plist
       properties:
         CFBundleDisplayName: OpenHabits
+        # From MARKETING_VERSION and CURRENT_PROJECT_VERSION above; XcodeGen
+        # would otherwise write its own 1.0 (1).
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.healthcare-fitness
         # Only standard HTTPS, which is exempt from export rules; stops
         # App Store Connect asking about encryption on every upload.
