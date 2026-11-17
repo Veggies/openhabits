@@ -2,6 +2,8 @@
 
 Thanks for wanting to help! Bug reports, ideas, fixes and new features are all welcome.
 
+Everyone taking part is expected to follow the [code of conduct](CODE_OF_CONDUCT.md).
+
 ## Before you start
 
 - **Found a bug?** [Open an issue](https://github.com/Veggies/openhabits/issues/new/choose) with the bug form. Say which device and version you're on, and what you expected to happen.
