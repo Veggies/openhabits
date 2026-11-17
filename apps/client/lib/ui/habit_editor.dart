@@ -1,6 +1,14 @@
 import 'dart:convert';
 
 import 'package:core/core.dart';
+import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
+// The emoji picker is built on Flutter's own material library, which looks
+// up its own localizations (this app's come from material_ui). It's
+// deprecated in favour of material_ui, but the picker still uses it.
+// ignore: deprecated_member_use
+import 'package:flutter/material.dart'
+    as flutter_material
+    show DefaultMaterialLocalizations;
 import 'package:material_ui/material_ui.dart';
 
 import '../data/reminders.dart';
@@ -408,8 +416,8 @@ String durationLabel(int minutes) {
 }
 
 /// A grid of habit icons. Returns the chosen icon's name.
-/// The emoji to choose from. Picking only from a list (no typing) means
-/// every icon is one the app can draw.
+/// A few emoji to start with; "More emoji" opens a picker with every emoji.
+/// There's no box to type into, so every icon is one the app can draw.
 const _emojiSuggestions = [
   '📚',
   '🏃',
@@ -487,7 +495,18 @@ Future<String?> pickHabitIcon(
                     ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                icon: const Icon(Icons.emoji_emotions_outlined),
+                label: const Text('More emoji'),
+                onPressed: () async {
+                  final emoji = await pickAnyEmoji(context);
+                  if (emoji != null && context.mounted) {
+                    Navigator.pop(context, emoji);
+                  }
+                },
+              ),
+              const SizedBox(height: 8),
               Text('Symbols', style: theme.textTheme.titleSmall),
               const SizedBox(height: 8),
               Wrap(
@@ -516,6 +535,63 @@ Future<String?> pickHabitIcon(
           child: const Text('Cancel'),
         ),
       ],
+    );
+  },
+);
+
+/// Every emoji, by category and with search. Windows and Linux don't have
+/// an emoji picker apps can open, so this is the app's own. Returns the
+/// chosen emoji, or null if closed. Only emoji the app can show as an icon
+/// are accepted (a few, like ©, are just text).
+Future<String?> pickAnyEmoji(BuildContext context) => showDialog<String>(
+  context: context,
+  builder: (context) {
+    final colors = Theme.of(context).colorScheme;
+    return Dialog(
+      clipBehavior: Clip.antiAlias,
+      child: SizedBox(
+        width: 420,
+        height: 440,
+        child: Localizations.override(
+          context: context,
+          delegates: const [
+            flutter_material.DefaultMaterialLocalizations.delegate,
+          ],
+          child: EmojiPicker(
+            onEmojiSelected: (_, emoji) {
+              if (isEmojiIcon(emoji.emoji)) Navigator.pop(context, emoji.emoji);
+            },
+            config: Config(
+              height: 440,
+              checkPlatformCompatibility: false,
+              emojiViewConfig: EmojiViewConfig(
+                columns: 9,
+                emojiSizeMax: 26,
+                backgroundColor: colors.surfaceContainerHigh,
+              ),
+              categoryViewConfig: CategoryViewConfig(
+                // Open on smileys rather than an empty "Recents" tab.
+                initCategory: Category.SMILEYS,
+                recentTabBehavior: RecentTabBehavior.NONE,
+                backgroundColor: colors.surfaceContainerHigh,
+                indicatorColor: colors.primary,
+                iconColor: colors.onSurfaceVariant,
+                iconColorSelected: colors.primary,
+              ),
+              bottomActionBarConfig: BottomActionBarConfig(
+                showBackspaceButton: false,
+                backgroundColor: colors.surfaceContainerHigh,
+                buttonColor: colors.surfaceContainerHigh,
+                buttonIconColor: colors.onSurfaceVariant,
+              ),
+              searchViewConfig: SearchViewConfig(
+                backgroundColor: colors.surfaceContainerHigh,
+                buttonIconColor: colors.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   },
 );

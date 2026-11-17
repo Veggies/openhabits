@@ -6,6 +6,7 @@ import 'package:client/data/sync_engine.dart';
 import 'package:client/main.dart';
 import 'package:client/ui/common.dart';
 import 'package:client/ui/habit_editor.dart';
+import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -536,5 +537,39 @@ void main() {
     for (final t in ['book', 'check', 'a', '1', '', 'ab']) {
       expect(isEmojiIcon(t), isFalse, reason: t);
     }
+  });
+
+  testWidgets('the icon picker offers every emoji, not just the grid', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(900, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () =>
+                pickHabitIcon(context, selected: 'check', color: 0xFF4CAF50),
+            child: const Text('Open'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    // No box to type into, but a way to reach any emoji.
+    expect(find.byType(TextField), findsNothing);
+    await tester.tap(find.text('More emoji'));
+    await tester.pumpAndSettle();
+    expect(find.byType(EmojiPicker), findsOneWidget);
+    // The full list loads in the background; once it's there, the picker
+    // shows it (on smileys) without throwing.
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 500)),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('😀'), findsOneWidget);
   });
 }

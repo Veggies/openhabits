@@ -340,9 +340,12 @@ struct IconPicker: View {
     @Binding var selected: String
     let color: Int
     @Environment(\.dismiss) private var dismiss
+    /// True while the system's emoji picker (Mac) or emoji keyboard
+    /// (iPhone and iPad) is open for choosing any emoji.
+    @State private var pickingAny = false
 
-    /// The emoji to choose from. Picking only from a list (no typing)
-    /// means every icon is one the app can draw.
+    /// A few to start with; "More Emoji" opens the system's own picker for
+    /// any other. There's no box to type into: only an emoji is kept.
     private let suggestions = [
         "📚", "🏃", "🚶", "🧘", "💧", "😴", "🥗", "🍎", "💪", "🚴", "✍️", "🎸",
         "🎨", "🧹", "🌱", "🐶", "🙏", "💊", "🦷", "☀️", "📵", "🚭", "💰", "🧠",
@@ -363,6 +366,13 @@ struct IconPicker: View {
                             .accessibilityLabel(emoji)
                         }
                     }
+                    Button("More Emoji", systemImage: "face.smiling") {
+                        pickingAny = true
+                        #if os(macOS)
+                        NSApp.orderFrontCharacterPalette(nil)
+                        #endif
+                    }
+                    .background { EmojiCatcher(active: $pickingAny, onEmoji: choose) }
                     Text("Symbols").font(.headline).padding(.top, 8)
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 56), spacing: 12)], spacing: 12) {
                         ForEach(habitSymbols, id: \.key) { item in
@@ -408,3 +418,104 @@ struct IconPicker: View {
         .accessibilityAddTraits(on ? .isSelected : [])
     }
 }
+
+/// Receives an emoji from the system's emoji picker without showing a text
+/// box. The Mac's Emoji & Symbols window and the iPhone's emoji keyboard
+/// both type into whatever is focused, so this is an invisible field that
+/// keeps only an emoji and throws away anything else.
+#if os(macOS)
+private struct EmojiCatcher: NSViewRepresentable {
+    @Binding var active: Bool
+    let onEmoji: (String) -> Void
+
+    func makeNSView(context: Context) -> NSTextField {
+        let field = NSTextField()
+        field.isBordered = false
+        field.drawsBackground = false
+        field.textColor = .clear
+        field.focusRingType = .none
+        field.delegate = context.coordinator
+        field.setAccessibilityElement(false)
+        return field
+    }
+
+    func updateNSView(_ field: NSTextField, context: Context) {
+        context.coordinator.parent = self
+        if active {
+            DispatchQueue.main.async { field.window?.makeFirstResponder(field) }
+        }
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSTextField, context: Context) -> CGSize? {
+        CGSize(width: 1, height: 1)
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+    @MainActor final class Coordinator: NSObject, NSTextFieldDelegate {
+        var parent: EmojiCatcher
+        init(parent: EmojiCatcher) { self.parent = parent }
+
+        func controlTextDidChange(_ note: Notification) {
+            guard let field = note.object as? NSTextField else { return }
+            let new = field.stringValue
+            field.stringValue = ""
+            if let emoji = lastEmoji(in: new) {
+                parent.active = false
+                parent.onEmoji(emoji)
+            }
+        }
+
+        func controlTextDidEndEditing(_ note: Notification) { parent.active = false }
+    }
+}
+#else
+private struct EmojiCatcher: UIViewRepresentable {
+    @Binding var active: Bool
+    let onEmoji: (String) -> Void
+
+    func makeUIView(context: Context) -> EmojiField {
+        let field = EmojiField()
+        field.tintColor = .clear
+        field.textColor = .clear
+        field.autocorrectionType = .no
+        field.addTarget(context.coordinator, action: #selector(Coordinator.changed(_:)), for: .editingChanged)
+        field.addTarget(context.coordinator, action: #selector(Coordinator.ended), for: .editingDidEnd)
+        return field
+    }
+
+    func updateUIView(_ field: EmojiField, context: Context) {
+        context.coordinator.parent = self
+        if active && !field.isFirstResponder {
+            DispatchQueue.main.async { field.becomeFirstResponder() }
+        } else if !active && field.isFirstResponder {
+            DispatchQueue.main.async { field.resignFirstResponder() }
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+    @MainActor final class Coordinator: NSObject {
+        var parent: EmojiCatcher
+        init(parent: EmojiCatcher) { self.parent = parent }
+
+        @objc func changed(_ field: UITextField) {
+            let new = field.text ?? ""
+            field.text = ""
+            if let emoji = lastEmoji(in: new) {
+                parent.active = false
+                parent.onEmoji(emoji)
+            }
+        }
+
+        @objc func ended() { parent.active = false }
+    }
+
+    /// Opens straight to the emoji keyboard when there is one.
+    final class EmojiField: UITextField {
+        override var textInputMode: UITextInputMode? {
+            UITextInputMode.activeInputModes.first { $0.primaryLanguage == "emoji" } ?? super.textInputMode
+        }
+    }
+}
+#endif
