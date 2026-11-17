@@ -36,7 +36,7 @@ struct ConnectView: View {
                 }
                 if useCode {
                     Section {
-                        TextField("Pairing code, e.g. ABCD-1234", text: $code).plainEntry()
+                        HintField("Pairing code, e.g. ABCD-1234", text: $code).plainEntry()
                     } footer: {
                         Text("On a device that's already signed in, go to Settings → Add a Device.")
                     }

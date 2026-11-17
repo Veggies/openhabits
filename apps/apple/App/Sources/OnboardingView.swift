@@ -405,7 +405,7 @@ private struct GuidedHabit: View {
                                 HabitIcon(icon: icon, color: habitColors[7], size: 44)
                             }
                             .buttonStyle(.plain)
-                            TextField("Habit, e.g. Read", text: $name)
+                            HintField("Habit, e.g. Read", text: $name)
                         }
                         Toggle("Start small and grow it", isOn: $startSmall.animation())
                         if startSmall { field("twoMinute", "Your version for now, e.g. Read one page") }
@@ -468,7 +468,7 @@ private struct GuidedHabit: View {
     }
 
     private func field(_ key: String, _ prompt: String) -> some View {
-        TextField(prompt, text: Binding(get: { plan[key] ?? "" }, set: { plan[key] = $0 }), axis: .vertical)
+        HintField(prompt, text: Binding(get: { plan[key] ?? "" }, set: { plan[key] = $0 }), axis: .vertical)
     }
 
     private func value(_ key: String) -> String {

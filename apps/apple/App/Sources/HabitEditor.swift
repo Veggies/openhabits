@@ -49,7 +49,7 @@ struct HabitEditor: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Choose icon")
-                        TextField(kind == .build ? "Habit, e.g. Read" : "Habit to break, e.g. Scrolling in bed",
+                        HintField(kind == .build ? "Habit, e.g. Read" : "Habit to break, e.g. Scrolling in bed",
                             text: $name)
                             .font(.title3)
                     }
@@ -199,7 +199,7 @@ struct HabitEditor: View {
     }
 
     private func field(_ key: String, _ prompt: String) -> some View {
-        TextField(prompt, text: Binding(get: { plan[key] ?? "" }, set: { plan[key] = $0 }), axis: .vertical)
+        HintField(prompt, text: Binding(get: { plan[key] ?? "" }, set: { plan[key] = $0 }), axis: .vertical)
     }
 
     private func load() {

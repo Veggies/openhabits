@@ -221,3 +221,25 @@ let buildUpExplanation = """
 
     For a daily habit, "most days" means 12 out of 14. For one you do 3 times a week, it's 5 out of 6.
     """
+
+/// A text field with its hint inside it, like "Habit, e.g. Read": the hint
+/// disappears as you type, and your text starts on the left. In a Mac form a
+/// plain TextField shows its title as a label on the left instead, so typing
+/// lands on the far right of the row.
+struct HintField: View {
+    let hint: String
+    @Binding var text: String
+    var axis: Axis = .horizontal
+
+    init(_ hint: String, text: Binding<String>, axis: Axis = .horizontal) {
+        self.hint = hint
+        _text = text
+        self.axis = axis
+    }
+
+    var body: some View {
+        TextField(hint, text: $text, prompt: Text(hint), axis: axis)
+            .labelsHidden()
+            .multilineTextAlignment(.leading)
+    }
+}

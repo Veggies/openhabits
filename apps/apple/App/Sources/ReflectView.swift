@@ -98,7 +98,7 @@ struct WeeklyReviewView: View {
             }
             ForEach(WeeklyReview.prompts, id: \.id) { prompt in
                 Section(prompt.text) {
-                    TextField("Write a few words…", text: binding(prompt.id, day: shown), axis: .vertical)
+                    HintField("Write a few words…", text: binding(prompt.id, day: shown), axis: .vertical)
                         .lineLimit(2...8)
                 }
             }
@@ -171,7 +171,7 @@ struct ScorecardView: View {
                 .onDelete { offsets in
                     for i in offsets { repo.deleteScorecardItem(items[i].id) }
                 }
-                TextField("Add something you do, e.g. Check my phone", text: $newItem)
+                HintField("Add something you do, e.g. Check my phone", text: $newItem)
                     .focused($adding)
                     .onSubmit {
                         let text = newItem.trimmingCharacters(in: .whitespacesAndNewlines)

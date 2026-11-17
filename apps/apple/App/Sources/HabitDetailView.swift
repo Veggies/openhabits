@@ -372,7 +372,7 @@ struct SizeCheckIn: View {
                 LabeledContent("Your version for now", value: habit.plan.twoMinute)
             }
             Section {
-                TextField("Your new version", text: $version, axis: .vertical)
+                HintField("Your new version", text: $version, axis: .vertical)
                     .onSubmit(change)
             } header: {
                 Text("Your new version")
