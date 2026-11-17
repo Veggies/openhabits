@@ -4,8 +4,8 @@
 # For a new version, run tool/release_mac.sh --upload and update version
 # and sha256 here and in the tap.
 cask "openhabits" do
-  version "0.1.1"
-  sha256 "56375e3daaea48aa16945e1dce886ff649e94cd6042fb83038e1beba2bb34a94"
+  version "0.1.2"
+  sha256 "27a5ba009f8c4b3a7701c5774d12836981bdc27110b1e85e33e52b6bebd8fc6c"
 
   url "https://github.com/Veggies/openhabits/releases/download/v#{version}/OpenHabits-#{version}-macOS.zip"
   name "OpenHabits"
