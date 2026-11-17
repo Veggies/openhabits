@@ -28,7 +28,7 @@ struct OpenHabitsApp: App {
                 .environment(app)
                 .tint(app.accentName == "system" ? nil : app.accent)
         } label: {
-            FocusMenuLabel().environment(app)
+            MenuBarFocusLabel().environment(app)
         }
         .menuBarExtraStyle(.window)
 

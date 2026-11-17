@@ -148,6 +148,42 @@ struct FocusMenuLabel: View {
     }
 }
 
+/// The menu bar's version of the label. The menu bar turns a text label
+/// into a plain title and drops `.monospacedDigit()`, so each second the
+/// digits changed width and the item shifted. Drawing the countdown as a
+/// picture keeps the digits even and the item still.
+struct MenuBarFocusLabel: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.displayScale) private var scale
+
+    var body: some View {
+        let focus = app.focus
+        if focus.running || focus.paused {
+            let left = Int(focus.remaining(at: focus.now).rounded(.up))
+            Image(nsImage: picture(paused: focus.paused, text: String(format: "%d:%02d", left / 60, left % 60)))
+                .accessibilityLabel(focus.paused ? "Focus paused" : "Focus timer")
+        } else {
+            Image(systemName: "timer")
+        }
+    }
+
+    private func picture(paused: Bool, text: String) -> NSImage {
+        let renderer = ImageRenderer(content:
+            HStack(spacing: 4) {
+                Image(systemName: paused ? "pause.fill" : "timer")
+                Text(text).monospacedDigit()
+            }
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(.black)
+        )
+        renderer.scale = scale
+        let image = renderer.nsImage ?? NSImage()
+        // A template follows the menu bar's light or dark look.
+        image.isTemplate = true
+        return image
+    }
+}
+
 /// What opens from the menu bar: the timer and today's tomatoes.
 struct FocusMenu: View {
     @Environment(AppModel.self) private var app
