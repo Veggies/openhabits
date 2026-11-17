@@ -24,6 +24,13 @@ struct OnboardingView: View {
             }
         }
         .animation(.smooth, value: step)
+        #if os(macOS)
+        // The Mac draws a solid strip under the title bar when content
+        // scrolls beneath it, only as wide as the scroll view. In this
+        // narrow column that showed as an odd box at the top of the window;
+        // a soft fade has no strip.
+        .scrollEdgeEffectStyle(.soft, for: .top)
+        #endif
         .frame(maxWidth: 560)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.background)
