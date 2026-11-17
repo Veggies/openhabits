@@ -1,23 +1,14 @@
-# Builds and tests the server when it (or the shared core) changes. The
-# apps and the directory have their own workflows. When a version
-# tag (e.g. v1.0.0) is pushed, it also publishes the image to GitHub
-# Container Registry as ghcr.io/<owner>/openhabits-server, for linux/amd64
-# and linux/arm64. TrueNAS and the Docker Compose file install from there.
-name: Server
+# Publishes a release of the server: when a version tag (e.g. v1.0.0) is
+# pushed, it tests the server, then builds the image for linux/amd64 and
+# linux/arm64 and publishes it to GitHub Container Registry as
+# ghcr.io/<owner>/openhabits-server. TrueNAS and the Docker Compose file
+# install from there. Day-to-day tests, including checking that the image
+# still builds, are in checks.yml.
+name: Release
 
 on:
   push:
-    branches: [main]
-    # Path filters don't apply to tag pushes, so every release still builds.
     tags: ["v*"]
-    paths: &paths
-      - "apps/server/**"
-      - "packages/core/**"
-      - "fixtures/**"
-      - "pubspec.yaml"
-      - ".github/workflows/release.yml"
-  pull_request:
-    paths: *paths
   workflow_dispatch:
 
 permissions:

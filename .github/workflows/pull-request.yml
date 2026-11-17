@@ -1,0 +1,73 @@
+# Checks a pull request's description, and runs again whenever it's edited.
+# - Screenshots: if the change touches anything you can see (app screens,
+#   the server's setup page, icons), the description must include a
+#   screenshot or video, or tick "This change doesn't affect anything you
+#   can see". Required before merging.
+# - Tests: if code changed but no tests did, it leaves a reminder (a
+#   warning, not a failure).
+# It only reads the pull request; the description is passed in as data, so
+# nothing in it can run as code.
+name: Pull request
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  screenshots:
+    name: Screenshots for visible changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3
+        id: filter
+        with:
+          list-files: shell
+          filters: |
+            visible:
+              - 'apps/apple/App/**'
+              - 'apps/client/lib/ui/**'
+              - 'apps/client/lib/main.dart'
+              - 'apps/server/lib/web/**'
+            code:
+              - 'apps/**'
+              - 'packages/**'
+              - 'services/**'
+            tests:
+              - '**/test/**'
+              - '**/Tests/**'
+              - '**/*_test.dart'
+              - '**/*.test.js'
+
+      - name: Check the description has a screenshot
+        if: steps.filter.outputs.visible == 'true'
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+          FILES: ${{ steps.filter.outputs.visible_files }}
+        run: |
+          image='!\[[^]]*\]\(|<img|<video|github\.com/user-attachments/|\.(png|jpe?g|gif|webp|mp4|mov)([?) ]|$)'
+          none='\[[xX]\][^[:cntrl:]]*affect anything you can see'
+          if printf '%s' "$BODY" | grep -Eiq "$image"; then
+            echo "Found a screenshot or video in the description. Thanks!"
+          elif printf '%s' "$BODY" | grep -Eq "$none"; then
+            echo "The description says nothing visible changed."
+          else
+            echo "::error title=Please add a screenshot::This pull request changes something you can see ($FILES). Add a screenshot or short video of the change to the description (drag it into the Screenshots section), ideally before and after. If nothing visible changed, tick \"This change doesn't affect anything you can see\" instead. This check runs again when you edit the description."
+            exit 1
+          fi
+
+      - name: No visible changes
+        if: steps.filter.outputs.visible != 'true'
+        run: echo "Nothing visible changed, so no screenshot is needed."
+
+      - name: Remind about tests
+        if: steps.filter.outputs.code == 'true' && steps.filter.outputs.tests != 'true'
+        run: echo "::warning title=No tests changed::This pull request changes code but no tests. If it fixes a bug or adds behaviour, please add a test that would have caught it, so it can't quietly come back. See CONTRIBUTING.md for how to run them."

@@ -1,0 +1,174 @@
+# Runs on every pull request and every push to main. A first job works out
+# which parts of the project changed, and only their checks run. The last
+# job, "All checks passed", fails if any check that ran failed; that's the
+# one branch protection requires, so pull requests can't be merged with
+# failing tests, while skipped checks (nothing changed there) don't block.
+# Modelled on Immich's test workflow (github.com/immich-app/immich).
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    name: What changed
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      server: ${{ steps.filter.outputs.server == 'true' || steps.filter.outputs.ci == 'true' || github.event_name == 'workflow_dispatch' }}
+      flutter: ${{ steps.filter.outputs.flutter == 'true' || steps.filter.outputs.ci == 'true' || github.event_name == 'workflow_dispatch' }}
+      swift: ${{ steps.filter.outputs.swift == 'true' || steps.filter.outputs.ci == 'true' || github.event_name == 'workflow_dispatch' }}
+      directory: ${{ steps.filter.outputs.directory == 'true' || steps.filter.outputs.ci == 'true' || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3
+        id: filter
+        with:
+          # Shared test data is read by every part, so it runs everything.
+          filters: |
+            server:
+              - 'apps/server/**'
+              - '.dockerignore'
+              - 'packages/core/**'
+              - 'fixtures/**'
+              - 'pubspec.*'
+            flutter:
+              - 'apps/client/**'
+              - 'apps/server/**'
+              - 'packages/core/**'
+              - 'fixtures/**'
+              - 'pubspec.*'
+            swift:
+              - 'apps/apple/Packages/**'
+              - 'fixtures/**'
+            directory:
+              - 'services/directory/**'
+              - 'fixtures/**'
+            ci:
+              - '.github/workflows/checks.yml'
+
+  server:
+    name: Server and core
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    container: dart:3.14
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      # Same trimmed workspace as the Dockerfile: the Flutter client would
+      # need the Flutter SDK to resolve.
+      - name: Resolve core and server
+        run: |
+          printf 'name: workspace\npublish_to: none\nenvironment:\n  sdk: ^3.14.0\nworkspace:\n  - packages/core\n  - apps/server\n' > pubspec.yaml
+          dart pub get
+      - name: Formatting
+        run: |
+          (cd packages/core && dart format --output=none --set-exit-if-changed .)
+          (cd apps/server && dart format --output=none --set-exit-if-changed .)
+      - run: dart analyze packages/core apps/server
+      - run: dart test
+        working-directory: packages/core
+      - run: dart test
+        working-directory: apps/server
+
+  flutter:
+    name: Flutter app (Windows and Linux)
+    needs: changes
+    if: needs.changes.outputs.flutter == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          # Same version as .fvmrc.
+          flutter-version: 3.50.0
+          channel: stable
+      - run: flutter pub get
+      - name: Formatting
+        run: dart format --output=none --set-exit-if-changed .
+        working-directory: apps/client
+      - run: flutter analyze
+        working-directory: apps/client
+      - run: flutter test
+        working-directory: apps/client
+
+  server-image:
+    name: Server image builds
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      # Just proves the image still builds; releases publish it (release.yml).
+      - run: docker build -f apps/server/Dockerfile -t openhabits-server:check .
+
+  swift:
+    name: Apple core (Swift)
+    needs: changes
+    if: needs.changes.outputs.swift == 'true'
+    # HabitsCore targets iOS and macOS 26, so it needs Xcode 26 or later.
+    # The app screens themselves are built by Xcode Cloud.
+    runs-on: macos-latest
+    # Fails fast if no Mac runner picks the job up.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - run: xcodebuild -version && swift --version
+      - run: swift test
+        working-directory: apps/apple/Packages/HabitsCore
+
+  directory:
+    name: Directory service
+    needs: changes
+    if: needs.changes.outputs.directory == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - run: npm test
+        working-directory: services/directory
+
+  all-passed:
+    name: All checks passed
+    needs: [changes, server, server-image, flutter, swift, directory]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Fail if any check failed
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: |
+          echo "::error::A check failed. Open the failed job above to see why."
+          exit 1
+      - run: echo "Every check that ran has passed. Checks for parts that didn't change were skipped."
