@@ -93,9 +93,7 @@ Future<bool> confirmDeleteHabit(BuildContext context, Habit habit) async =>
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Delete ${habit.name}?'),
-        content: const Text(
-          'This removes it from all your devices.',
-        ),
+        content: const Text('This removes it from all your devices.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -266,8 +264,7 @@ class _HabitList extends StatelessWidget {
             habits: quit,
           ),
         // A nudge toward the scorecard while there's little to track yet.
-        if (habits.length < 3 &&
-            repo.scorecard.isEmpty) ...[
+        if (habits.length < 3 && repo.scorecard.isEmpty) ...[
           const SizedBox(height: 16),
           ListTile(
             leading: const Icon(Icons.fact_check_outlined),

@@ -39,7 +39,9 @@ Future<(int, Map<String, Object?>)> send(
         if (body != null) 'content-type': contentType,
       },
       body: body == null ? null : (body is String ? body : jsonEncode(body)),
-      context: {'shelf.io.connection_info': ?(ip == null ? null : FakeConnection(ip))},
+      context: {
+        'shelf.io.connection_info': ?(ip == null ? null : FakeConnection(ip)),
+      },
     ),
   );
   final text = await response.readAsString();

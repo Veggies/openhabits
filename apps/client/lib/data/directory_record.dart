@@ -59,10 +59,8 @@ class DirectoryRecord {
       final curve = ECCurve_secp256r1();
       final point = curve.curve.decodePoint(key);
       if (point == null) return false;
-      BigInt number(List<int> bytes) => bytes.fold(
-        BigInt.zero,
-        (n, b) => (n << 8) | BigInt.from(b),
-      );
+      BigInt number(List<int> bytes) =>
+          bytes.fold(BigInt.zero, (n, b) => (n << 8) | BigInt.from(b));
       final signer = ECDSASigner(SHA256Digest())
         ..init(false, PublicKeyParameter(ECPublicKey(point, curve)));
       return signer.verifySignature(

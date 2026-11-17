@@ -162,8 +162,9 @@ class Reminders extends ChangeNotifier {
       }
     }
     requests.sort((a, b) => a.at.compareTo(b.at));
-    for (final (:at, :id, :title, :body, :payload, :isHabit)
-        in requests.take(60)) {
+    for (final (:at, :id, :title, :body, :payload, :isHabit) in requests.take(
+      60,
+    )) {
       await _plugin.zonedSchedule(
         id: id,
         scheduledDate: tz.TZDateTime.from(at, tz.local),

@@ -104,7 +104,8 @@ void main() {
   late Device laptop;
 
   setUp(() async {
-    Device.directory.clear(); // shared by every device, so start each test empty
+    Device.directory
+        .clear(); // shared by every device, so start each test empty
     serverStore = SyncStore.inMemory();
     auth = AuthStore(serverStore);
     auth.createUser('ryan', password: 'correct horse');
@@ -488,49 +489,43 @@ void main() {
       },
     );
 
-    test(
-      "something else at an already trusted remote address can't sign the "
-      'phone out',
-      () async {
-        final device = Device(remoteHandler);
-        await device.signIn();
-        device.unreachable.add('server');
-        await device.sync.syncNow(); // the remote address checks out
-        expect(device.sync.status, SyncStatus.idle);
+    test("something else at an already trusted remote address can't sign the "
+        'phone out', () async {
+      final device = Device(remoteHandler);
+      await device.signIn();
+      device.unreachable.add('server');
+      await device.sync.syncNow(); // the remote address checks out
+      expect(device.sync.status, SyncStatus.idle);
 
-        device.impostors['203.0.113.7'] = http.Response(
-          '{"error":"Please sign in again."}',
-          401,
-        );
-        device.repo.createHabit({'name': 'Kept'});
-        await device.sync.syncNow();
-        expect(device.sync.status, isNot(SyncStatus.signedOut));
-        expect(device.store.pendingCount, greaterThan(0));
-        device.sync.dispose();
-      },
-    );
+      device.impostors['203.0.113.7'] = http.Response(
+        '{"error":"Please sign in again."}',
+        401,
+      );
+      device.repo.createHabit({'name': 'Kept'});
+      await device.sync.syncNow();
+      expect(device.sync.status, isNot(SyncStatus.signedOut));
+      expect(device.store.pendingCount, greaterThan(0));
+      device.sync.dispose();
+    });
 
-    test(
-      "away from home, another device at the home address doesn't get the "
-      "token and can't sign the phone out",
-      () async {
-        final device = Device(remoteHandler);
-        await device.signIn();
-        // On someone else's network, something else has the same address as
-        // the home server and refuses everything.
-        device.impostors['server'] = http.Response(
-          '{"error":"Please sign in again."}',
-          401,
-        );
-        device.tokensSentTo.clear();
-        device.repo.createHabit({'name': 'At a friend\'s house'});
-        await device.sync.syncNow();
-        expect(device.sync.status, SyncStatus.idle);
-        expect(device.tokensSentTo, isNot(contains('server')));
-        expect(device.store.pendingCount, 0); // went via the remote address
-        device.sync.dispose();
-      },
-    );
+    test("away from home, another device at the home address doesn't get the "
+        "token and can't sign the phone out", () async {
+      final device = Device(remoteHandler);
+      await device.signIn();
+      // On someone else's network, something else has the same address as
+      // the home server and refuses everything.
+      device.impostors['server'] = http.Response(
+        '{"error":"Please sign in again."}',
+        401,
+      );
+      device.tokensSentTo.clear();
+      device.repo.createHabit({'name': 'At a friend\'s house'});
+      await device.sync.syncNow();
+      expect(device.sync.status, SyncStatus.idle);
+      expect(device.tokensSentTo, isNot(contains('server')));
+      expect(device.store.pendingCount, 0); // went via the remote address
+      device.sync.dispose();
+    });
 
     test(
       'devices follow the remote address, and forget it when turned off',
@@ -608,39 +603,43 @@ void main() {
       );
     });
 
-    test('a reinstall at a new address also keeps and uploads the habits',
-        () async {
-      phone.repo.createHabit({'name': 'Only copy is on the phone'});
-      await phone.sync.syncNow();
-      final fresh = SyncStore.inMemory();
-      addTearDown(fresh.close);
-      final freshAuth = AuthStore(fresh)
-        ..createUser('ryan', password: 'correct horse');
-      phone.handler = buildHandler(fresh, freshAuth, serverId: 'new-box');
+    test(
+      'a reinstall at a new address also keeps and uploads the habits',
+      () async {
+        phone.repo.createHabit({'name': 'Only copy is on the phone'});
+        await phone.sync.syncNow();
+        final fresh = SyncStore.inMemory();
+        addTearDown(fresh.close);
+        final freshAuth = AuthStore(fresh)
+          ..createUser('ryan', password: 'correct horse');
+        phone.handler = buildHandler(fresh, freshAuth, serverId: 'new-box');
 
-      await phone.sync.signIn('http://new-box', 'ryan', 'correct horse');
-      await phone.sync.syncNow();
-      final owner = freshAuth.userByName('ryan')!.id;
-      expect(
-        fresh.rows(owner, Tables.habits).values.map((h) => h['name']),
-        contains('Only copy is on the phone'),
-      );
-    });
+        await phone.sync.signIn('http://new-box', 'ryan', 'correct horse');
+        await phone.sync.syncNow();
+        final owner = freshAuth.userByName('ryan')!.id;
+        expect(
+          fresh.rows(owner, Tables.habits).values.map((h) => h['name']),
+          contains('Only copy is on the phone'),
+        );
+      },
+    );
 
-    test("signing in doesn't fall back to the previous server's directory",
-        () async {
-      phone.store.setMeta(
-        'directoryLookup',
-        'https://directory.example/v1/servers/old',
-      );
-      phone.unreachable.add('new-box');
-      phone.hostsUsed.clear();
-      await expectLater(
-        phone.sync.signIn('http://new-box', 'ryan', 'correct horse'),
-        throwsA(isA<SyncException>()),
-      );
-      expect(phone.hostsUsed, isNot(contains('directory.example')));
-    });
+    test(
+      "signing in doesn't fall back to the previous server's directory",
+      () async {
+        phone.store.setMeta(
+          'directoryLookup',
+          'https://directory.example/v1/servers/old',
+        );
+        phone.unreachable.add('new-box');
+        phone.hostsUsed.clear();
+        await expectLater(
+          phone.sync.signIn('http://new-box', 'ryan', 'correct horse'),
+          throwsA(isA<SyncException>()),
+        );
+        expect(phone.hostsUsed, isNot(contains('directory.example')));
+      },
+    );
 
     test('after a restore from backup, devices send what it lost', () async {
       final dir = Directory.systemTemp.createTempSync('restore');
@@ -663,8 +662,11 @@ void main() {
       // The disk fails; the owner restores last night's backup.
       final restored = SyncStore.open('${dir.path}/backup.sqlite');
       addTearDown(restored.close);
-      device.handler = buildHandler(restored, AuthStore(restored),
-          serverId: 'home');
+      device.handler = buildHandler(
+        restored,
+        AuthStore(restored),
+        serverId: 'home',
+      );
       await device.sync.syncNow();
       await device.sync.syncNow();
       expect(device.sync.status, SyncStatus.idle);
@@ -684,7 +686,10 @@ void main() {
     expect(warning, contains(server));
     expect(warning, contains('as ryan'));
     expect(warning, contains("haven't been sent yet"));
-    expect(Device(handler).sync.replacementWarning('https://x.example'), isNull);
+    expect(
+      Device(handler).sync.replacementWarning('https://x.example'),
+      isNull,
+    );
   });
 
   test('a queued change that can\'t be read doesn\'t block the rest', () async {

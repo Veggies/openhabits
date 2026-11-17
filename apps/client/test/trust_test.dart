@@ -12,9 +12,9 @@ import 'package:server/remote/tls.dart';
 
 /// Signed by the server's DirectoryIdentity; also checked by the
 /// directory's tests and the Swift tests.
-final _record =
-    jsonDecode(File('../../fixtures/directory_record.json').readAsStringSync())
-        as Map<String, Object?>;
+final _record = jsonDecode(
+  File('../../fixtures/directory_record.json').readAsStringSync(),
+) as Map<String, Object?>;
 
 void main() {
   group('directory records', () {
@@ -41,7 +41,11 @@ void main() {
         '198.51.100.66',
       );
       expect(
-        DirectoryRecord.verify(answer(payload: tampered), key: key, id: id),
+        DirectoryRecord.verify(
+          answer(payload: tampered),
+          key: key,
+          id: id,
+        ),
         isNull,
       );
       expect(
@@ -54,7 +58,13 @@ void main() {
         isNull,
       );
       expect(
-        DirectoryRecord.verify({'urls': ['https://x.example']}, key: key, id: id),
+        DirectoryRecord.verify(
+          {
+            'urls': ['https://x.example'],
+          },
+          key: key,
+          id: id,
+        ),
         isNull,
       );
     });

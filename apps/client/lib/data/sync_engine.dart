@@ -359,8 +359,7 @@ class SyncEngine extends ChangeNotifier {
     // Pin the certificate the person confirmed or the QR code carried, even
     // when signing in over the home network, for use when away. Only if it
     // was confirmed for one of the addresses signed in to.
-    if (trusted != null &&
-        urls.any((u) => Uri.parse(u).host == trusted.host)) {
+    if (trusted != null && urls.any((u) => Uri.parse(u).host == trusted.host)) {
       store.setMeta('fingerprint', trusted.fingerprint);
     }
     _activeUrl = url;
@@ -581,9 +580,8 @@ class SyncEngine extends ChangeNotifier {
       final streamed = await _http
           .send(request)
           .timeout(Duration(seconds: quick ? 6 : 30));
-      response = await http.Response.fromStream(
-        streamed,
-      ).timeout(const Duration(minutes: 2));
+      response = await http.Response.fromStream(streamed)
+          .timeout(const Duration(minutes: 2));
     } on TimeoutException {
       throw const _Unreachable(timedOut: true);
     } catch (_) {
@@ -598,7 +596,9 @@ class SyncEngine extends ChangeNotifier {
     final answeredBy = response.headers['x-openhabits-server'];
     if (expected != null && answeredBy != expected) {
       _verified.remove('${url.scheme}://${url.authority}');
-      if (answeredBy != null) _otherServerAt = '${url.scheme}://${url.authority}';
+      if (answeredBy != null) {
+        _otherServerAt = '${url.scheme}://${url.authority}';
+      }
       throw const _Unreachable();
     }
     Map<String, Object?>? decoded;

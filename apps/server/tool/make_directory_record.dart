@@ -24,13 +24,6 @@ void main() {
       .encode(identity.sign(utf8.encode(payload)))
       .replaceAll('=', '');
   File('../../fixtures/directory_record.json').writeAsStringSync(
-    '${const JsonEncoder.withIndent('  ').convert({
-      'about': 'A directory record signed by the Dart server. The server, the directory and both apps check it the same way. Test-only key.',
-      'privateKeyPem': pem,
-      'key': identity.publicKeyBase64Url,
-      'id': identity.id,
-      'payload': payload,
-      'sig': sig,
-    })}\n',
+    '${const JsonEncoder.withIndent('  ').convert({'about': 'A directory record signed by the Dart server. The server, the directory and both apps check it the same way. Test-only key.', 'privateKeyPem': pem, 'key': identity.publicKeyBase64Url, 'id': identity.id, 'payload': payload, 'sig': sig})}\n',
   );
 }

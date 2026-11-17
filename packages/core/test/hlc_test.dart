@@ -59,11 +59,12 @@ void main() {
     });
 
     test('receive, including a device whose date is far ahead', () {
-      for (final [clock, remote, now, expected] in _fixture['receive'] as List) {
+      for (final [clock, remote, now, expected]
+          in _fixture['receive'] as List) {
         expect(
-          Hlc.parse(
-            clock as String,
-          ).receive(Hlc.parse(remote as String), now as int).pack(),
+          Hlc.parse(clock as String)
+              .receive(Hlc.parse(remote as String), now as int)
+              .pack(),
           expected,
           reason: '$clock receives $remote at $now',
         );
@@ -71,7 +72,8 @@ void main() {
     });
 
     test('the merge rule', () {
-      for (final [incoming, current, expected] in _fixture['shouldApply'] as List) {
+      for (final [incoming, current, expected]
+          in _fixture['shouldApply'] as List) {
         Change at(String packed) => Change(
           table: 't',
           rowId: 'r',

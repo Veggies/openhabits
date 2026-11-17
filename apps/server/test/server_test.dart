@@ -431,7 +431,10 @@ void main() {
     expect(reopened.cursor, 1);
     reopened.apply(owner.id, [set('title', 'Oat milk', 2, 'phone')]);
     expect(reopened.cursor, 2); // keeps counting, never reuses a sequence
-    expect((await AuthStore(reopened).signIn('ryan', 'correct horse')).id, owner.id);
+    expect(
+      (await AuthStore(reopened).signIn('ryan', 'correct horse')).id,
+      owner.id,
+    );
   });
 
   group('OIDC', () {

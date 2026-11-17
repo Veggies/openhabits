@@ -70,7 +70,10 @@ void main() {
     test('two setups at once: exactly one becomes the owner', () async {
       final api = Client(handler());
       final results = await Future.wait([
-        api.call('POST', '/setup', {'username': 'ryan', 'password': '12345678'}),
+        api.call('POST', '/setup', {
+          'username': 'ryan',
+          'password': '12345678',
+        }),
         api.call('POST', '/setup', {'username': 'eve', 'password': '12345678'}),
       ]);
       expect(results.map((r) => r.$1).toList()..sort(), [200, 409]);
@@ -90,8 +93,10 @@ void main() {
       for (var i = 0; i < 5; i++) {
         await api.login('ryan', 'wrong');
       }
-      expect((await api.login('ryan', 'correct horse')).$2['error'],
-          startsWith("That's too many tries"));
+      expect(
+        (await api.login('ryan', 'correct horse')).$2['error'],
+        startsWith("That's too many tries"),
+      );
       // Same address (e.g. the same proxy), different person: fine.
       expect((await api.login('sam', 'sam password')).$1, 200);
     });
@@ -104,8 +109,10 @@ void main() {
       now = now.add(const Duration(seconds: 31));
       await api.login('ryan', 'wrong'); // 6th: now 60 seconds
       now = now.add(const Duration(seconds: 31));
-      expect((await api.login('ryan', 'correct horse')).$2['error'],
-          startsWith("That's too many tries"));
+      expect(
+        (await api.login('ryan', 'correct horse')).$2['error'],
+        startsWith("That's too many tries"),
+      );
       now = now.add(const Duration(hours: 2));
       expect((await api.login('ryan', 'correct horse')).$1, 200);
     });
@@ -115,69 +122,92 @@ void main() {
       for (var i = 0; i < 20; i++) {
         await api.login('nobody$i', 'guess');
       }
-      expect((await api.login('ryan', 'correct horse')).$2['error'],
-          startsWith("That's too many tries"));
+      expect(
+        (await api.login('ryan', 'correct horse')).$2['error'],
+        startsWith("That's too many tries"),
+      );
       // Another address isn't affected.
-      expect((await Client(handler(), ip: '192.168.1.51')
-              .login('ryan', 'correct horse')).$1, 200);
+      expect(
+        (await Client(
+          handler(),
+          ip: '192.168.1.51',
+        ).login('ryan', 'correct horse')).$1,
+        200,
+      );
     });
 
     test('forwarded addresses are only believed from a local proxy', () async {
       // Straight from the internet (e.g. the forwarded HTTPS port), a made-up
       // header changes nothing: every guess counts against the real address.
       for (var i = 0; i < 6; i++) {
-        await Client(handler(trust: ProxyTrust.forwardedFor),
-            ip: '198.51.100.9',
-            headers: {'x-forwarded-for': '10.9.9.$i'}).login('ryan', 'wrong');
+        await Client(
+          handler(trust: ProxyTrust.forwardedFor),
+          ip: '198.51.100.9',
+          headers: {'x-forwarded-for': '10.9.9.$i'},
+        ).login('ryan', 'wrong');
       }
-      expect((await Client(handler(trust: ProxyTrust.forwardedFor),
-                  ip: '198.51.100.9')
-              .login('ryan', 'correct horse')).$2['error'],
-          startsWith("That's too many tries"));
+      expect(
+        (await Client(
+          handler(trust: ProxyTrust.forwardedFor),
+          ip: '198.51.100.9',
+        ).login('ryan', 'correct horse')).$2['error'],
+        startsWith("That's too many tries"),
+      );
 
       // From a proxy on the home network, each visitor is told apart by
       // the address it adds, so one visitor's guesses don't lock another.
       for (var i = 0; i < 6; i++) {
-        await Client(handler(trust: ProxyTrust.forwardedFor),
-            ip: '192.168.1.2',
-            headers: {'x-forwarded-for': '203.0.113.66'}).login('ryan', 'wrong');
+        await Client(
+          handler(trust: ProxyTrust.forwardedFor),
+          ip: '192.168.1.2',
+          headers: {'x-forwarded-for': '203.0.113.66'},
+        ).login('ryan', 'wrong');
       }
-      expect((await Client(handler(trust: ProxyTrust.forwardedFor),
-                  ip: '192.168.1.2',
-                  headers: {'x-forwarded-for': '203.0.113.77'})
-              .login('ryan', 'correct horse')).$1, 200);
+      expect(
+        (await Client(
+          handler(trust: ProxyTrust.forwardedFor),
+          ip: '192.168.1.2',
+          headers: {'x-forwarded-for': '203.0.113.77'},
+        ).login('ryan', 'correct horse')).$1,
+        200,
+      );
     });
 
     test('behind a proxy, the address the proxy added is used', () {
       expect(
-        clientFromHeaders({'x-forwarded-for': 'spoofed, 203.0.113.5'},
-            ProxyTrust.forwardedFor),
+        clientFromHeaders({
+          'x-forwarded-for': 'spoofed, 203.0.113.5',
+        }, ProxyTrust.forwardedFor),
         '203.0.113.5',
       );
       expect(
-        clientFromHeaders({'cf-connecting-ip': '203.0.113.5'},
-            ProxyTrust.forwardedFor),
+        clientFromHeaders({
+          'cf-connecting-ip': '203.0.113.5',
+        }, ProxyTrust.forwardedFor),
         isNull,
       );
       expect(
-        clientFromHeaders({'cf-connecting-ip': '203.0.113.5'},
-            ProxyTrust.cloudflare),
+        clientFromHeaders({
+          'cf-connecting-ip': '203.0.113.5',
+        }, ProxyTrust.cloudflare),
         '203.0.113.5',
       );
       expect(ProxyTrust.parse('true'), ProxyTrust.forwardedFor);
       expect(ProxyTrust.parse(null), ProxyTrust.none);
     });
 
-    test('password checks run side by side without mixing up results',
-        () async {
-      final api = Client(handler());
-      final results = await Future.wait([
-        api.login('ryan', 'correct horse'),
-        api.login('sam', 'sam password'),
-        Client(handler(), ip: '192.168.1.60').login('sam', 'wrong'),
-      ]);
-      expect(results.map((r) => r.$1), [200, 200, 400]);
-    });
+    test(
+      'password checks run side by side without mixing up results',
+      () async {
+        final api = Client(handler());
+        final results = await Future.wait([
+          api.login('ryan', 'correct horse'),
+          api.login('sam', 'sam password'),
+          Client(handler(), ip: '192.168.1.60').login('sam', 'wrong'),
+        ]);
+        expect(results.map((r) => r.$1), [200, 200, 400]);
+      },
+    );
   });
 
   group('one-time codes', () {
@@ -199,8 +229,10 @@ void main() {
 
     test('guessing is limited', () {
       for (var i = 0; i < 10; i++) {
-        expect(() => auth.redeemCode('AAAA-AAA$i', client: 'x'),
-            throwsA(isA<AuthException>()));
+        expect(
+          () => auth.redeemCode('AAAA-AAA$i', client: 'x'),
+          throwsA(isA<AuthException>()),
+        );
       }
       final code = auth.createCode(owner);
       expect(
@@ -218,10 +250,10 @@ void main() {
       auth.createUser('sam', password: 'sam password');
       phone = Client(handler());
       laptop = Client(handler());
-      phone.token = (await phone.login('ryan', 'correct horse')).$2['token']
-          as String;
-      laptop.token = (await laptop.login('ryan', 'correct horse')).$2['token']
-          as String;
+      phone.token =
+          (await phone.login('ryan', 'correct horse')).$2['token'] as String;
+      laptop.token =
+          (await laptop.login('ryan', 'correct horse')).$2['token'] as String;
     });
 
     test('expire after three months unused', () async {
@@ -237,18 +269,21 @@ void main() {
           (await phone.call('GET', '/auth/me')).$2['sessions'] as List;
       expect(sessions.where((s) => s['current'] == true), hasLength(1));
       final other = sessions.firstWhere((s) => s['current'] == false);
-      expect((await phone.call('DELETE', '/auth/sessions/${other['id']}')).$1,
-          200);
+      expect(
+        (await phone.call('DELETE', '/auth/sessions/${other['id']}')).$1,
+        200,
+      );
       expect((await laptop.call('GET', '/auth/me')).$1, 401);
       expect((await phone.call('GET', '/auth/me')).$1, 200);
     });
 
     test("you can't sign out someone else's device", () async {
       final sam = Client(handler());
-      sam.token = (await sam.login('sam', 'sam password')).$2['token'] as String;
+      sam.token =
+          (await sam.login('sam', 'sam password')).$2['token'] as String;
       final ids = [
-        for (final s in (await phone.call('GET', '/auth/me')).$2['sessions']
-            as List)
+        for (final s
+            in (await phone.call('GET', '/auth/me')).$2['sessions'] as List)
           s['id'],
       ];
       expect((await sam.call('DELETE', '/auth/sessions/${ids.first}')).$1, 404);
@@ -265,30 +300,36 @@ void main() {
       expect((await laptop.call('GET', '/auth/me')).$1, 401);
     });
 
-    test('the owner can sign someone out without deleting their data',
-        () async {
-      final sam = Client(handler());
-      sam.token = (await sam.login('sam', 'sam password')).$2['token'] as String;
-      final samId = auth.userByName('sam')!.id;
-      expect((await sam.call('POST', '/users/$samId/sign-out')).$1, 403);
-      expect((await phone.call('POST', '/users/$samId/sign-out')).$1, 200);
-      expect((await sam.call('GET', '/auth/me')).$1, 401);
-      expect(auth.userById(samId), isNotNull);
-    });
+    test(
+      'the owner can sign someone out without deleting their data',
+      () async {
+        final sam = Client(handler());
+        sam.token =
+            (await sam.login('sam', 'sam password')).$2['token'] as String;
+        final samId = auth.userByName('sam')!.id;
+        expect((await sam.call('POST', '/users/$samId/sign-out')).$1, 403);
+        expect((await phone.call('POST', '/users/$samId/sign-out')).$1, 200);
+        expect((await sam.call('GET', '/auth/me')).$1, 401);
+        expect(auth.userById(samId), isNotNull);
+      },
+    );
   });
 
   test('sign-in answers say which server this is', () async {
     auth.createUser('ryan', password: 'correct horse');
     final api = Client(handler());
     expect((await api.call('GET', '/auth/info')).$2['id'], 'server-1');
-    expect(((await api.login('ryan', 'correct horse')).$2['server'] as Map)['id'],
-        'server-1');
+    expect(
+      ((await api.login('ryan', 'correct horse')).$2['server'] as Map)['id'],
+      'server-1',
+    );
   });
 
   group('limits on what anyone can send', () {
     test('a huge request is refused before it is read', () async {
       final big = '{"username":"${'x' * (maxBodyBytes + 10)}"}';
-      final (status, _) = await Client(handler()).call('POST', '/auth/login', big);
+      final (status, _) = await Client(handler())
+          .call('POST', '/auth/login', big);
       expect(status, 413);
     });
 
@@ -298,7 +339,9 @@ void main() {
         'GET [200] /calendar/… 2ms',
       );
       expect(
-        redactLogLine('GET [200] /qr.svg?data=openhabits%3A%2F%2Fpair%3Fcode%3DK7QM-3XPT 1ms'),
+        redactLogLine(
+          'GET [200] /qr.svg?data=openhabits%3A%2F%2Fpair%3Fcode%3DK7QM-3XPT 1ms',
+        ),
         'GET [200] /qr.svg?… 1ms',
       );
     });

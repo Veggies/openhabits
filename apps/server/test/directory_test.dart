@@ -17,10 +17,12 @@ void main() {
     // fixtures/directory_record.json is also checked by the directory's
     // tests (JavaScript, WebCrypto) and both apps. If the ID or key format
     // drifted here, every address update would be refused.
-    final record =
-        jsonDecode(File('../../fixtures/directory_record.json').readAsStringSync())
-            as Map<String, Object?>;
-    final identity = DirectoryIdentity.fromPem(record['privateKeyPem'] as String);
+    final record = jsonDecode(
+      File('../../fixtures/directory_record.json').readAsStringSync(),
+    ) as Map<String, Object?>;
+    final identity = DirectoryIdentity.fromPem(
+      record['privateKeyPem'] as String,
+    );
     expect(identity.id, record['id']);
     expect(identity.publicKeyBase64Url, record['key']);
     expect((jsonDecode(record['payload'] as String) as Map)['id'], identity.id);
