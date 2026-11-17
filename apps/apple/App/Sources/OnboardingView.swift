@@ -11,6 +11,10 @@ struct OnboardingView: View {
 
     enum Step { case welcome, connect, tour, firstHabit, habit, done }
     @State private var step = Step.welcome
+    #if os(macOS)
+    /// Space either side of the 560-point column.
+    @State private var sideMargin: CGFloat = 0
+    #endif
 
     var body: some View {
         ZStack {
@@ -24,7 +28,18 @@ struct OnboardingView: View {
             }
         }
         .animation(.smooth, value: step)
+        #if os(macOS)
+        // On the Mac, each step's scroll view fills the window and only its
+        // content sits in the column. The Mac draws a strip under the title
+        // bar as wide as the scroll view when content scrolls beneath it,
+        // so a narrow scroll view showed as an odd box at the top.
+        .contentMargins(.horizontal, sideMargin, for: .scrollContent)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+            sideMargin = max(0, (width - 560) / 2)
+        }
+        #else
         .frame(maxWidth: 560)
+        #endif
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.background)
     }
@@ -57,6 +72,7 @@ struct OnboardingView: View {
             }
             .padding(.horizontal, 28)
             .padding(.top, 48)
+            .onboardingColumn()
             ConnectView { _ in go(.tour) }
                 .scrollContentBackground(.hidden)
             Button("Skip, and use it on this device only") { go(.tour) }
@@ -170,6 +186,7 @@ private struct TourView: View {
             }
             .padding(.horizontal, 24)
             .padding(.top, 20)
+            .onboardingColumn()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
@@ -215,6 +232,7 @@ private struct TourView: View {
             .controlSize(.large)
             .padding(.horizontal, 24)
             .padding(.bottom, 24)
+            .onboardingColumn()
         }
     }
 
@@ -390,6 +408,7 @@ private struct GuidedHabit: View {
             ProgressView(value: Double(page + 1), total: Double(pages))
                 .padding(.horizontal, 28)
                 .padding(.top, 24)
+                .onboardingColumn()
             Form {
                 switch page {
                 case 0:
@@ -452,6 +471,7 @@ private struct GuidedHabit: View {
             }
             .controlSize(.large)
             .padding(24)
+            .onboardingColumn()
         }
         .sheet(isPresented: $choosingIcon) { IconPicker(selected: $icon, color: habitColors[7]) }
     }
@@ -507,5 +527,14 @@ private struct GuidedHabit: View {
         fields["time"] = .string(hasTime ? TimeOfDay(time).text : "")
         app.repo.createHabit(fields)
         onDone()
+    }
+}
+
+extension View {
+    /// Setup's column width, for the parts of a step outside its scroll
+    /// view. (On the Mac the scroll views fill the window; see
+    /// OnboardingView. Elsewhere the whole of setup is already this wide.)
+    fileprivate func onboardingColumn() -> some View {
+        frame(maxWidth: 560)
     }
 }
