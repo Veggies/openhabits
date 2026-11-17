@@ -65,6 +65,5 @@ targets:
         ENABLE_PREVIEWS: true
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: JK252Z5J39
-        "CODE_SIGN_IDENTITY[sdk=macosx*]": "-"
         "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": App/OpenHabits-macOS.entitlements
         ENABLE_HARDENED_RUNTIME: true
