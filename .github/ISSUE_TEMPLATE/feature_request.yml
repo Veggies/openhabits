@@ -1,0 +1,21 @@
+name: Idea or feature request
+description: Suggest something new or a change.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like?
+      description: Describe it from your side, e.g. "I'd like to be reminded twice for some habits".
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why would it help?
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Would you like to build it?
+      options:
+        - label: I'd like to work on this myself

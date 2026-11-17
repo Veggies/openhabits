@@ -1,0 +1,43 @@
+name: Bug report
+description: Something isn't working as it should.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where did it happen?
+      multiple: true
+      options:
+        - iPhone or iPad
+        - Mac
+        - Windows
+        - Linux
+        - Server (setup page or sync)
+        - TrueNAS install
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The version you installed (from Releases, Homebrew or the App Store), if you know it.
+      placeholder: e.g. 0.1.1
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen again
+      placeholder: |
+        1. Open …
+        2. Tap …
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Screenshots, or the server's logs if it's a sync problem. Remove anything private first.
