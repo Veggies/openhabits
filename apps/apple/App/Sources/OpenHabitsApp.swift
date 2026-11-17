@@ -28,7 +28,7 @@ struct OpenHabitsApp: App {
                 .environment(app)
                 .tint(app.accentName == "system" ? nil : app.accent)
         } label: {
-            FocusMenuLabel().environment(app)
+            MenuBarFocusLabel().environment(app)
         }
         .menuBarExtraStyle(.window)
 
@@ -119,9 +119,11 @@ final class AppModel {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         var path = folder.appending(path: "data.sqlite").path
         #if DEBUG
-        // -sampleData uses its own database, made fresh each launch, so
-        // sample habits never mix with real ones (e.g. for screenshots).
-        if UserDefaults.standard.bool(forKey: "sampleData") {
+        // -sampleData (and -emptyData) use their own database, made fresh
+        // each launch, so sample habits never mix with real ones (e.g. for
+        // screenshots).
+        let defaults = UserDefaults.standard
+        if defaults.bool(forKey: "sampleData") || defaults.bool(forKey: "emptyData") {
             path = folder.appending(path: "sample.sqlite").path
             try? FileManager.default.removeItem(atPath: path)
         }

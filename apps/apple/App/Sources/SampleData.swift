@@ -5,7 +5,7 @@ import SwiftUI
 /// For trying the app out during development. Launch with
 /// `-sampleData YES` to start from a fresh, separate database of sample
 /// habits (see AppModel.init) and skip
-/// setup, and `-startTab progress` (habits, progress, reflect, focus,
+/// setup, or `-emptyData YES` for the same with no habits, and `-startTab progress` (habits, progress, reflect, focus,
 /// settings) to open on a tab. On the habits tab, `-openScreen checkIn`
 /// or `-openScreen editor` opens that sheet. Not part of release builds.
 extension AppModel {
@@ -15,6 +15,9 @@ extension AppModel {
             addSampleHabits()
             onboarded = true
         }
+        // -emptyData YES: the same fresh database but with no habits, for
+        // checking empty screens.
+        if defaults.bool(forKey: "emptyData") { onboarded = true }
         #if os(macOS)
         // -cycleTabs YES: flips between Today and Progress a few times, to
         // measure tab switching under a profiler.

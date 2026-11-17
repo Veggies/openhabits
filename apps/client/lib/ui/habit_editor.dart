@@ -408,7 +408,8 @@ String durationLabel(int minutes) {
 }
 
 /// A grid of habit icons. Returns the chosen icon's name.
-/// A few emoji to start with; any emoji can be typed or pasted.
+/// The emoji to choose from. Picking only from a list (no typing) means
+/// every icon is one the app can draw.
 const _emojiSuggestions = [
   '📚',
   '🏃',
@@ -485,18 +486,6 @@ Future<String?> pickHabitIcon(
                       e,
                     ),
                 ],
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                decoration: const InputDecoration(
-                  hintText: 'Or type any emoji',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-                onChanged: (text) {
-                  final emoji = lastEmoji(text);
-                  if (emoji != null) Navigator.pop(context, emoji);
-                },
               ),
               const SizedBox(height: 16),
               Text('Symbols', style: theme.textTheme.titleSmall),

@@ -340,10 +340,9 @@ struct IconPicker: View {
     @Binding var selected: String
     let color: Int
     @Environment(\.dismiss) private var dismiss
-    @State private var typed = ""
-    @FocusState private var typing: Bool
 
-    /// A few to start with; any emoji can be typed or pasted.
+    /// The emoji to choose from. Picking only from a list (no typing)
+    /// means every icon is one the app can draw.
     private let suggestions = [
         "📚", "🏃", "🚶", "🧘", "💧", "😴", "🥗", "🍎", "💪", "🚴", "✍️", "🎸",
         "🎨", "🧹", "🌱", "🐶", "🙏", "💊", "🦷", "☀️", "📵", "🚭", "💰", "🧠",
@@ -363,20 +362,6 @@ struct IconPicker: View {
                             }
                             .accessibilityLabel(emoji)
                         }
-                    }
-                    HStack {
-                        TextField("Or type any emoji", text: $typed)
-                            .focused($typing)
-                            .textFieldStyle(.roundedBorder)
-                            .onChange(of: typed) { _, text in
-                                if let emoji = lastEmoji(in: text) { choose(emoji) }
-                            }
-                        #if os(macOS)
-                        Button("Emoji & Symbols") {
-                            typing = true
-                            NSApp.orderFrontCharacterPalette(nil)
-                        }
-                        #endif
                     }
                     Text("Symbols").font(.headline).padding(.top, 8)
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 56), spacing: 12)], spacing: 12) {
