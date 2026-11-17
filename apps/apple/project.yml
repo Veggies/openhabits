@@ -30,6 +30,9 @@ targets:
       properties:
         CFBundleDisplayName: OpenHabits
         LSApplicationCategoryType: public.app-category.healthcare-fitness
+        # Only standard HTTPS, which is exempt from export rules; stops
+        # App Store Connect asking about encryption on every upload.
+        ITSAppUsesNonExemptEncryption: false
         # Self-hosted servers are often plain http on the home network.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
