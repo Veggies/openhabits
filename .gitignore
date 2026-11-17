@@ -12,3 +12,4 @@ apps/apple/build/
 apps/apple/App/Info.plist
 apps/apple/Packages/HabitsCore/.build/
 apps/apple/Packages/HabitsCore/.swiftpm/
+.DS_Store
