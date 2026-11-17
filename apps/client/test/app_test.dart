@@ -529,14 +529,12 @@ void main() {
     expect(find.text('🍅'), findsOneWidget);
   });
 
-  test('any single emoji can be a habit icon', () {
+  test('emoji habit icons are recognised', () {
     for (final e in ['📚', '✍️', '☀️', '👩‍💻', '🇯🇵', '👍🏽']) {
       expect(isEmojiIcon(e), isTrue, reason: e);
     }
     for (final t in ['book', 'check', 'a', '1', '', 'ab']) {
       expect(isEmojiIcon(t), isFalse, reason: t);
     }
-    expect(lastEmoji('hello 🎸'), '🎸');
-    expect(lastEmoji('abc'), isNull);
   });
 }

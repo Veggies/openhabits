@@ -59,12 +59,6 @@ func isEmojiIcon(_ icon: String) -> Bool {
         || (first.properties.isEmoji && icon.unicodeScalars.count > 1)
 }
 
-/// The last emoji in some typed text, if any: used when someone types or
-/// pastes an emoji as a habit's icon.
-func lastEmoji(in text: String) -> String? {
-    text.reversed().map(String.init).first(where: isEmojiIcon)
-}
-
 func symbol(for icon: String) -> String {
     habitSymbols.first { $0.key == icon }?.symbol ?? "checkmark.circle"
 }
