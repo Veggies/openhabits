@@ -65,7 +65,8 @@ Then open `http://<your-server>:8080` in a browser and create your account. The 
 |---|---|
 | **Windows** | Download the Windows zip from [Releases](https://github.com/Veggies/openhabits/releases), unzip it, and open `openhabits.exe`. If Windows warns about an unknown publisher, choose *More info → Run anyway*. |
 | **Linux** | Download the Linux archive from [Releases](https://github.com/Veggies/openhabits/releases), unpack it, and open `openhabits`. |
-| **iPhone, iPad and Mac** | Coming soon to the App Store, and to Homebrew for the Mac. |
+| **Mac** | Install with [Homebrew](https://brew.sh): `brew install --cask veggies/openhabits/openhabits`. Or download the Mac zip from [Releases](https://github.com/Veggies/openhabits/releases), unzip it, and move OpenHabits to Applications. |
+| **iPhone and iPad** | Coming soon to the App Store. |
 
 ### 3. Connect
 

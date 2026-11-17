@@ -20,7 +20,7 @@ The app icon doesn't need uploading. App Store Connect takes it from the build.
 | Marketing URL (optional) | `https://github.com/Veggies/openhabits` |
 | Copyright | `2026 Ryan Ruddock` |
 
-Keep "Atomic Habits" out of the name, subtitle and keywords. It's the title of James Clear's book, and Apple rejects other people's trademarks in those fields. Mentioning the book in the description is fine.
+Keep "Atomic Habits" out of the name, subtitle and keywords. It's the title of James Clear's book (and a trademark), and Apple rejects other people's trademarks in those fields. A factual mention in the description is fine; the last line of the description says the app isn't affiliated with him, so it can't read as an endorsement.
 
 ## App Privacy
 
@@ -70,6 +70,8 @@ YOUR DATA, YOUR SERVER
 OpenHabits works fully on its own, with no account. If you'd like your iPhone, iPad and Mac to stay in sync, connect them to your own OpenHabits server, for example on a home NAS. Each person in your household gets a private account, and it works away from home too. The server is free and open source.
 
 No ads, no tracking, no subscription.
+
+OpenHabits is an independent app. It isn't affiliated with or endorsed by James Clear.
 ```
 
 **What's New** (first version):
@@ -94,9 +96,19 @@ Syncing between devices is optional. It needs a server that the user hosts thems
 | Upload to | Folder | Size |
 |---|---|---|
 | iPhone 6.9" display | `screenshots/iphone-6.9` | 1320 × 2868 |
-| iPad 13" display | `screenshots/ipad-13` | 2064 × 2752 |
-| Mac | `screenshots/mac` | 2880 × 1800 |
+| iPhone 6.1" / 6.3" display | `screenshots/iphone-6.3` | 1206 × 2622 |
+| iPad 12.9" / 13" display | `screenshots/ipad-13` | 2064 × 2752 |
+| Mac | `screenshots/mac` | 1440 × 900 |
 
-Upload them in the numbered order. The first two or three are what people see in search results. Apple scales these down for the smaller iPhones and iPads, so only these sizes are needed.
+Upload them in the numbered order. The first two or three are what people see in search results. App Store Connect asks for whichever iPhone size it currently needs; both are here. The Mac ones are 1440 × 900 because the Mac they were taken on has a standard (non-Retina) display, so that's their sharpest size.
+
+## Header and search results artwork
+
+| Upload to | File | Size |
+|---|---|---|
+| Header | `artwork/header-3840x1646.png` | 3840 × 1646 |
+| Search results | `artwork/search-3840x2560.png` | 3840 × 2560 |
+
+Both use the icon, the name and tagline, and the iPad and iPhone screens. The important parts sit in the middle, in case the edges are cropped on smaller screens.
 
 To retake them after the app changes, build the Debug app and launch it with `-sampleData YES` plus `-openScreen checkIn|editorPlan` or `-startTab progress|reflect|focus`. See `docs/DEVELOPMENT.md`.
