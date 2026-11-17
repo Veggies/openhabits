@@ -28,7 +28,8 @@ targets:
     info:
       path: App/Info.plist
       properties:
-        CFBundleDisplayName: OpenHabits
+        CFBundleDisplayName: $(APP_DISPLAY_NAME)
+        CFBundleName: $(APP_DISPLAY_NAME)
         # From MARKETING_VERSION and CURRENT_PROJECT_VERSION above; XcodeGen
         # would otherwise write its own 1.0 (1).
         CFBundleShortVersionString: $(MARKETING_VERSION)
@@ -67,3 +68,11 @@ targets:
         DEVELOPMENT_TEAM: JK252Z5J39
         "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": App/OpenHabits-macOS.entitlements
         ENABLE_HARDENED_RUNTIME: true
+        APP_DISPLAY_NAME: OpenHabits
+      configs:
+        # Debug builds are a separate app, "OpenHabits Dev", with its own
+        # ID and so its own data folder and settings: testing never touches
+        # the copy you use every day, and both can run side by side.
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: com.ryanruddock.openhabits.dev
+          APP_DISPLAY_NAME: OpenHabits Dev
