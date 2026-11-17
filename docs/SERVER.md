@@ -2,7 +2,7 @@
 
 The image is `ghcr.io/veggies/openhabits-server` (Intel and ARM). Pick whichever fits what you run:
 
-- **TrueNAS:** until OpenHabits is in the catalog, go to *Apps → Discover Apps → ⋮ → Install via YAML* and paste [`deploy/truenas/openhabits.yaml`](../deploy/truenas/openhabits.yaml) (set the dataset path first).
+- **TrueNAS:** until OpenHabits is in the catalog, go to *Apps → Discover Apps → ⋮ → Install via YAML* and paste [`deploy/truenas/openhabits.yaml`](../deploy/truenas/openhabits.yaml). It creates its data folder and sets its permissions itself; change the folder at the top if you like.
 - **Unraid:** add [`deploy/unraid/openhabits.xml`](../deploy/unraid/openhabits.xml) as a template (*Docker → Add Container → Template*), or wait for it in Community Apps.
 - **Synology, QNAP, Portainer, or any machine with Docker:** download [`deploy/docker-compose.yml`](../deploy/docker-compose.yml) and run `docker compose up -d` (or paste it into your NAS's "Project" or "Stack" page). It pulls the ready-made image, so there's nothing to build.
 - **From source:** `docker compose up -d --build` in the repository's top folder.
