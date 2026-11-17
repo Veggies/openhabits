@@ -1,0 +1,36 @@
+# Tests the Flutter app (Windows and Linux) when it, or anything it
+# depends on, changes. Its tests run against the real server code.
+name: Flutter app
+
+on:
+  push:
+    branches: [main]
+    paths: &paths
+      - "apps/client/**"
+      - "apps/server/**"
+      - "packages/core/**"
+      - "fixtures/**"
+      - ".github/workflows/flutter.yml"
+  pull_request:
+    paths: *paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          # Same version as .fvmrc.
+          flutter-version: 3.50.0
+          channel: stable
+      - run: flutter pub get
+      - run: flutter analyze
+        working-directory: apps/client
+      - run: flutter test
+        working-directory: apps/client

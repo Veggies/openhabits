@@ -1,5 +1,5 @@
-# Builds and tests the server on pushes to main and on pull requests. The
-# apps and the directory are tested by apps.yml. When a version
+# Builds and tests the server when it (or the shared core) changes. The
+# apps and the directory have their own workflows. When a version
 # tag (e.g. v1.0.0) is pushed, it also publishes the image to GitHub
 # Container Registry as ghcr.io/<owner>/openhabits-server, for linux/amd64
 # and linux/arm64. TrueNAS and the Docker Compose file install from there.
@@ -8,10 +8,16 @@ name: Server
 on:
   push:
     branches: [main]
+    # Path filters don't apply to tag pushes, so every release still builds.
     tags: ["v*"]
-    paths-ignore: ["apps/apple/**", "apps/client/**", "services/directory/**"]
+    paths: &paths
+      - "apps/server/**"
+      - "packages/core/**"
+      - "fixtures/**"
+      - "pubspec.yaml"
+      - ".github/workflows/release.yml"
   pull_request:
-    paths-ignore: ["apps/apple/**", "apps/client/**", "services/directory/**"]
+    paths: *paths
   workflow_dispatch:
 
 permissions:
