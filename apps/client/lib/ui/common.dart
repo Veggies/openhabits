@@ -228,14 +228,6 @@ bool isEmojiIcon(String icon) =>
     icon.characters.length == 1 &&
     icon.runes.first >= 0x2000;
 
-/// The last emoji in some typed text, if any.
-String? lastEmoji(String text) {
-  for (final c in text.characters.toList().reversed) {
-    if (isEmojiIcon(c)) return c;
-  }
-  return null;
-}
-
 /// Just the icon: a symbol in the habit's colour, or the emoji itself.
 class HabitGlyph extends StatelessWidget {
   final String icon;
