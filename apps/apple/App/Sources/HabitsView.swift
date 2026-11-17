@@ -169,8 +169,10 @@ struct HabitsView: View {
                 }
                 .listRowSeparator(.hidden)
                 #endif
-                ForEach(list) { habit in
+                ForEach(Array(list.enumerated()), id: \.element.id) { i, habit in
                     habitLink(habit, days)
+                    // Every other habit gets the same faint band as Progress.
+                    .listRowBackground(i.isMultiple(of: 2) ? StripeBackground() : nil)
                     .swipeActions(edge: .trailing) {
                         Button("Delete", systemImage: "trash", role: .destructive) { confirmingDelete = habit }
                         Button("Archive", systemImage: "archivebox") {
@@ -513,5 +515,22 @@ struct DayCircle: View {
         .accessibilityLabel(isToday ? "Today" : day.formatted(.dateTime.weekday(.wide)))
         .accessibilityValue(upcoming ? "Upcoming" : done ? (habit.isQuit ? "Stayed clear" : "Done") : "Not done")
         .help(isToday ? (habit.isQuit ? "Stayed clear today" : "Done today") : day.formatted(.dateTime.weekday(.wide)))
+    }
+}
+
+/// The faint band behind every other habit row, matching the Progress grid:
+/// on iPhone and iPad a tint over the list's card, on the Mac a rounded band.
+struct StripeBackground: View {
+    var body: some View {
+        #if os(iOS)
+        ZStack {
+            Color(uiColor: .secondarySystemGroupedBackground)
+            Color.primary.opacity(0.05)
+        }
+        #else
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(Color.primary.opacity(0.05))
+            .padding(.horizontal, 10)
+        #endif
     }
 }

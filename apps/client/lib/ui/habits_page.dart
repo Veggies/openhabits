@@ -386,7 +386,7 @@ class _Section extends StatelessWidget {
                       habit: h,
                       days: days,
                       wide: wide,
-                      shaded: i.isOdd,
+                      shaded: i.isEven,
                     ),
                 ],
               ),
@@ -549,7 +549,7 @@ class _HabitRow extends StatelessWidget {
       // Every other row is shaded a little, so your eye can follow a
       // habit across to its days.
       color: shaded
-          ? theme.colorScheme.onSurface.withValues(alpha: 0.035)
+          ? theme.colorScheme.onSurface.withValues(alpha: 0.05)
           : Colors.transparent,
       child: InkWell(
         onTap: () => openHabit(context, habit),
