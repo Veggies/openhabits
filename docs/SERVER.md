@@ -11,6 +11,8 @@ The image is `ghcr.io/veggies/openhabits-server` (Intel and ARM). Pick whichever
 
 Then open `http://<your-server>:8080` in a browser. The setup page asks you to create your account, and afterwards is where the owner manages the server.
 
+**Security:** Before enabling remote access, review the [self-hosted security hardening guide](SECURITY-HARDENING.md) for recommendations on network exposure, authentication, Docker security, and backups.
+
 **Remote access.** On the setup page, turn on *Remote access*. The server asks your router to open a port (UPnP), checks it can be reached, and secures the connection with its own certificate, which devices learn to trust when they're signed in. Nothing extra is installed on phones or computers. If your home's internet address changes, devices find the new one through the OpenHabits directory.
 
 - If your router doesn't respond, the page explains how to forward the port by hand.
