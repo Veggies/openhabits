@@ -44,21 +44,21 @@ The published server image is `ghcr.io/veggies/openhabits-server`.
 - Review release notes before updating the OpenHabits image.
 - For controlled deployments, pin a specific published image version rather than automatically following `latest`.
 - Restrict administrative access to the Docker host and its management interface.
-- Protect the persistent `/data` volume using appropriate filesystem permissions.
+- Protect the server's data folder (`/data` by default) using appropriate filesystem permissions.
 - Avoid granting additional container privileges, host mounts, or access to the Docker socket unless explicitly required and understood.
 
 These precautions apply to the deployment environment; they do not imply that the default container configuration is vulnerable.
 
 ## 5. Back up and protect stored data
 
-OpenHabits stores its server data in `/data`, including its SQLite database and certificate material.
+OpenHabits keeps its server data in the folder that holds the database file set by `DB_PATH`. That's `/data` unless you changed `DB_PATH`. The folder holds the SQLite database, the server's certificate, and the signing key that signed-in devices use to recognise the server. If you restore without the signing key, your devices won't recognise it as the same server.
 
-- Back up the persistent data volume regularly.
+- Back up that whole folder regularly.
 - Store backups somewhere protected from unauthorized access.
 - Encrypt backups when they contain sensitive personal information.
 - Test restoration periodically so backups are known to work.
 - Stop the container before copying database files, or use SQLite's supported online backup method as described in the server documentation.
-- Protect backup copies of certificate material as carefully as the live server.
+- Protect backup copies of the certificate and signing key as carefully as the live server.
 
 ## 6. Review your deployment periodically
 

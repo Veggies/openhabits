@@ -59,9 +59,11 @@ one address between many homes (CGNAT), where port forwarding can't work.
 
 ## Backups
 
-Everything lives in the `/data` folder: back it up and you've backed up the
-server. Stop the container first, or copy `data.sqlite` with
-`sqlite3 data.sqlite ".backup backup.sqlite"` while it runs.
+Everything lives in the folder that holds the `DB_PATH` file, which is `/data`
+unless you changed `DB_PATH`. That folder has the database, the certificate, and
+the signing key devices use to recognise the server, so back up the whole
+folder and you've backed up the server. Stop the container first, or copy
+`data.sqlite` with `sqlite3 data.sqlite ".backup backup.sqlite"` while it runs.
 
 ## Development
 
