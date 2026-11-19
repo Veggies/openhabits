@@ -113,11 +113,13 @@ docker stop openhabits
 ```
 
 To restore a whole-folder backup, clear the data folder and unpack the archive
-into it:
+into it. The command reads the whole archive first and stops without touching
+anything if it's missing or damaged:
 
 ```sh
 docker run --rm --volumes-from openhabits -v "$PWD":/backup alpine \
-  sh -c 'find /data -mindepth 1 -delete &&
+  sh -c 'tar tzf /backup/openhabits-backup.tgz >/dev/null &&
+  find /data -mindepth 1 -delete &&
   tar xzf /backup/openhabits-backup.tgz -C /data'
 ```
 
@@ -145,11 +147,23 @@ Then start the server again:
 docker start openhabits
 ```
 
+The server is now back to how it was when you made the backup, including who's
+signed in. That has a few effects:
+
+- Your devices notice the server has gone back in time and send it everything
+  they have, so changes made after the backup come back from them.
+- A device that signed in after the backup was made will ask you to sign in
+  again. That's expected.
+- Any device signed out after the backup was made is signed in again. If that
+  was because it was lost or someone else had it, change your password in the
+  app's settings, which signs out all your other devices. For someone else's
+  account, use "Sign out everywhere" in the People section of the setup page.
+
 To check the restore worked, open the setup page at `http://<this-machine>:8080`
 and sign in, then open the app on one of your devices and make sure your habits
-are there and it syncs without asking you to sign in again. If a device says "A
-different OpenHabits server answered", the signing key wasn't restored: stop the
-container and restore it from a whole-folder backup.
+are there and it syncs. If a device says "A different OpenHabits server
+answered", the signing key wasn't restored: stop the container and restore it
+from a whole-folder backup.
 
 ## Development
 
