@@ -99,6 +99,76 @@ first: if the path is wrong, `sqlite3` makes a new empty database and backs that
 up without any error. This copies only the database, so also keep a copy of the
 certificate and signing key from that folder.
 
+## Restoring a backup
+
+Restoring uses the same helper container as the backup, run from the folder
+that holds your backup file. Keep that folder outside the server's data folder,
+because the restore clears the data folder first. If you're moving to a new machine, install the
+server there first so the `openhabits` container exists, then follow these
+steps. Whatever is in its data folder gets replaced.
+
+Stop the server's container first:
+
+```sh
+docker stop openhabits
+```
+
+To restore a whole-folder backup, clear the data folder and unpack the archive
+into it. The command reads the whole archive first and stops without touching
+anything if it's missing or damaged:
+
+```sh
+docker run --rm --volumes-from openhabits -v "$PWD":/backup alpine \
+  sh -c 'tar tzf /backup/openhabits-backup.tgz >/dev/null &&
+  find /data -mindepth 1 -delete &&
+  tar xzf /backup/openhabits-backup.tgz -C /data'
+```
+
+That brings back everything: the database (`data.sqlite`), the certificate
+(`remote-cert.pem` and `remote-key.pem`), and the signing key
+(`directory-key.pem`).
+
+To restore a database-only backup made while the server was running, copy it
+over the database and remove any leftover journal file. This keeps the
+certificate and signing key that are already there, so only do it on the same
+server, or after restoring those two from a whole-folder backup:
+
+```sh
+docker run --rm --volumes-from openhabits -v "$PWD":/backup alpine \
+  sh -c 'cp /backup/backup.sqlite /data/data.sqlite &&
+  rm -f /data/data.sqlite-journal'
+```
+
+If you changed `DB_PATH`, use that path in place of `/data/data.sqlite`, and its
+folder in place of `/data`.
+
+Then start the server again:
+
+```sh
+docker start openhabits
+```
+
+The server is now back to how it was when you made the backup, including who's
+signed in. That has a few effects:
+
+- A device that synced after the backup was made notices the server has gone
+  back in time and sends it everything it has, which brings back changes made
+  since the backup. Open the app first on the device you used most recently,
+  then on the others one at a time, and check that your recent changes are
+  there.
+- A device that signed in after the backup was made will ask you to sign in
+  again. That's expected.
+- Any device signed out after the backup was made is signed in again. If that
+  was because it was lost or someone else had it, change your password in the
+  app's settings, which signs out all your other devices. For someone else's
+  account, use "Sign out everywhere" in the People section of the setup page.
+
+To check the restore worked, open the setup page at `http://<this-machine>:8080`
+and sign in, then open the app on one of your devices and make sure your habits
+are there and it syncs. If a device says "A different OpenHabits server
+answered", the signing key wasn't restored: stop the container and restore it
+from a whole-folder backup.
+
 ## Development
 
 From the repository root:
