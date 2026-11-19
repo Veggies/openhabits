@@ -10,7 +10,7 @@ turns on remote access and adds devices.
 | --- | --- |
 | TrueNAS | Apps → Discover Apps → search for OpenHabits. Before it's in the catalog: ⋮ → *Install via YAML* with [`deploy/truenas/openhabits.yaml`](../../deploy/truenas/openhabits.yaml). |
 | Anything with Docker | Download [`deploy/docker-compose.yml`](../../deploy/docker-compose.yml) and run `docker compose up -d`. Works on Linux, Unraid, Synology, a Raspberry Pi and Portainer. |
-| Just Docker | `docker run -d --network host -v openhabits-data:/data ghcr.io/veggies/openhabits-server:1` |
+| Just Docker | `docker run -d --name openhabits --network host -v openhabits-data:/data ghcr.io/veggies/openhabits-server:1` |
 
 Then open `http://<your-server>:8080` and follow the setup page.
 
@@ -59,9 +59,45 @@ one address between many homes (CGNAT), where port forwarding can't work.
 
 ## Backups
 
-Everything lives in the `/data` folder: back it up and you've backed up the
-server. Stop the container first, or copy `data.sqlite` with
-`sqlite3 data.sqlite ".backup backup.sqlite"` while it runs.
+Everything lives in the folder that holds the `DB_PATH` file, which is `/data`
+unless you changed `DB_PATH`. That folder has the database, the certificate, and
+the signing key devices use to recognise the server, so back up the whole
+folder and you've backed up the server.
+
+`/data` is the path inside the container, not on your computer. The server
+image has no shell or `sqlite3`, so the commands below run in a small helper
+container. `--volumes-from openhabits` gives it the same storage as your server,
+at the same paths, so you don't need to know what Docker named the volume. Use
+your server's container name if it isn't `openhabits` (`docker ps -a` lists
+them). The backup lands in the folder you run the command from.
+
+The backup holds the server's signing key, so the commands make it readable only
+by you. Keep it that way, and store it somewhere other people can't read.
+
+Stop the server's container first, then copy the whole folder:
+
+```sh
+docker run --rm --volumes-from openhabits -v "$PWD":/backup \
+  -e OWNER="$(id -u):$(id -g)" alpine sh -c 'umask 077 &&
+  tar czf /backup/openhabits-backup.tgz -C /data . &&
+  chown "$OWNER" /backup/openhabits-backup.tgz'
+```
+
+A copy taken while the server is writing can leave you with a damaged database.
+If you can't stop it, you can copy just the database while it runs:
+
+```sh
+docker run --rm --volumes-from openhabits -v "$PWD":/backup \
+  -e OWNER="$(id -u):$(id -g)" alpine sh -c 'umask 077 && apk add -q sqlite &&
+  sqlite3 /data/data.sqlite ".backup /backup/backup.sqlite" &&
+  chown "$OWNER" /backup/backup.sqlite'
+```
+
+If you changed `DB_PATH`, use that path in place of `/data/data.sqlite` (and in
+the `tar` command, use the folder that holds it in place of `/data`). Check it
+first: if the path is wrong, `sqlite3` makes a new empty database and backs that
+up without any error. This copies only the database, so also keep a copy of the
+certificate and signing key from that folder.
 
 ## Development
 
