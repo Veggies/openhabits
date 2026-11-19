@@ -314,6 +314,25 @@ void main() {
     });
   });
 
+  test('deleting the newest data never makes the cursor go back', () {
+    final dir = Directory.systemTemp.createTempSync('delete_test');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final path = '${dir.path}/data.sqlite';
+
+    final first = SyncStore.open(path);
+    first.apply('a', [set('title', 'Milk', 1, 'phone')]);
+    first.apply('b', [set('title', 'Eggs', 2, 'phone')]);
+    first.deleteUserData('b');
+    final before = first.cursor;
+    first.close();
+
+    final reopened = SyncStore.open(path);
+    addTearDown(reopened.close);
+    expect(reopened.cursor, before); // not reused after a restart
+    reopened.apply('a', [set('title', 'Oat milk', 3, 'phone')]);
+    expect(reopened.cursor, before + 1);
+  });
+
   test(
     'a device notices a restore even after the cursor climbs back past it',
     () async {

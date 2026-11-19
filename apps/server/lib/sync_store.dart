@@ -70,8 +70,16 @@ class SyncStore {
     }
   }
 
+  // History is included because deleting someone's data can remove the
+  // fields with the highest sequence numbers, and a sequence must never be
+  // reused: devices past it would miss what's written there next.
   int _maxSeq() =>
-      db.select('SELECT COALESCE(MAX(seq), 0) AS s FROM fields').first['s']
+      db
+              .select(
+                'SELECT MAX(COALESCE((SELECT MAX(seq) FROM fields), 0), '
+                'COALESCE((SELECT MAX(seq) FROM history), 0)) AS s',
+              )
+              .first['s']
           as int;
 
   /// Gives data stored without an owner (from before accounts) to [userId].

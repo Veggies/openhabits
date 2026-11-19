@@ -38,7 +38,7 @@ the device's cursor in the same round trip.
 
 Each answer also carries a `cursorTag`, a random tag for that point in the
 server's history, and devices send it back as `sinceTag`. If the server was
-restored from a backup taken after a device last synced, it doesn't have that
+restored from a backup taken before a device last synced, it doesn't have that
 tag and answers `"rewound": true`, so the device sends everything again. This
 still works when other devices have already counted the cursor back up past the
 device's own. Devices also treat a cursor lower than their own as a restore,
