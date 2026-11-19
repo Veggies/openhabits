@@ -55,7 +55,7 @@ jobs:
               - 'fixtures/**'
               - 'pubspec.*'
             swift:
-              - 'apps/apple/Packages/**'
+              - 'apps/apple/**'
               - 'fixtures/**'
             directory:
               - 'services/directory/**'
@@ -131,14 +131,14 @@ jobs:
       - run: docker build -f apps/server/Dockerfile -t openhabits-server:check .
 
   swift:
-    name: Apple core (Swift)
+    name: Apple app and core (Swift)
     needs: changes
     if: needs.changes.outputs.swift == 'true'
-    # HabitsCore targets iOS and macOS 26, so it needs Xcode 26 or later.
-    # The app screens themselves are built by Xcode Cloud.
+    # HabitsCore and the app target iOS and macOS 26, so they need Xcode 26
+    # or later. Standard macOS runners are free for public repositories.
     runs-on: macos-latest
     # Fails fast if no Mac runner picks the job up.
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -146,6 +146,18 @@ jobs:
       - run: xcodebuild -version && swift --version
       - run: swift test
         working-directory: apps/apple/Packages/HabitsCore
+      # The Xcode project isn't checked in; it's generated from project.yml.
+      - run: brew install xcodegen && xcodegen generate
+        working-directory: apps/apple
+      # Builds the app screens for Mac and iPhone/iPad, so a change that
+      # stops the app compiling can't be merged. Unsigned: CI has no
+      # certificates, and nothing here ships (Xcode Cloud does releases).
+      - name: Build the Mac app
+        working-directory: apps/apple
+        run: xcodebuild build -project OpenHabits.xcodeproj -scheme OpenHabits -configuration Debug -destination 'generic/platform=macOS' -derivedDataPath build/ci CODE_SIGNING_ALLOWED=NO
+      - name: Build the iPhone and iPad app
+        working-directory: apps/apple
+        run: xcodebuild build -project OpenHabits.xcodeproj -scheme OpenHabits -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath build/ci CODE_SIGNING_ALLOWED=NO
 
   directory:
     name: Directory service
