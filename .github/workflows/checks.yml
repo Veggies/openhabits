@@ -324,9 +324,16 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Fail if any check failed
-        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+      # Only "success" and "skipped" (nothing changed in that part) count as
+      # passing. Anything else fails, including a job that never got a
+      # runner, which GitHub doesn't always report as "cancelled".
+      - name: Every check passed or was skipped
+        env:
+          NEEDS: ${{ toJSON(needs) }}
         run: |
-          echo "::error::A check failed. Open the failed job above to see why."
-          exit 1
-      - run: echo "Every check that ran has passed. Checks for parts that didn't change were skipped."
+          bad=$(printf '%s' "$NEEDS" | jq -r '[to_entries[] | select(.value.result != "success" and .value.result != "skipped") | "\(.key) (\(if (.value.result // "") == "" then "no result" else .value.result end))"] | join(", ")')
+          if [ -n "$bad" ]; then
+            echo "::error::These checks didn't pass: $bad. Open them above to see why. A check that never started (e.g. no Mac runner was free) can be re-run from the Checks tab."
+            exit 1
+          fi
+          echo "Every check that ran has passed. Checks for parts that didn't change were skipped."
