@@ -1,0 +1,42 @@
+# Dependabot opens pull requests that update dependencies, once a week.
+# Each kind is grouped into one pull request, and they go through the same
+# checks as any other change before they can be merged.
+#
+# Not listed because they have no outside dependencies: the Apple app's
+# HabitsCore package and the directory service (services/directory).
+version: 2
+updates:
+  # Dart and Flutter packages. The root pubspec.yaml is a workspace for
+  # packages/core, apps/server and apps/client, with one shared pubspec.lock.
+  - package-ecosystem: "pub"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    groups:
+      dart-packages:
+        patterns: ["*"]
+    commit-message:
+      prefix: "Dependencies"
+
+  # The server's Docker base image (dart:3.14 in apps/server/Dockerfile).
+  - package-ecosystem: "docker"
+    directory: "/apps/server"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "Dependencies"
+
+  # The actions our workflows use. They're pinned to exact commits, so
+  # nothing updates them unless Dependabot does.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    groups:
+      github-actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "Dependencies"
