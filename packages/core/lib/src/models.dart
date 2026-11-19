@@ -125,17 +125,46 @@ class HabitPlan {
   /// so they never need typing.
   static const leads = {'stackAfter': 'After I', 'identity': 'I am'};
 
+  /// The ways people type a field's lead words, and what's left in their
+  /// place. Contractions keep their verb: "After I've eaten" becomes
+  /// "have eaten", which shows as "After I have eaten".
+  static const _typedLeads = {
+    'stackAfter': [
+      ("After I['’]ve", 'have '),
+      ("After I['’]m", 'am '),
+      ('After I', ''),
+    ],
+    'identity': [('I am', ''), ("I['’]m", '')],
+  };
+
   /// [text] ready to save: trimmed, and without the field's lead words if
   /// they were typed anyway ("After I sit down" becomes "sit down").
   static String tidy(String field, String text) {
-    final t = text.trim();
-    final lead = leads[field];
-    if (lead == null) return t;
-    final typed = RegExp(
-      '^${RegExp.escape(lead)}\\b[\\s,.…]*',
-      caseSensitive: false,
-    );
-    return t.replaceFirst(typed, '');
+    var t = text.trim();
+    final forms = _typedLeads[field];
+    if (forms == null) return t;
+    // Typed more than once ("After I After I sit down"), each copy comes
+    // off. Every pass removes at least the two letters of "I'm".
+    var removed = true;
+    while (removed) {
+      removed = false;
+      for (final (form, keep) in forms) {
+        // The lead must end at a space, punctuation or the end of the text,
+        // so "After Iñaki leaves" and "I amaze people" stay. (A regex
+        // word boundary in Dart treats letters like "ñ" as a break.)
+        final typed = RegExp(
+          '^$form(?=[\\s,.…]|\$)[\\s,.…]*',
+          caseSensitive: false,
+          unicode: true,
+        ).firstMatch(t);
+        if (typed != null) {
+          t = keep + t.substring(typed.end);
+          removed = true;
+          break;
+        }
+      }
+    }
+    return t.trim();
   }
 
   /// True when none of the Atomic Habits fields are filled in. The time

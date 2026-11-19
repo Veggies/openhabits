@@ -113,14 +113,36 @@ public struct HabitPlan: Sendable, Hashable {
     /// so they never need typing.
     public static let leads = ["stackAfter": "After I", "identity": "I am"]
 
+    /// The ways people type a field's lead words, and what's left in their
+    /// place. Contractions keep their verb: "After I've eaten" becomes
+    /// "have eaten", which shows as "After I have eaten".
+    static let typedLeads: [String: [(form: String, keep: String)]] = [
+        "stackAfter": [("After I['’]ve", "have "), ("After I['’]m", "am "), ("After I", "")],
+        "identity": [("I am", ""), ("I['’]m", "")],
+    ]
+
     /// `text` ready to save: trimmed, and without the field's lead words if
     /// they were typed anyway ("After I sit down" becomes "sit down").
     public static func tidy(_ field: String, _ text: String) -> String {
-        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let lead = leads[field],
-              let typed = t.range(of: "^\\Q\(lead)\\E\\b[\\s,.…]*", options: [.regularExpression, .caseInsensitive])
-        else { return t }
-        return String(t[typed.upperBound...])
+        var t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let forms = typedLeads[field] else { return t }
+        // Typed more than once ("After I After I sit down"), each copy comes
+        // off. Every pass removes at least the two letters of "I'm".
+        var removed = true
+        while removed {
+            removed = false
+            for (form, keep) in forms {
+                // The lead must end at a space, punctuation or the end of the
+                // text, so "After Iñaki leaves" and "I amaze people" stay.
+                if let typed = t.range(of: "^\(form)(?=[\\s,.…]|$)[\\s,.…]*",
+                                       options: [.regularExpression, .caseInsensitive]) {
+                    t = keep + t[typed.upperBound...]
+                    removed = true
+                    break
+                }
+            }
+        }
+        return t.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// True when none of the Atomic Habits fields are filled in. The time

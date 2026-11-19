@@ -57,6 +57,14 @@ import Testing
         #expect(HabitPlan.tidy("identity", "I am a reader") == "a reader")
         #expect(HabitPlan.tidy("identity", "I amaze people") == "I amaze people")
         #expect(HabitPlan.tidy("location", "After I leave") == "After I leave")
+        // Contractions keep their verb, so the plan still reads "After I have…".
+        #expect(HabitPlan.tidy("stackAfter", "After I've finished breakfast") == "have finished breakfast")
+        #expect(HabitPlan.tidy("stackAfter", "After I’m home") == "am home")
+        #expect(HabitPlan.tidy("identity", "I'm a runner") == "a runner")
+        // The lead only counts as whole words, so names are left alone.
+        #expect(HabitPlan.tidy("stackAfter", "After Iñaki leaves") == "After Iñaki leaves")
+        // Typed twice, both copies come off.
+        #expect(HabitPlan.tidy("stackAfter", "After I After I sit down") == "sit down")
         // Plans saved before the fix read back without the doubled words.
         #expect(HabitPlan(["stackAfter": "After I sit down"]).stackAfter == "sit down")
     }
