@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit reviews pull requests for free on public repositories.
+# While the repository has fewer than 10 stars, start a review by commenting
+# "@coderabbitai review" on the pull request; after that it reviews on its own.
+language: "en-US"
+tone_instructions: "Write plainly, in full sentences. Point out real problems first; skip nitpicks about style the formatters already enforce."
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: false
+    # Dependency bumps are checked by CI; don't review them.
+    ignore_usernames:
+      - "dependabot[bot]"
+  path_instructions:
+    - path: "apps/apple/**"
+      instructions: "SwiftUI app for iPhone, iPad and Mac. Anything visible here usually needs the same change in the Flutter app (apps/client); say so if the pull request doesn't mention it."
+    - path: "apps/client/**"
+      instructions: "Flutter app for Windows and Linux. It should look and behave like the Apple app; say so if a change seems to make them differ."
+    - path: "{packages/core,apps/server,apps/apple/Packages/HabitsCore,fixtures}/**"
+      instructions: "Shared sync logic. Older apps must keep working when they see new fields (they ignore unknown fields). If a shared format changes, the matching file in fixtures/ should change too."
+    - path: "**/*.{dart,swift}"
+      instructions: "Text shown to people should read like a person talking: full, friendly sentences, no jargon."
