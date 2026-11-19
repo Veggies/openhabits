@@ -57,7 +57,7 @@ OpenHabits keeps its server data in the folder that holds the database file set 
 - Store backups somewhere protected from unauthorized access.
 - Encrypt backups when they contain sensitive personal information.
 - Test restoration periodically so backups are known to work.
-- Stop the container before copying database files, or use SQLite's supported online backup method as described in the server documentation.
+- Stop the container before copying the folder. If you can't, SQLite's online backup method (see the [server documentation](../apps/server/README.md#backups)) copies only the database, so keep a separate copy of the certificate and signing key too.
 - Protect backup copies of the certificate and signing key as carefully as the live server.
 
 ## 6. Review your deployment periodically
