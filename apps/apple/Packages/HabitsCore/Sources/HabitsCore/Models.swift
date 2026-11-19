@@ -64,10 +64,10 @@ public struct HabitPlan: Sendable, Hashable {
     }
 
     public init(_ f: Fields) {
-        identity = text(f["identity"])
+        identity = Self.tidy("identity", text(f["identity"]))
         time = text(f["time"])
         location = text(f["location"])
-        stackAfter = text(f["stackAfter"])
+        stackAfter = Self.tidy("stackAfter", text(f["stackAfter"]))
         twoMinute = text(f["twoMinute"])
         goal = text(f["goal"])
         steppedUpAt = text(f["steppedUpAt"])
@@ -106,6 +106,21 @@ public struct HabitPlan: Sendable, Hashable {
         case "unsatisfying": unsatisfying
         default: contract
         }
+    }
+
+    /// The words the app puts in front of a field when it shows it
+    /// ("After I pour my coffee"). Forms show them fixed in front of the box,
+    /// so they never need typing.
+    public static let leads = ["stackAfter": "After I", "identity": "I am"]
+
+    /// `text` ready to save: trimmed, and without the field's lead words if
+    /// they were typed anyway ("After I sit down" becomes "sit down").
+    public static func tidy(_ field: String, _ text: String) -> String {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let lead = leads[field],
+              let typed = t.range(of: "^\\Q\(lead)\\E\\b[\\s,.…]*", options: [.regularExpression, .caseInsensitive])
+        else { return t }
+        return String(t[typed.upperBound...])
     }
 
     /// True when none of the Atomic Habits fields are filled in. The time

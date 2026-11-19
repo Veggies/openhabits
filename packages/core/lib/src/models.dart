@@ -84,10 +84,10 @@ class HabitPlan {
   final String contract;
 
   HabitPlan.fromFields(Fields f)
-    : identity = _text(f['identity']),
+    : identity = tidy('identity', _text(f['identity'])),
       time = _text(f['time']),
       location = _text(f['location']),
-      stackAfter = _text(f['stackAfter']),
+      stackAfter = tidy('stackAfter', _text(f['stackAfter'])),
       twoMinute = _text(f['twoMinute']),
       goal = _text(f['goal']),
       steppedUpAt = _text(f['steppedUpAt']),
@@ -119,6 +119,24 @@ class HabitPlan {
     'unsatisfying',
     'contract',
   ];
+
+  /// The words the app puts in front of a field when it shows it
+  /// ("After I pour my coffee"). Forms show them fixed in front of the box,
+  /// so they never need typing.
+  static const leads = {'stackAfter': 'After I', 'identity': 'I am'};
+
+  /// [text] ready to save: trimmed, and without the field's lead words if
+  /// they were typed anyway ("After I sit down" becomes "sit down").
+  static String tidy(String field, String text) {
+    final t = text.trim();
+    final lead = leads[field];
+    if (lead == null) return t;
+    final typed = RegExp(
+      '^${RegExp.escape(lead)}\\b[\\s,.…]*',
+      caseSensitive: false,
+    );
+    return t.replaceFirst(typed, '');
+  }
 
   /// True when none of the Atomic Habits fields are filled in. The time
   /// doesn't count: any habit can have one.

@@ -50,6 +50,17 @@ import Testing
 }
 
 @Suite struct DatesAndTimes {
+    @Test func leadWordsTypedIntoThePlanAreNotDoubled() {
+        #expect(HabitPlan.tidy("stackAfter", " After I sit down ") == "sit down")
+        #expect(HabitPlan.tidy("stackAfter", "after i, pour coffee") == "pour coffee")
+        #expect(HabitPlan.tidy("stackAfter", "pour coffee") == "pour coffee")
+        #expect(HabitPlan.tidy("identity", "I am a reader") == "a reader")
+        #expect(HabitPlan.tidy("identity", "I amaze people") == "I amaze people")
+        #expect(HabitPlan.tidy("location", "After I leave") == "After I leave")
+        // Plans saved before the fix read back without the doubled words.
+        #expect(HabitPlan(["stackAfter": "After I sit down"]).stackAfter == "sit down")
+    }
+
     @Test func dayKeysAndWeekdays() {
         let day = Days.parse("2026-11-15")!  // a Sunday
         #expect(Days.key(day) == "2026-11-15")

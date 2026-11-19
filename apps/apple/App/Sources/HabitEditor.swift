@@ -80,7 +80,7 @@ struct HabitEditor: View {
                 }
 
                 Section {
-                    field("identity", "I am a person who…")
+                    field("identity", "e.g. a person who reads every day")
                 } header: {
                     Text("Who do you want to become?")
                 } footer: {
@@ -137,7 +137,7 @@ struct HabitEditor: View {
     private var buildSections: some View {
         Section {
             field("location", "Where, e.g. In the kitchen")
-            field("stackAfter", "After I…, e.g. pour my morning coffee")
+            field("stackAfter", "e.g. pour my morning coffee")
         } header: {
             LawHeader(number: 1, title: "Make it obvious")
         } footer: {
@@ -199,7 +199,8 @@ struct HabitEditor: View {
     }
 
     private func field(_ key: String, _ prompt: String) -> some View {
-        HintField(prompt, text: Binding(get: { plan[key] ?? "" }, set: { plan[key] = $0 }), axis: .vertical)
+        HintField(prompt, text: Binding(get: { plan[key] ?? "" }, set: { plan[key] = $0 }), axis: .vertical,
+                  prefix: HabitPlan.leads[key])
     }
 
     private func load() {
@@ -235,7 +236,7 @@ struct HabitEditor: View {
             "remind": .bool(remind),
         ]
         for f in HabitPlan.fieldNames where f != "time" {
-            fields[f] = .string((plan[f] ?? "").trimmingCharacters(in: .whitespacesAndNewlines))
+            fields[f] = .string(HabitPlan.tidy(f, plan[f] ?? ""))
         }
         if !startSmall { fields["twoMinute"] = "" }
         fields["time"] = .string(hasTime ? TimeOfDay(time).text : "")

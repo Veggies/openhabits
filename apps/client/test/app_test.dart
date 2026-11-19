@@ -366,7 +366,7 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    await fill('I am…', 'a reader');
+    await fill('Who you want to become', 'a reader');
     await next();
     await fill('Habit', 'Read');
     // Starting small is optional: the boxes appear once it's switched on.
@@ -386,7 +386,11 @@ void main() {
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
     expect(find.text('07:00'), findsOneWidget);
-    await fill('After I…', 'pour my morning coffee');
+    // "After I" is shown in front of the box; typing it too doesn't double it.
+    await fill(
+      'Right after something you already do',
+      'After I pour my morning coffee',
+    );
     await fill('Where', 'on the couch');
     await next();
     await fill('Reward', 'A square of chocolate');

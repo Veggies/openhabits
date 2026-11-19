@@ -414,7 +414,7 @@ private struct GuidedHabit: View {
                 case 0:
                     intro("Who do you want to become?",
                         "Think about the kind of person you want to be, not just a result you want. Each time you do the habit, it's a vote for becoming that person.")
-                    Section { field("identity", "I am… e.g. a reader") }
+                    Section { field("identity", "e.g. a reader") }
                 case 1:
                     intro("What small habit proves it?",
                         "Now make it easy. If you like, you can start with a tiny version and grow it over time. That part is up to you.")
@@ -438,7 +438,7 @@ private struct GuidedHabit: View {
                         Toggle("At a set time", isOn: $hasTime.animation())
                         if hasTime { DatePicker("When", selection: $time, displayedComponents: .hourAndMinute) }
                         field("location", "Where, e.g. On the couch")
-                        field("stackAfter", "After I…, e.g. pour my morning coffee")
+                        field("stackAfter", "e.g. pour my morning coffee")
                     }
                 case 3:
                     intro("Make it attractive and satisfying",
@@ -488,11 +488,12 @@ private struct GuidedHabit: View {
     }
 
     private func field(_ key: String, _ prompt: String) -> some View {
-        HintField(prompt, text: Binding(get: { plan[key] ?? "" }, set: { plan[key] = $0 }), axis: .vertical)
+        HintField(prompt, text: Binding(get: { plan[key] ?? "" }, set: { plan[key] = $0 }), axis: .vertical,
+                  prefix: HabitPlan.leads[key])
     }
 
     private func value(_ key: String) -> String {
-        (plan[key] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        HabitPlan.tidy(key, plan[key] ?? "")
     }
 
     /// "After I pour my coffee, I will read one page at 7:00 AM on the couch.
