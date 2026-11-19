@@ -64,15 +64,32 @@ unless you changed `DB_PATH`. That folder has the database, the certificate, and
 the signing key devices use to recognise the server, so back up the whole
 folder and you've backed up the server.
 
-Stop the container before you copy the folder. A copy taken while the server is
-writing can leave you with a damaged database.
+`/data` is the path inside the container, not on your computer. With the Docker
+install above, it's the `openhabits-data` volume. The server image has no shell
+or `sqlite3`, so the commands below run in a small helper container that mounts
+the same volume and writes the backup to the folder you run them from. If you
+use a different volume name or a folder on disk, put that in place of
+`openhabits-data`.
 
-If you can't stop it, you can copy just the database while it runs with
-`sqlite3 <database file> ".backup backup.sqlite"`, using the file `DB_PATH`
-names (`/data/data.sqlite` by default). Check the name first: if it's wrong,
-`sqlite3` makes a new empty database and backs that up without any error. This
-copies only the database, so also keep a copy of the certificate and signing
-key from that folder.
+Stop the server's container first, then copy the whole folder:
+
+```sh
+docker run --rm -v openhabits-data:/data -v "$PWD":/backup alpine \
+  tar czf /backup/openhabits-backup.tgz -C /data .
+```
+
+A copy taken while the server is writing can leave you with a damaged database.
+If you can't stop it, you can copy just the database while it runs:
+
+```sh
+docker run --rm -v openhabits-data:/data -v "$PWD":/backup alpine \
+  sh -c 'apk add -q sqlite && sqlite3 /data/data.sqlite ".backup /backup/backup.sqlite"'
+```
+
+If `DB_PATH` names a different file, use that instead of `/data/data.sqlite`.
+Check it first: if the path is wrong, `sqlite3` makes a new empty database and
+backs that up without any error. This copies only the database, so also keep a
+copy of the certificate and signing key from that folder.
 
 ## Development
 
