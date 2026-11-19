@@ -32,6 +32,7 @@ jobs:
       flutter: ${{ steps.filter.outputs.flutter == 'true' || steps.filter.outputs.ci == 'true' || github.event_name == 'workflow_dispatch' }}
       swift: ${{ steps.filter.outputs.swift == 'true' || steps.filter.outputs.ci == 'true' || github.event_name == 'workflow_dispatch' }}
       directory: ${{ steps.filter.outputs.directory == 'true' || steps.filter.outputs.ci == 'true' || github.event_name == 'workflow_dispatch' }}
+      workflows: ${{ steps.filter.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -59,6 +60,9 @@ jobs:
             directory:
               - 'services/directory/**'
               - 'fixtures/**'
+            workflows:
+              - '.github/workflows/**'
+              - '.github/dependabot.yml'
             ci:
               - '.github/workflows/checks.yml'
 
@@ -159,9 +163,30 @@ jobs:
       - run: npm test
         working-directory: services/directory
 
+  workflows:
+    name: Workflow files
+    needs: changes
+    if: needs.changes.outputs.workflows == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      # actionlint finds mistakes in workflow files (bad expressions, typos,
+      # shell problems in run steps).
+      - name: actionlint
+        run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12 -no-color
+      # zizmor finds security problems: actions not pinned to a commit,
+      # tokens left on disk, untrusted text used as code, and so on.
+      - name: zizmor
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pipx run zizmor==1.32.0 --min-severity low --format github .github/workflows
+
   all-passed:
     name: All checks passed
-    needs: [changes, server, server-image, flutter, swift, directory]
+    needs: [changes, server, server-image, flutter, swift, directory, workflows]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
