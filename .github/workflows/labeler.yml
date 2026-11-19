@@ -1,0 +1,24 @@
+# Labels pull requests by the parts of the project they change, using
+# .github/labeler.yml, so release notes can be grouped (.github/release.yml).
+name: Labeler
+
+on:
+  # pull_request_target runs this workflow as it is on main, with permission
+  # to add labels, even for pull requests from forks. That's safe here: it
+  # never checks out or runs the pull request's code; it only reads the list
+  # of changed files.
+  pull_request_target: # zizmor: ignore[dangerous-triggers] never checks out or runs pull request code
+    types: [opened, synchronize, reopened]
+
+permissions: {}
+
+jobs:
+  label:
+    name: Label by area
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/labeler@bf12e9b00b37c5c0ca2b87b79b2daf7891dbda13 # v7.0.0
