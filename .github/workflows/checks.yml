@@ -209,6 +209,10 @@ jobs:
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
       HOMEBREW_NO_ANALYTICS: 1
+      # The online audit calls GitHub's API. Without a token it shares the
+      # runner's anonymous limit and can fail at random. This one is
+      # read-only (the workflow only has contents: read).
+      HOMEBREW_GITHUB_API_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
