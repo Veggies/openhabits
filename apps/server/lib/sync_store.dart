@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:core/core.dart';
 import 'package:sqlite3/sqlite3.dart';
@@ -14,6 +15,11 @@ class SyncStore {
   SyncStore(this.db) {
     _migrate();
     _seq = _maxSeq();
+    // Databases from before history tags start their history here.
+    db.execute('INSERT OR IGNORE INTO history (seq, tag) VALUES (?, ?)', [
+      _seq,
+      _newTag(),
+    ]);
     // Packed HLCs sort as text, so MAX finds the latest one written.
     final latest =
         db.select('SELECT MAX(hlc) AS h FROM fields').first['h'] as String?;
@@ -47,6 +53,14 @@ class SyncStore {
         PRIMARY KEY (user_id, tbl, row_id, field)
       );
       CREATE INDEX IF NOT EXISTS fields_user_seq ON fields (user_id, seq);
+      -- A random tag for every point the cursor has stopped at. Devices
+      -- send back the tag they were given; if it isn't here, the server
+      -- was restored from a backup taken before that point, even if the
+      -- cursor has since counted back up past it.
+      CREATE TABLE IF NOT EXISTS history (
+        seq INTEGER PRIMARY KEY,
+        tag TEXT NOT NULL
+      );
     ''');
     if (columns.isNotEmpty && !columns.contains('user_id')) {
       db.execute(
@@ -73,6 +87,26 @@ class SyncStore {
   Hlc stamp() => _clock = _clock.send(_now());
 
   int get cursor => _seq;
+
+  static final _random = Random.secure();
+
+  static String _newTag() => [
+    for (var i = 0; i < 8; i++)
+      _random.nextInt(256).toRadixString(16).padLeft(2, '0'),
+  ].join();
+
+  /// The tag for the current [cursor], sent to devices along with it.
+  String get cursorTag =>
+      db.select('SELECT tag FROM history WHERE seq = ?', [_seq]).first['tag']
+          as String;
+
+  /// Whether this server's history includes the point a device was given
+  /// as [seq] and [tag]. It doesn't after a restore from a backup taken
+  /// before that point.
+  bool knows(int seq, String tag) => db.select(
+    'SELECT 1 FROM history WHERE seq = ? AND tag = ?',
+    [seq, tag],
+  ).isNotEmpty;
 
   /// Applies [changes] to [userId]'s data using the shared merge rule.
   /// Returns how many won.
@@ -115,6 +149,12 @@ class SyncStore {
           ++_seq,
         ]);
         applied++;
+      }
+      if (applied > 0) {
+        db.execute('INSERT INTO history (seq, tag) VALUES (?, ?)', [
+          _seq,
+          _newTag(),
+        ]);
       }
       db.execute('COMMIT');
     } catch (_) {

@@ -663,8 +663,12 @@ class SyncEngine extends ChangeNotifier {
   Future<void> _roundTrip() async {
     final pending = store.pending();
     final since = store.cursor;
+    // Lets the server tell whether it still has the history this device
+    // saw, even if a restore has since counted the cursor back up.
+    final sinceTag = since > 0 ? store.meta('cursorTag') : null;
     final body = await _post('/sync', {
       'since': since,
+      'sinceTag': ?sinceTag,
       'changes': [for (final c in pending.changes) c.toJson()],
     });
     // Check the answer before forgetting what was sent: if it isn't a real
@@ -687,14 +691,20 @@ class SyncEngine extends ChangeNotifier {
     }
     if (pending.lastId > 0) store.markSent(pending.lastId);
     _followRemote(body['server']);
-    if (cursor < since) {
+    if (cursor < since || body['rewound'] == true) {
       // The server has gone back in time: restored from a backup. It may be
       // missing changes this device already sent, so send everything again
-      // and fetch everything it has.
+      // and fetch everything it has. "rewound" catches it even when other
+      // devices have already counted the cursor back up past this one's.
       store.requeueAll();
       return;
     }
-    store.applyRemote(incoming, cursor);
+    final cursorTag = body['cursorTag'];
+    store.applyRemote(
+      incoming,
+      cursor,
+      cursorTag: cursorTag is String ? cursorTag : null,
+    );
   }
 
   /// Where the directory says this server can be reached now. Only

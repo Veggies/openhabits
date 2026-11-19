@@ -47,14 +47,16 @@ class Api {
   Future<Map<String, Object?>> sync(
     String token,
     int since,
-    List<Change> changes,
-  ) async {
+    List<Change> changes, {
+    String? sinceTag,
+  }) async {
     final (status, b) = await call(
       'POST',
       '/sync',
       token: token,
       body: {
         'since': since,
+        'sinceTag': ?sinceTag,
         'changes': [for (final c in changes) c.toJson()],
       },
     );
@@ -294,7 +296,90 @@ void main() {
       final result = await api.sync(ownerToken, 0, []);
       expect((result['changes'] as List).single['value'], 'Oat milk');
     });
+
+    test('each answer carries a tag for its cursor', () async {
+      final first = await api.sync(ownerToken, 0, [
+        set('title', 'Milk', 1, 'phone'),
+      ]);
+      expect(first['cursorTag'], isA<String>());
+      final again = await api.sync(
+        ownerToken,
+        first['cursor'] as int,
+        [],
+        sinceTag: first['cursorTag'] as String,
+      );
+      // Nothing new, so the same point in history and the same tag.
+      expect(again['cursorTag'], first['cursorTag']);
+      expect(again.containsKey('rewound'), isFalse);
+    });
   });
+
+  test(
+    'a device notices a restore even after the cursor climbs back past it',
+    () async {
+      final dir = Directory.systemTemp.createTempSync('restore_test');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final path = '${dir.path}/data.sqlite';
+      final backup = '${dir.path}/backup.sqlite';
+
+      var live = SyncStore.open(path);
+      var liveAuth = AuthStore(live);
+      liveAuth.createUser('ryan', password: 'correct horse');
+      var liveApi = Api(buildHandler(live, liveAuth));
+      final phone = await liveApi.login('ryan', 'correct horse');
+      final laptop = await liveApi.login('ryan', 'correct horse');
+
+      // Both devices sync, then the backup is taken.
+      final early = await liveApi.sync(phone, 0, [
+        set('title', 'Milk', 1, 'phone'),
+      ]);
+      live.db.execute("VACUUM INTO '$backup'");
+
+      // After the backup: the laptop sends a change only it has, and the
+      // phone sends a few of its own.
+      final laptopLast = await liveApi.sync(laptop, 0, [
+        set('notes', 'Only on the laptop', 2, 'laptop'),
+      ]);
+      await liveApi.sync(phone, early['cursor'] as int, [
+        for (var i = 0; i < 5; i++) set('f$i', i, 10 + i, 'phone'),
+      ], sinceTag: early['cursorTag'] as String);
+      live.close();
+
+      // Restore the backup.
+      File(backup).copySync(path);
+      live = SyncStore.open(path);
+      addTearDown(live.close);
+      liveAuth = AuthStore(live);
+      liveApi = Api(buildHandler(live, liveAuth));
+
+      // The phone resends everything first, so the cursor climbs back past
+      // where the laptop left off.
+      await liveApi.sync(phone, 0, [
+        set('title', 'Milk', 1, 'phone'),
+        for (var i = 0; i < 5; i++) set('f$i', i, 10 + i, 'phone'),
+      ]);
+      expect(live.cursor, greaterThan(laptopLast['cursor'] as int));
+
+      // The laptop's cursor looks fine as a number, but its tag isn't part
+      // of this server's history, so it's told to send everything again.
+      final laptopNext = await liveApi.sync(
+        laptop,
+        laptopLast['cursor'] as int,
+        [],
+        sinceTag: laptopLast['cursorTag'] as String,
+      );
+      expect(laptopNext['rewound'], isTrue);
+
+      // A device that last synced before the backup has nothing to resend.
+      final phoneOld = await liveApi.sync(
+        phone,
+        early['cursor'] as int,
+        [],
+        sinceTag: early['cursorTag'] as String,
+      );
+      expect(phoneOld.containsKey('rewound'), isFalse);
+    },
+  );
 
   group('calendar link', () {
     /// Uploads a habit's fields the way the app does.

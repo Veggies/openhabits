@@ -677,6 +677,60 @@ void main() {
       );
       device.sync.dispose();
     });
+
+    test(
+      'a restore is noticed even after another device raised the cursor again',
+      () async {
+        final dir = Directory.systemTemp.createTempSync('restore');
+        addTearDown(() => dir.deleteSync(recursive: true));
+        final path = '${dir.path}/data.sqlite';
+        final live = SyncStore.open(path);
+        final liveAuth = AuthStore(live)
+          ..createUser('ryan', password: 'correct horse');
+        final phone = Device(buildHandler(live, liveAuth, serverId: 'home'));
+        final laptop = Device(buildHandler(live, liveAuth, serverId: 'home'));
+        await phone.signIn();
+        await laptop.signIn();
+        phone.repo.createHabit({'name': 'Before the backup'});
+        await phone.sync.syncNow();
+        await laptop.sync.syncNow();
+
+        File(path).copySync('${dir.path}/backup.sqlite');
+        phone.repo.createHabit({'name': 'Phone, after the backup'});
+        await phone.sync.syncNow();
+        laptop.repo.createHabit({'name': 'Only on the laptop'});
+        await laptop.sync.syncNow();
+        final laptopCursor = laptop.store.cursor;
+        live.close();
+
+        final restored = SyncStore.open('${dir.path}/backup.sqlite');
+        addTearDown(restored.close);
+        final restoredAuth = AuthStore(restored);
+        phone.handler = buildHandler(restored, restoredAuth, serverId: 'home');
+        laptop.handler = buildHandler(restored, restoredAuth, serverId: 'home');
+
+        // The phone notices first, resends, and keeps being used, so the
+        // cursor climbs back past where the laptop left off.
+        await phone.sync.syncNow();
+        for (var i = 0; i < 5; i++) {
+          phone.repo.createHabit({'name': 'Phone $i'});
+        }
+        await phone.sync.syncNow();
+        await phone.sync.syncNow();
+        expect(restored.cursor, greaterThan(laptopCursor));
+
+        await laptop.sync.syncNow();
+        await laptop.sync.syncNow();
+        expect(laptop.sync.status, SyncStatus.idle);
+        final owner = restoredAuth.userByName('ryan')!.id;
+        expect(
+          restored.rows(owner, Tables.habits).values.map((h) => h['name']),
+          contains('Only on the laptop'),
+        );
+        phone.sync.dispose();
+        laptop.sync.dispose();
+      },
+    );
   });
 
   test('a pairing code for another server says what switching costs', () {
