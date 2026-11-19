@@ -12,7 +12,9 @@
 
 <!--
 Required for anything you can see: app screens, the server's setup page, icons.
-Drag images or a short video straight into this box. Before-and-after is best:
+Drag images or a short video straight into this box. From the terminal, you can
+use `gh pr create --attach` or `gh pr edit --attach` instead (see CONTRIBUTING.md).
+Before-and-after is best:
 
 | Before | After |
 |---|---|

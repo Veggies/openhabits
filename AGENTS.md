@@ -15,8 +15,9 @@ OpenHabits is a self-hosted habit tracker built around the ideas in *Atomic Habi
 7. **Verify, don't guess.** Open a definition before you use it, and confirm a bug's cause in the code before fixing it.
 8. **Keep fixes narrow and tested.** One issue, one pull request. Add a test that fails without the fix. A version bump is its own pull request.
 9. **Report only what ran.** Say which tests you ran and what you checked by hand. If you couldn't build or run something, say so.
-10. **Follow the pull request template in full.** Link the issue (`Fixes #12`). Add before-and-after screenshots for anything visible. Say how AI was used. Right after opening it, comment `@coderabbitai review` on it to start the automatic code review, then answer or fix what it finds.
+10. **Follow the pull request template in full.** Link the issue (`Fixes #12`). Add before-and-after screenshots for anything visible: you can't drag images in, so in the description file use a normal Markdown image link to each file by its name, such as `before.png`, and pass each one with `--attach before.png` to `gh pr create` or `gh pr edit` (GitHub CLI 2.99 or later). GitHub uploads them and swaps in the links. Never commit screenshots to the repository or to a branch. Say how AI was used. Right after opening it, comment `@coderabbitai review` on it to start the automatic code review, then answer or fix what it finds.
 11. **Keep secrets and personal details out** of the code, logs, commits and pull requests.
+12. **Finish the job.** After opening a pull request, wait for its checks. If one fails, read why and fix it, then check again. The pull request isn't done until every check passes.
 
 ## Building and testing
 
