@@ -84,10 +84,10 @@ class HabitPlan {
   final String contract;
 
   HabitPlan.fromFields(Fields f)
-    : identity = _text(f['identity']),
+    : identity = tidy('identity', _text(f['identity'])),
       time = _text(f['time']),
       location = _text(f['location']),
-      stackAfter = _text(f['stackAfter']),
+      stackAfter = tidy('stackAfter', _text(f['stackAfter'])),
       twoMinute = _text(f['twoMinute']),
       goal = _text(f['goal']),
       steppedUpAt = _text(f['steppedUpAt']),
@@ -119,6 +119,55 @@ class HabitPlan {
     'unsatisfying',
     'contract',
   ];
+
+  /// The words the app puts in front of a field when it shows it
+  /// ("After I pour my coffee"). Forms show them fixed in front of the box,
+  /// so they never need typing.
+  static const leads = {'stackAfter': 'After I', 'identity': 'I am'};
+
+  /// The ways people type a field's lead words, and what's left in their
+  /// place. Contractions keep their verb: "After I've eaten" becomes
+  /// "have eaten", which shows as "After I have eaten".
+  static const _typedLeads = {
+    'stackAfter': [
+      ("After I['’]ve", 'have '),
+      ("After I['’]m", 'am '),
+      ('After I', ''),
+    ],
+    'identity': [('I am', ''), ("I['’]m", '')],
+  };
+
+  /// [text] ready to save: trimmed, and without the field's lead words if
+  /// they were typed anyway ("After I sit down" becomes "sit down").
+  static String tidy(String field, String text) {
+    var t = text.trim();
+    final forms = _typedLeads[field];
+    if (forms == null) return t;
+    // Typed more than once ("After I After I sit down"), each copy comes
+    // off. Every pass removes at least the two letters of "I'm".
+    var removed = true;
+    while (removed) {
+      removed = false;
+      for (final (form, keep) in forms) {
+        // The lead must end at a space, punctuation or the end of the text,
+        // so "After Iñaki leaves" and "I amaze people" stay. (A regex
+        // word boundary in Dart treats letters like "ñ" as a break.)
+        // An apostrophe isn't a separator: it starts a contraction.
+        const gap = r'[\s,.…:;!?–—-]';
+        final typed = RegExp(
+          '^$form(?=$gap|\$)$gap*',
+          caseSensitive: false,
+          unicode: true,
+        ).firstMatch(t);
+        if (typed != null) {
+          t = keep + t.substring(typed.end);
+          removed = true;
+          break;
+        }
+      }
+    }
+    return t.trim();
+  }
 
   /// True when none of the Atomic Habits fields are filled in. The time
   /// doesn't count: any habit can have one.

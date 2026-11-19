@@ -609,7 +609,7 @@ class _GuidedHabitState extends State<_GuidedHabit> {
     super.dispose();
   }
 
-  String _v(String f) => _plan[f]!.text.trim();
+  String _v(String f) => HabitPlan.tidy(f, _plan[f]!.text);
 
   void _create() {
     final repo = AppScope.read(context).repo;
@@ -650,7 +650,8 @@ class _GuidedHabitState extends State<_GuidedHabit> {
         ),
         PlanField(
           controller: _plan['identity']!,
-          label: 'I am…',
+          label: 'Who you want to become',
+          prefix: HabitPlan.leads['identity'],
           hint: 'e.g. a reader',
         ),
       ],
@@ -717,7 +718,8 @@ class _GuidedHabitState extends State<_GuidedHabit> {
         ),
         PlanField(
           controller: _plan['stackAfter']!,
-          label: 'After I…',
+          label: 'Right after something you already do',
+          prefix: HabitPlan.leads['stackAfter'],
           hint: 'e.g. pour my morning coffee',
         ),
       ],

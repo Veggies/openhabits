@@ -230,16 +230,23 @@ struct HintField: View {
     let hint: String
     @Binding var text: String
     var axis: Axis = .horizontal
+    /// Fixed words in front of what's typed, e.g. "After I". They're always
+    /// shown, so it's clear they're already part of the sentence.
+    var prefix: String?
 
-    init(_ hint: String, text: Binding<String>, axis: Axis = .horizontal) {
+    init(_ hint: String, text: Binding<String>, axis: Axis = .horizontal, prefix: String? = nil) {
         self.hint = hint
         _text = text
         self.axis = axis
+        self.prefix = prefix
     }
 
     var body: some View {
-        TextField(hint, text: $text, prompt: Text(hint), axis: axis)
-            .labelsHidden()
-            .multilineTextAlignment(.leading)
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            if let prefix { Text(prefix).foregroundStyle(.secondary) }
+            TextField(hint, text: $text, prompt: Text(hint), axis: axis)
+                .labelsHidden()
+                .multilineTextAlignment(.leading)
+        }
     }
 }

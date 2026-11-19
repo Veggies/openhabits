@@ -50,6 +50,30 @@ import Testing
 }
 
 @Suite struct DatesAndTimes {
+    @Test func leadWordsTypedIntoThePlanAreNotDoubled() {
+        #expect(HabitPlan.tidy("stackAfter", " After I sit down ") == "sit down")
+        #expect(HabitPlan.tidy("stackAfter", "after i, pour coffee") == "pour coffee")
+        #expect(HabitPlan.tidy("stackAfter", "pour coffee") == "pour coffee")
+        #expect(HabitPlan.tidy("identity", "I am a reader") == "a reader")
+        #expect(HabitPlan.tidy("identity", "I amaze people") == "I amaze people")
+        #expect(HabitPlan.tidy("location", "After I leave") == "After I leave")
+        // Contractions keep their verb, so the plan still reads "After I have…".
+        #expect(HabitPlan.tidy("stackAfter", "After I've finished breakfast") == "have finished breakfast")
+        #expect(HabitPlan.tidy("stackAfter", "After I’m home") == "am home")
+        #expect(HabitPlan.tidy("identity", "I'm a runner") == "a runner")
+        // The lead only counts as whole words, so names are left alone.
+        #expect(HabitPlan.tidy("stackAfter", "After Iñaki leaves") == "After Iñaki leaves")
+        // Typed twice, both copies come off.
+        #expect(HabitPlan.tidy("stackAfter", "After I After I sit down") == "sit down")
+        // Any punctuation after the lead counts, except an apostrophe.
+        #expect(HabitPlan.tidy("stackAfter", "After I: sit down") == "sit down")
+        #expect(HabitPlan.tidy("stackAfter", "After I; sit down") == "sit down")
+        #expect(HabitPlan.tidy("stackAfter", "After I – sit down") == "sit down")
+        #expect(HabitPlan.tidy("identity", "I am: a reader") == "a reader")
+        // Plans saved before the fix read back without the doubled words.
+        #expect(HabitPlan(["stackAfter": "After I sit down"]).stackAfter == "sit down")
+    }
+
     @Test func dayKeysAndWeekdays() {
         let day = Days.parse("2026-11-15")!  // a Sunday
         #expect(Days.key(day) == "2026-11-15")

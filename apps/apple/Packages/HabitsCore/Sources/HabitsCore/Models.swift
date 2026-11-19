@@ -64,10 +64,10 @@ public struct HabitPlan: Sendable, Hashable {
     }
 
     public init(_ f: Fields) {
-        identity = text(f["identity"])
+        identity = Self.tidy("identity", text(f["identity"]))
         time = text(f["time"])
         location = text(f["location"])
-        stackAfter = text(f["stackAfter"])
+        stackAfter = Self.tidy("stackAfter", text(f["stackAfter"]))
         twoMinute = text(f["twoMinute"])
         goal = text(f["goal"])
         steppedUpAt = text(f["steppedUpAt"])
@@ -106,6 +106,45 @@ public struct HabitPlan: Sendable, Hashable {
         case "unsatisfying": unsatisfying
         default: contract
         }
+    }
+
+    /// The words the app puts in front of a field when it shows it
+    /// ("After I pour my coffee"). Forms show them fixed in front of the box,
+    /// so they never need typing.
+    public static let leads = ["stackAfter": "After I", "identity": "I am"]
+
+    /// The ways people type a field's lead words, and what's left in their
+    /// place. Contractions keep their verb: "After I've eaten" becomes
+    /// "have eaten", which shows as "After I have eaten".
+    static let typedLeads: [String: [(form: String, keep: String)]] = [
+        "stackAfter": [("After I['’]ve", "have "), ("After I['’]m", "am "), ("After I", "")],
+        "identity": [("I am", ""), ("I['’]m", "")],
+    ]
+
+    /// `text` ready to save: trimmed, and without the field's lead words if
+    /// they were typed anyway ("After I sit down" becomes "sit down").
+    public static func tidy(_ field: String, _ text: String) -> String {
+        var t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let forms = typedLeads[field] else { return t }
+        // Typed more than once ("After I After I sit down"), each copy comes
+        // off. Every pass removes at least the two letters of "I'm".
+        var removed = true
+        while removed {
+            removed = false
+            for (form, keep) in forms {
+                // The lead must end at a space, punctuation or the end of the
+                // text, so "After Iñaki leaves" and "I amaze people" stay.
+                // An apostrophe isn't a separator: it starts a contraction.
+                let gap = "[\\s,.…:;!?–—-]"
+                if let typed = t.range(of: "^\(form)(?=\(gap)|$)\(gap)*",
+                                       options: [.regularExpression, .caseInsensitive]) {
+                    t = keep + t[typed.upperBound...]
+                    removed = true
+                    break
+                }
+            }
+        }
+        return t.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// True when none of the Atomic Habits fields are filled in. The time

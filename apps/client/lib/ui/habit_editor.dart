@@ -69,7 +69,8 @@ class _HabitEditorState extends State<HabitEditor> {
     'weekdays': weekdays.toList()..sort(),
     'duration': duration,
     'remind': remind,
-    for (final MapEntry(:key, :value) in _plan.entries) key: value.text.trim(),
+    for (final MapEntry(:key, :value) in _plan.entries)
+      key: HabitPlan.tidy(key, value.text),
   };
 
   @override
@@ -192,10 +193,11 @@ class _HabitEditorState extends State<HabitEditor> {
               ),
             ),
             const SizedBox(height: 8),
-            _field(
-              'identity',
-              'Who do you want to become?',
-              'I am a person who…',
+            PlanField(
+              controller: _plan['identity']!,
+              label: 'Who do you want to become?',
+              prefix: HabitPlan.leads['identity'],
+              hint: 'e.g. a person who reads every day',
               help: "Each time you do the habit, it's a vote for becoming this person.",
             ),
             if (kind == HabitKind.build)
@@ -285,9 +287,6 @@ class _HabitEditorState extends State<HabitEditor> {
       ],
     );
   }
-
-  Widget _field(String name, String label, String hint, {String? help}) =>
-      PlanField(controller: _plan[name]!, label: label, hint: hint, help: help);
 
   Future<void> _pickTime() async {
     final current = _plan['time']!.text;
@@ -626,7 +625,8 @@ List<Widget> buildPlanFields(
   ),
   PlanField(
     controller: plan['stackAfter']!,
-    label: 'After I…',
+    label: 'Right after something you already do',
+    prefix: HabitPlan.leads['stackAfter'],
     hint: 'e.g. pour my morning coffee',
     help: 'Tie it to something you already do every day, like making your morning coffee.',
   ),
@@ -718,6 +718,10 @@ class PlanField extends StatelessWidget {
 
   /// Shown at the end of the box, e.g. a clear button.
   final Widget? suffix;
+
+  /// Fixed words in front of what's typed, e.g. "After I". They're always
+  /// shown, so it's clear they're already part of the sentence.
+  final String? prefix;
   const PlanField({
     super.key,
     required this.controller,
@@ -726,6 +730,7 @@ class PlanField extends StatelessWidget {
     this.help,
     this.onTap,
     this.suffix,
+    this.prefix,
   });
 
   @override
@@ -743,6 +748,11 @@ class PlanField extends StatelessWidget {
         helperText: help,
         helperMaxLines: 2,
         suffixIcon: suffix,
+        prefixText: prefix == null ? null : '$prefix ',
+        // The prefix only shows while the label sits above the box.
+        floatingLabelBehavior: prefix == null
+            ? null
+            : FloatingLabelBehavior.always,
         border: const OutlineInputBorder(),
       ),
     ),
