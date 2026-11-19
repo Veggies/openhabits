@@ -5,6 +5,9 @@
 #   can see". Required before merging.
 # - Tests: if code changed but no tests did, it leaves a reminder (a
 #   warning, not a failure).
+# - Linked issue: the description must link an issue ("Fixes #12"), or
+#   tick "No issue needed" for small changes like a typo or a version bump.
+#   Dependabot's pull requests don't need one. Required before merging.
 # It only reads the pull request; the description is passed in as data, so
 # nothing in it can run as code.
 name: Pull request
@@ -71,3 +74,31 @@ jobs:
       - name: Remind about tests
         if: steps.filter.outputs.code == 'true' && steps.filter.outputs.tests != 'true'
         run: echo "::warning title=No tests changed::This pull request changes code but no tests. If it fixes a bug or adds behaviour, please add a test that would have caught it, so it can't quietly come back. See CONTRIBUTING.md for how to run them."
+
+  linked-issue:
+    name: Linked issue
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check the description links an issue
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+          AUTHOR_TYPE: ${{ github.event.pull_request.user.type }}
+        run: |
+          if [ "$AUTHOR_TYPE" = "Bot" ]; then
+            echo "Opened by a bot (e.g. Dependabot), so no issue is needed."
+            exit 0
+          fi
+          # Ignore the template's hidden <!-- comments -->, whose examples
+          # would otherwise count as a link.
+          text=$(printf '%s' "$BODY" | perl -0pe 's/<!--.*?-->//gs')
+          issue='(fix(es|ed)?|close[sd]?|resolve[sd]?|related( to)?)[: ]+(#|https://github\.com/Veggies/openhabits/issues/)[0-9]+'
+          none='\[[xX]\][^[:cntrl:]]*[Nn]o issue needed'
+          if printf '%s' "$text" | grep -Eiq "$issue"; then
+            echo "The description links an issue. Thanks!"
+          elif printf '%s' "$text" | grep -Eq "$none"; then
+            echo "The description says no issue is needed."
+          else
+            echo "::error title=Please link an issue::Add a line like \"Fixes #12\" to the description, so the change is tied to the bug or idea it's for. If it's a small change that doesn't need one (a typo, a version bump), tick \"No issue needed\" instead. This check runs again when you edit the description."
+            exit 1
+          fi

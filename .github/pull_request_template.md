@@ -1,6 +1,8 @@
 ## What this changes
 
-<!-- A sentence or two: what it does and why. Link the issue if there is one, e.g. "Fixes #12". -->
+<!-- A sentence or two: what it does and why, and the issue it's for, e.g. "Fixes #12". -->
+
+- [ ] No issue needed (a small change, like a typo or a version bump)
 
 ## How you tested it
 
