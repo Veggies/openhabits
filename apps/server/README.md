@@ -99,6 +99,58 @@ first: if the path is wrong, `sqlite3` makes a new empty database and backs that
 up without any error. This copies only the database, so also keep a copy of the
 certificate and signing key from that folder.
 
+## Restoring a backup
+
+Restoring uses the same helper container as the backup, run from the folder
+that holds your backup file. If you're moving to a new machine, install the
+server there first so the `openhabits` container exists, then follow these
+steps. Whatever is in its data folder gets replaced.
+
+Stop the server's container first:
+
+```sh
+docker stop openhabits
+```
+
+To restore a whole-folder backup, clear the data folder and unpack the archive
+into it:
+
+```sh
+docker run --rm --volumes-from openhabits -v "$PWD":/backup alpine \
+  sh -c 'find /data -mindepth 1 -delete &&
+  tar xzf /backup/openhabits-backup.tgz -C /data'
+```
+
+That brings back everything: the database (`data.sqlite`), the certificate
+(`remote-cert.pem` and `remote-key.pem`), and the signing key
+(`directory-key.pem`).
+
+To restore a database-only backup made while the server was running, copy it
+over the database and remove any leftover journal file. This keeps the
+certificate and signing key that are already there, so only do it on the same
+server, or after restoring those two from a whole-folder backup:
+
+```sh
+docker run --rm --volumes-from openhabits -v "$PWD":/backup alpine \
+  sh -c 'cp /backup/backup.sqlite /data/data.sqlite &&
+  rm -f /data/data.sqlite-journal'
+```
+
+If you changed `DB_PATH`, use that path in place of `/data/data.sqlite`, and its
+folder in place of `/data`.
+
+Then start the server again:
+
+```sh
+docker start openhabits
+```
+
+To check the restore worked, open the setup page at `http://<this-machine>:8080`
+and sign in, then open the app on one of your devices and make sure your habits
+are there and it syncs without asking you to sign in again. If a device says "A
+different OpenHabits server answered", the signing key wasn't restored: stop the
+container and restore it from a whole-folder backup.
+
 ## Development
 
 From the repository root:
