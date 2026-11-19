@@ -32,6 +32,7 @@ jobs:
       flutter: ${{ steps.filter.outputs.flutter == 'true' || steps.filter.outputs.ci == 'true' || github.event_name == 'workflow_dispatch' }}
       swift: ${{ steps.filter.outputs.swift == 'true' || steps.filter.outputs.ci == 'true' || github.event_name == 'workflow_dispatch' }}
       directory: ${{ steps.filter.outputs.directory == 'true' || steps.filter.outputs.ci == 'true' || github.event_name == 'workflow_dispatch' }}
+      agents: ${{ steps.filter.outputs.agents == 'true' || steps.filter.outputs.ci == 'true' || github.event_name == 'workflow_dispatch' }}
       packaging: ${{ steps.filter.outputs.packaging == 'true' || steps.filter.outputs.ci == 'true' || github.event_name == 'workflow_dispatch' }}
       workflows: ${{ steps.filter.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch' }}
     steps:
@@ -67,6 +68,9 @@ jobs:
             workflows:
               - '.github/workflows/**'
               - '.github/dependabot.yml'
+            agents:
+              - 'AGENTS.md'
+              - 'CLAUDE.md'
             ci:
               - '.github/workflows/checks.yml'
 
@@ -283,9 +287,39 @@ jobs:
         working-directory: truenas-apps
         run: python3 ./.github/scripts/ci.py --train community --app openhabits --test-file bridge-values.yaml --skip-metadata
 
+  agents:
+    name: Agent instructions
+    needs: changes
+    if: needs.changes.outputs.agents == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      # CLAUDE.md only imports AGENTS.md, so every agent reads the same rules.
+      # Rules kept in one agent's file would quietly drift from the others.
+      - name: CLAUDE.md points to AGENTS.md
+        run: |
+          if [ "$(cat CLAUDE.md)" != "@AGENTS.md" ]; then
+            echo "::error file=CLAUDE.md,title=Put rules in AGENTS.md::CLAUDE.md should contain only \"@AGENTS.md\". Put agent rules in AGENTS.md, so every agent follows them."
+            exit 1
+          fi
+      # Agents follow these links, so they must lead somewhere.
+      - name: Files AGENTS.md links to exist
+        run: |
+          missing=0
+          while read -r link; do
+            if [ ! -e "$link" ]; then
+              echo "::error file=AGENTS.md,title=Broken link::AGENTS.md links to $link, which doesn't exist."
+              missing=1
+            fi
+          done < <(grep -oE '\]\([^)#:]+\)' AGENTS.md | sed -E 's/^\]\(//; s/\)$//')
+          exit $missing
+
   all-passed:
     name: All checks passed
-    needs: [changes, server, server-image, flutter, swift, directory, workflows, homebrew, truenas]
+    needs: [changes, server, server-image, flutter, swift, directory, workflows, homebrew, truenas, agents]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
