@@ -12,7 +12,7 @@ OpenHabits uses port 8080 for its local setup page and port 8443 for its built-i
 - If you enable remote access, expose only the port required for your chosen configuration.
 - OpenHabits can use UPnP to request router port forwarding. Review your router's forwarding rules and remove any rules you no longer need.
 - If you do not need access from outside your home, leave remote access disabled.
-- Consider a private VPN or an appropriately configured reverse proxy if you already use one.
+- For remote access, use OpenHabits' built-in HTTPS or a securely configured reverse proxy or server-side tunnel. Avoid configurations that require installing additional software on each device.
 
 **Note:** The default Docker Compose deployment uses host networking. Review the host's firewall rules because Docker network isolation differs when host networking is enabled.
 
