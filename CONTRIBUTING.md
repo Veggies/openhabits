@@ -52,6 +52,7 @@ Everyone taking part is expected to follow the [code of conduct](CODE_OF_CONDUCT
 - **The tests run automatically** for every part you changed, plus a formatting check and a check that the server's Docker image still builds. They all have to pass before the pull request can be merged. If one fails, open it from the pull request's *Checks* tab to see why.
 - **Anything you can see needs a screenshot.** If you change an app screen, the server's setup page or an icon, add a screenshot or short video to the description, ideally before and after. If nothing visible changed, tick the box that says so. A check enforces this, and it runs again when you edit the description.
 - **Changed code but no tests?** You'll see a reminder. Bug fixes and new behaviour should come with a test that would have caught the problem, so it can't quietly come back.
+- **CodeRabbit reviews every pull request.** It's an automatic code review, free for open-source projects. To start it, comment `@coderabbitai review` on your pull request (anyone can). Its comments are suggestions: reply if you disagree, and fix what's right.
 - **A maintainer reviews every pull request** before it's merged. If changes are needed, just push more commits to the same branch.
 
 ## Licence
