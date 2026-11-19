@@ -102,7 +102,8 @@ certificate and signing key from that folder.
 ## Restoring a backup
 
 Restoring uses the same helper container as the backup, run from the folder
-that holds your backup file. If you're moving to a new machine, install the
+that holds your backup file. Keep that folder outside the server's data folder,
+because the restore clears the data folder first. If you're moving to a new machine, install the
 server there first so the `openhabits` container exists, then follow these
 steps. Whatever is in its data folder gets replaced.
 
@@ -150,8 +151,11 @@ docker start openhabits
 The server is now back to how it was when you made the backup, including who's
 signed in. That has a few effects:
 
-- Your devices notice the server has gone back in time and send it everything
-  they have, so changes made after the backup come back from them.
+- A device that synced after the backup was made notices the server has gone
+  back in time and sends it everything it has, which brings back changes made
+  since the backup. Open the app first on the device you used most recently,
+  then on the others one at a time, and check that your recent changes are
+  there.
 - A device that signed in after the backup was made will ask you to sign in
   again. That's expected.
 - Any device signed out after the backup was made is signed in again. If that
