@@ -90,6 +90,11 @@ void main() {
       HabitPlan.tidy('stackAfter', 'After I After I sit down'),
       'sit down',
     );
+    // Any punctuation after the lead counts, except an apostrophe.
+    expect(HabitPlan.tidy('stackAfter', 'After I: sit down'), 'sit down');
+    expect(HabitPlan.tidy('stackAfter', 'After I; sit down'), 'sit down');
+    expect(HabitPlan.tidy('stackAfter', 'After I – sit down'), 'sit down');
+    expect(HabitPlan.tidy('identity', 'I am: a reader'), 'a reader');
     // Plans saved before the fix read back without the doubled words.
     expect(
       HabitPlan.fromFields({'stackAfter': 'After I sit down'}).stackAfter,

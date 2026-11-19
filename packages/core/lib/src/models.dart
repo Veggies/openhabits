@@ -152,8 +152,10 @@ class HabitPlan {
         // The lead must end at a space, punctuation or the end of the text,
         // so "After Iñaki leaves" and "I amaze people" stay. (A regex
         // word boundary in Dart treats letters like "ñ" as a break.)
+        // An apostrophe isn't a separator: it starts a contraction.
+        const gap = r'[\s,.…:;!?–—-]';
         final typed = RegExp(
-          '^$form(?=[\\s,.…]|\$)[\\s,.…]*',
+          '^$form(?=$gap|\$)$gap*',
           caseSensitive: false,
           unicode: true,
         ).firstMatch(t);

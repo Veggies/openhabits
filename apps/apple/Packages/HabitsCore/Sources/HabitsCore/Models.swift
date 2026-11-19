@@ -134,7 +134,9 @@ public struct HabitPlan: Sendable, Hashable {
             for (form, keep) in forms {
                 // The lead must end at a space, punctuation or the end of the
                 // text, so "After Iñaki leaves" and "I amaze people" stay.
-                if let typed = t.range(of: "^\(form)(?=[\\s,.…]|$)[\\s,.…]*",
+                // An apostrophe isn't a separator: it starts a contraction.
+                let gap = "[\\s,.…:;!?–—-]"
+                if let typed = t.range(of: "^\(form)(?=\(gap)|$)\(gap)*",
                                        options: [.regularExpression, .caseInsensitive]) {
                     t = keep + t[typed.upperBound...]
                     removed = true
