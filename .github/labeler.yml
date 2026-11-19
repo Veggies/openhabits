@@ -1,0 +1,21 @@
+# Labels each pull request by the parts of the project it changes (read by
+# the Labeler workflow). Release notes are grouped by these labels; see
+# .github/release.yml. A pull request can get more than one.
+Apple app:
+  - changed-files:
+      - any-glob-to-any-file: 'apps/apple/**'
+
+Windows and Linux app:
+  - changed-files:
+      - any-glob-to-any-file: 'apps/client/**'
+
+Server:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'apps/server/**'
+          - 'packages/core/**'
+          - 'services/directory/**'
+
+Packaging:
+  - changed-files:
+      - any-glob-to-any-file: 'deploy/**'

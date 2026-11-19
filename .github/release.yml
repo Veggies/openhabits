@@ -1,0 +1,18 @@
+# How GitHub groups the automatic release notes (used when a release is
+# published, e.g. by desktop.yml's generate_release_notes). Pull requests are
+# labelled automatically by the parts they change (.github/labeler.yml); one
+# that changes several parts is listed under the first group it matches.
+changelog:
+  categories:
+    - title: iPhone, iPad and Mac
+      labels: ["Apple app"]
+    - title: Windows and Linux
+      labels: ["Windows and Linux app"]
+    - title: Server
+      labels: ["Server"]
+    - title: Installing (Homebrew, TrueNAS, Docker)
+      labels: ["Packaging"]
+    - title: Dependency updates
+      labels: ["dependencies"]
+    - title: Everything else
+      labels: ["*"]
