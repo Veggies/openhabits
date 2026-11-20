@@ -120,7 +120,10 @@ public final class LocalStore {
     }
 
     /// Applies changes from the server and records the new cursor.
-    public func applyRemote(_ changes: [Change], cursor: Int) throws {
+    /// `cursorTag` is the server's tag for that point in its history, sent
+    /// back next time so it can tell if it was restored from a backup.
+    /// Servers from before tags don't send one.
+    public func applyRemote(_ changes: [Change], cursor: Int, cursorTag: String? = nil) throws {
         let now = Self.nowMillis()
         var staged: [String: Change] = [:]
         try db.transaction {
@@ -129,6 +132,7 @@ public final class LocalStore {
                 try persist(c, &staged)
             }
             try db.run("INSERT OR REPLACE INTO meta (key, value) VALUES ('cursor', ?)", [String(cursor)])
+            try db.run("INSERT OR REPLACE INTO meta (key, value) VALUES ('cursorTag', ?)", [cursorTag])
         }
         keep(staged)
         if !staged.isEmpty {
@@ -176,6 +180,7 @@ public final class LocalStore {
                     }
                 }
                 try db.run("INSERT OR REPLACE INTO meta (key, value) VALUES ('cursor', '0')")
+                try db.run("DELETE FROM meta WHERE key = 'cursorTag'")
             }
             metaRevision += 1
         } catch {
@@ -188,6 +193,7 @@ public final class LocalStore {
     public func reset() {
         try? db.execute("DELETE FROM fields; DELETE FROM outbox;")
         setMeta("cursor", "0")
+        setMeta("cursorTag", nil)
         tables = [:]
         hlcs = [:]
         revision += 1

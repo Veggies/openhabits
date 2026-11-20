@@ -36,6 +36,14 @@ device clocks disagree. Devices keep a full local SQLite copy and work offline;
 edits are queued and sent to `POST /sync`, which returns everything newer than
 the device's cursor in the same round trip.
 
+Each answer also carries a `cursorTag`, a random tag for that point in the
+server's history, and devices send it back as `sinceTag`. If the server was
+restored from a backup that doesn't have the device's saved tag, it answers
+`"rewound": true`, so the device sends everything again. This
+still works when other devices have already counted the cursor back up past the
+device's own. Devices also treat a cursor lower than their own as a restore,
+which covers servers from before tags.
+
 Conflicts resolve per field with last-write-wins (`packages/core/lib/src/merge.dart`):
 renaming a habit on one device while changing its color on another keeps both
 edits. Deleting sets a `_deleted` field, so deleting and restoring sync like any
