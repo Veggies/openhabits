@@ -158,6 +158,7 @@ final class AppModel {
     func focus(on habit: Habit) {
         if focus.running || focus.paused {
             focus.habitId = habit.id
+            focus.show(focus.phase)
         } else {
             focus.select(.focus)
             focus.habitId = habit.id

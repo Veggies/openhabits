@@ -25,7 +25,11 @@ Future<Repo> pumpApp(
   if (onboarded) store.setMeta('onboarded', '1');
   final repo = Repo(store, clock: clock);
   await tester.pumpWidget(
-    App(repo: repo, sync: SyncEngine(store), focus: FocusController(repo)),
+    App(
+      repo: repo,
+      sync: SyncEngine(store),
+      focus: FocusController(repo, clock: tester.binding.clock.now),
+    ),
   );
   return repo;
 }
@@ -498,10 +502,44 @@ void main() {
     await tester.enterText(find.widgetWithText(TextField, '25'), '40');
     await tester.tap(find.text('Start'));
     await tester.pump();
-    // A second may already have gone.
-    expect(find.textContaining(RegExp('^(40:00|39:59)\$')), findsOneWidget);
+    expect(find.text('40:00'), findsOneWidget);
     await tester.tap(find.byTooltip('Reset'));
     await tester.pump();
+  });
+
+  testWidgets('focus: looking at Break leaves the session running', (
+    tester,
+  ) async {
+    await pumpApp(tester, const Size(1400, 900));
+    await go(tester, 'Focus');
+    await tester.tap(find.text('Start'));
+    await tester.pump();
+    await tester.tap(find.text('Break').first);
+    await tester.pump();
+    expect(find.text('05:00'), findsOneWidget);
+    expect(find.text('Your focus session is still going.'), findsOneWidget);
+    expect(
+      tester
+          .widget<CircularProgressIndicator>(
+            find.byType(CircularProgressIndicator),
+          )
+          .value,
+      0,
+    );
+    // A length typed here is the break's, not the running session's.
+    await tester.enterText(find.widgetWithText(TextField, '5'), '10');
+    await tester.pump();
+    expect(find.text('10:00'), findsOneWidget);
+    await tester.pump(const Duration(minutes: 1));
+    await tester.tap(find.text('Back to Timer'));
+    await tester.pump();
+    expect(find.text('24:00'), findsOneWidget);
+    await tester.pump();
+    await tester.tap(find.byTooltip('Reset'));
+    await tester.pump();
+    // And it doesn't follow you back to Focus.
+    expect(find.text('25:00'), findsOneWidget);
+    expect(find.widgetWithText(TextField, '25'), findsOneWidget);
   });
 
   testWidgets('phone: a habit opens as its own page', (tester) async {

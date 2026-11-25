@@ -117,6 +117,16 @@ String _phaseHint(FocusPhase p) => switch (p) {
   FocusPhase.rest => 'Rest before the next focus session.',
 };
 
+String _hint(FocusController focus) {
+  if (focus.shown != focus.phase) {
+    final doing = focus.paused ? 'paused' : 'still going';
+    return focus.phase == FocusPhase.focus
+        ? 'Your focus session is $doing.'
+        : 'Your break is $doing.';
+  }
+  return _phaseHint(focus.phase);
+}
+
 class _TimerPanel extends StatelessWidget {
   final FocusController focus;
   const _TimerPanel({required this.focus});
@@ -125,12 +135,16 @@ class _TimerPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final repo = AppScope.of(context).repo;
-    final remaining = focus.remaining;
+    // Looking at the other phase while the timer goes on.
+    final away = focus.shown != focus.phase;
+    final remaining = away
+        ? Duration(minutes: focus.minutes[focus.shown]!)
+        : focus.remaining;
     final mm = remaining.inMinutes.toString().padLeft(2, '0');
     final ss = (remaining.inSeconds % 60).toString().padLeft(2, '0');
     final habits = repo.habits.where((h) => !h.isQuit).toList();
-    final color = _phaseColor(focus.phase, theme.colorScheme);
-    final active = focus.running || focus.paused;
+    final color = _phaseColor(focus.shown, theme.colorScheme);
+    final active = (focus.running || focus.paused) && !away;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -141,12 +155,12 @@ class _TimerPanel extends StatelessWidget {
             for (final p in FocusPhase.values)
               ButtonSegment(value: p, label: Text(_phaseName(p))),
           ],
-          selected: {focus.phase},
-          onSelectionChanged: (s) => focus.selectPhase(s.first),
+          selected: {focus.shown},
+          onSelectionChanged: (s) => focus.show(s.first),
         ),
         const SizedBox(height: 8),
         Text(
-          _phaseHint(focus.phase),
+          _hint(focus),
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.outline,
           ),
@@ -159,7 +173,7 @@ class _TimerPanel extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               CircularProgressIndicator(
-                value: focus.progress,
+                value: away ? 0 : focus.progress,
                 strokeWidth: 10,
                 color: color,
                 backgroundColor: color.withValues(alpha: 0.15),
@@ -176,7 +190,9 @@ class _TimerPanel extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      focus.paused ? 'Paused' : _phaseName(focus.phase),
+                      active && focus.paused
+                          ? 'Paused'
+                          : _phaseName(focus.shown),
                       style: theme.textTheme.titleSmall?.copyWith(color: color),
                     ),
                   ],
@@ -200,8 +216,8 @@ class _TimerPanel extends StatelessWidget {
                 tooltip: '5 minutes less',
                 icon: const Icon(Icons.remove_circle_outline),
                 onPressed: () => focus.setMinutes(
-                  focus.phase,
-                  focus.minutes[focus.phase]! - 5,
+                  focus.shown,
+                  focus.minutes[focus.shown]! - 5,
                 ),
               ),
               _MinutesField(focus: focus),
@@ -209,8 +225,8 @@ class _TimerPanel extends StatelessWidget {
                 tooltip: '5 minutes more',
                 icon: const Icon(Icons.add_circle_outline),
                 onPressed: () => focus.setMinutes(
-                  focus.phase,
-                  focus.minutes[focus.phase]! + 5,
+                  focus.shown,
+                  focus.minutes[focus.shown]! + 5,
                 ),
               ),
             ],
@@ -234,11 +250,25 @@ class _TimerPanel extends StatelessWidget {
                 backgroundColor: color,
                 minimumSize: const Size(140, 52),
               ),
-              icon: Icon(focus.running ? Icons.pause : Icons.play_arrow),
-              label: Text(
-                focus.running ? 'Pause' : (focus.paused ? 'Resume' : 'Start'),
+              icon: Icon(
+                away
+                    ? Icons.undo
+                    : focus.running
+                    ? Icons.pause
+                    : Icons.play_arrow,
               ),
-              onPressed: focus.running ? focus.pause : focus.start,
+              label: Text(
+                away
+                    ? 'Back to Timer'
+                    : focus.running
+                    ? 'Pause'
+                    : (focus.paused ? 'Resume' : 'Start'),
+              ),
+              onPressed: away
+                  ? () => focus.show(focus.phase)
+                  : focus.running
+                  ? focus.pause
+                  : focus.start,
             ),
             const SizedBox(width: 16),
             Visibility.maintain(
@@ -257,7 +287,7 @@ class _TimerPanel extends StatelessWidget {
         SizedBox(
           width: 320,
           height: 64,
-          child: focus.phase == FocusPhase.focus
+          child: focus.shown == FocusPhase.focus
               ? DropdownButtonFormField<String?>(
                   initialValue: habits.any((h) => h.id == focus.habitId)
                       ? focus.habitId
@@ -392,11 +422,15 @@ class _MinutesFieldState extends State<_MinutesField> {
   late final _controller = TextEditingController(text: '$_minutes');
   final _focusNode = FocusNode();
 
-  int get _minutes => widget.focus.minutes[widget.focus.phase]!;
+  /// The phase whose length is showing.
+  late FocusPhase _phase;
+
+  int get _minutes => widget.focus.minutes[widget.focus.shown]!;
 
   @override
   void initState() {
     super.initState();
+    _phase = widget.focus.shown;
     _focusNode.addListener(() {
       if (!_focusNode.hasFocus) _commit();
     });
@@ -405,17 +439,19 @@ class _MinutesFieldState extends State<_MinutesField> {
   @override
   void didUpdateWidget(_MinutesField oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Follow the −/+ buttons and phase changes, unless the person is typing.
-    if (!_focusNode.hasFocus && _controller.text != '$_minutes') {
+    // Follow the −/+ buttons, unless the person is typing. Another phase
+    // always shows its own length.
+    final switched = _phase != widget.focus.shown;
+    _phase = widget.focus.shown;
+    if ((switched || !_focusNode.hasFocus) && _controller.text != '$_minutes') {
       _controller.text = '$_minutes';
     }
   }
 
-  void _commit() {
-    final value = int.tryParse(_controller.text.trim());
-    if (value != null) widget.focus.setMinutes(widget.focus.phase, value);
-    _controller.text = '$_minutes';
-  }
+  /// Shows the length as it was understood. It's already been set, as it
+  /// was typed; setting it again here could reach the other phase, if that's
+  /// the one on screen by now.
+  void _commit() => _controller.text = '$_minutes';
 
   @override
   void dispose() {
@@ -445,7 +481,7 @@ class _MinutesFieldState extends State<_MinutesField> {
       // Counts straight away, since clicking Start doesn't always end editing.
       onChanged: (typed) {
         final value = int.tryParse(typed);
-        if (value != null) widget.focus.setMinutes(widget.focus.phase, value);
+        if (value != null) widget.focus.setMinutes(widget.focus.shown, value);
       },
       onSubmitted: (_) => _commit(),
     ),
