@@ -81,6 +81,10 @@ final class StubServer: @unchecked Sendable {
     var id = "home-server"
     var userId = "user-1"
     var cursor = 0
+    /// The tag handed out for each point the cursor stopped at. Leave it
+    /// empty to act like a server from before history tags.
+    var tags: [Int: String] = [:]
+    var tagsEnabled = true
     var received: [JSONValue] = []
     var tokensSentTo: [String] = []
     /// Every host the app tried, reachable or not.
@@ -94,7 +98,7 @@ final class StubServer: @unchecked Sendable {
 
     func reset() {
         lock.withLock {
-            id = "home-server"; userId = "user-1"; cursor = 0
+            id = "home-server"; userId = "user-1"; cursor = 0; tags = [:]; tagsEnabled = true
             received = []; tokensSentTo = []; hostsAsked = []; impostors = [:]; unreachable = []
         }
     }
@@ -119,10 +123,20 @@ final class StubServer: @unchecked Sendable {
                     "server": ["id": .string(id)],
                 ]
             case "/sync":
-                let sent = (try? JSONDecoder().decode([String: JSONValue].self, from: body))?["changes"]?.array ?? []
+                let request = (try? JSONDecoder().decode([String: JSONValue].self, from: body)) ?? [:]
+                let sent = request["changes"]?.array ?? []
+                let since = request["since"]?.int ?? 0
+                let rewound = tagsEnabled && since > 0
+                    && request["sinceTag"]?.string.map { tags[since] != $0 } == true
                 received += sent
                 cursor += sent.count
-                json = ["cursor": .int(cursor), "changes": [], "server": ["id": .string(id)]]
+                var answer: [String: JSONValue] = ["cursor": .int(cursor), "changes": [], "server": ["id": .string(id)]]
+                if tagsEnabled {
+                    if tags[cursor] == nil || !sent.isEmpty { tags[cursor] = UUID().uuidString }
+                    answer["cursorTag"] = .string(tags[cursor]!)
+                    if rewound { answer["rewound"] = true }
+                }
+                json = answer
             default:
                 return (404, ["content-type": "application/json"], Data(#"{"error":"Not found"}"#.utf8))
             }
@@ -275,6 +289,41 @@ final class StubProtocol: URLProtocol {
         #expect(engine.status == .idle)
         let names = server.received.compactMap { $0.object?["value"]?.string }
         #expect(names.contains("Before the backup") && names.contains("After the backup"))
+    }
+
+    @Test func aRestoreIsNoticedEvenAfterAnotherDeviceRaisedTheCursorAgain() async throws {
+        try await signIn()
+        addHabit("Before the backup")
+        await engine.syncNow()
+        let backupCursor = server.cursor
+        addHabit("After the backup")
+        await engine.syncNow()
+        let lastSeen = server.cursor
+
+        // Restored, and then another device resent everything it had before
+        // this one synced, so the counter is already back past this
+        // device's cursor. Only the tag shows the history changed.
+        server.tags = server.tags.filter { $0.key <= backupCursor }
+        server.received = []
+        server.cursor = lastSeen + 10
+        server.tags[server.cursor] = "after-the-other-device-resent"
+        await engine.syncNow()
+        #expect(engine.status == .idle)
+        let names = server.received.compactMap { $0.object?["value"]?.string }
+        #expect(names.contains("Before the backup") && names.contains("After the backup"))
+    }
+
+    @Test func anOlderServerWithoutTagsStillSyncs() async throws {
+        server.tagsEnabled = false
+        try await signIn()
+        addHabit("No tags here")
+        await engine.syncNow()
+        #expect(engine.status == .idle)
+        #expect(store.meta("cursorTag") == nil)
+        server.received = []
+        await engine.syncNow()
+        #expect(engine.status == .idle)
+        #expect(server.received.isEmpty)  // nothing resent without a reason
     }
 
     @Test func aPairingCodeForAnotherServerSaysWhatSwitchingCosts() async throws {

@@ -115,7 +115,10 @@ class LocalStore extends ChangeNotifier {
       : Hlc(current.millis, current.counter + 1, nodeId);
 
   /// Applies changes received from the server and records the new cursor.
-  void applyRemote(List<Change> changes, int cursor) {
+  /// [cursorTag] is the server's tag for that point in its history, sent
+  /// back next time so it can tell if it was restored from a backup.
+  /// Servers from before tags don't send one.
+  void applyRemote(List<Change> changes, int cursor, {String? cursorTag}) {
     final now = DateTime.now().millisecondsSinceEpoch;
     final staged = <(String, String, String), Change>{};
     _db.execute('BEGIN');
@@ -125,6 +128,7 @@ class LocalStore extends ChangeNotifier {
         _persist(c, staged);
       }
       setMeta('cursor', '$cursor');
+      setMeta('cursorTag', cursorTag);
       _db.execute('COMMIT');
     } catch (_) {
       _db.execute('ROLLBACK');
@@ -174,6 +178,7 @@ class LocalStore extends ChangeNotifier {
     _db.execute('DELETE FROM fields');
     _db.execute('DELETE FROM outbox');
     setMeta('cursor', '0');
+    setMeta('cursorTag', null);
     _tables.clear();
     _hlcs.clear();
     notifyListeners();
@@ -234,6 +239,7 @@ class LocalStore extends ChangeNotifier {
       }
       queue.close();
       setMeta('cursor', '0');
+      setMeta('cursorTag', null);
       _db.execute('COMMIT');
     } catch (_) {
       _db.execute('ROLLBACK');

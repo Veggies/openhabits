@@ -490,13 +490,25 @@ Handler buildHandler(
       final b = await body(r);
       final userId = userOf(r).id;
       final since = b['since'] as int? ?? 0;
+      // Apps from before history tags don't send one.
+      final sinceTag = b['sinceTag'] as String?;
       final changes = [
         for (final c in b['changes'] as List? ?? const [])
           Change.fromJson(c as Map<String, Object?>),
       ];
+      // Checked before applying this request's changes, which add to the
+      // history but can't bring back the point the device is asking about.
+      final rewound =
+          since > 0 && sinceTag != null && !store.knows(since, sinceTag);
       store.apply(userId, changes);
       return _json({
         'cursor': store.cursor,
+        'cursorTag': store.cursorTag,
+        // The server was restored from a backup that doesn't have the point
+        // this device last saw, so it may be missing changes the device
+        // sent. The device sends everything again and starts over from
+        // cursor 0.
+        if (rewound) 'rewound': true,
         // Lets devices follow the server's remote address if it changes.
         // remoteEnabled tells devices to forget the remote address only
         // when remote access is really off, not during a temporary problem.

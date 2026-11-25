@@ -535,7 +535,11 @@ public final class SyncEngine {
         let pending = store.pending()
         let since = store.cursor
         let changes = try JSONDecoder().decode([JSONValue].self, from: JSONEncoder().encode(pending.changes))
-        let body = try await post("/sync", ["since": .int(since), "changes": .array(changes)])
+        var request: [String: JSONValue] = ["since": .int(since), "changes": .array(changes)]
+        // Lets the server tell whether it still has the history this device
+        // saw, even if a restore has since counted the cursor back up.
+        if since > 0, let tag = store.meta("cursorTag") { request["sinceTag"] = .string(tag) }
+        let body = try await post("/sync", request)
         // Check the answer before forgetting what was sent: if it isn't a
         // real sync answer, the queued edits stay queued and go again.
         guard let cursor = body["cursor"]?.int, let received = body["changes"]?.array else {
@@ -549,14 +553,16 @@ public final class SyncEngine {
         }
         if pending.lastId > 0 { store.markSent(upTo: pending.lastId) }
         followRemote(body["server"])
-        if cursor < since {
+        if cursor < since || body["rewound"]?.bool == true {
             // The server has gone back in time: restored from a backup. It
             // may be missing changes this device already sent, so send
-            // everything again and fetch everything it has.
+            // everything again and fetch everything it has. "rewound" catches
+            // it even when other devices have already counted the cursor
+            // back up past this one's.
             store.requeueAll()
             return
         }
-        try store.applyRemote(incoming, cursor: cursor)
+        try store.applyRemote(incoming, cursor: cursor, cursorTag: body["cursorTag"]?.string)
     }
 
     /// Where the directory says this server can be reached now. Only
