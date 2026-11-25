@@ -124,7 +124,11 @@ String _hint(FocusController focus) {
         ? 'Your focus session is $doing.'
         : 'Your break is $doing.';
   }
-  return _phaseHint(focus.phase);
+  return switch (focus.ended) {
+    FocusPhase.focus => "Time's up. Keep going, or take your break.",
+    FocusPhase.rest => "Your break's over. Start when you're ready.",
+    null => _phaseHint(focus.phase),
+  };
 }
 
 class _TimerPanel extends StatelessWidget {
@@ -145,6 +149,7 @@ class _TimerPanel extends StatelessWidget {
     final habits = repo.habits.where((h) => !h.isQuit).toList();
     final color = _phaseColor(focus.shown, theme.colorScheme);
     final active = (focus.running || focus.paused) && !away;
+    final canReset = active || (focus.ended != null && !away);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -237,10 +242,10 @@ class _TimerPanel extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Visibility.maintain(
-              visible: active,
+              visible: canReset,
               child: IconButton.outlined(
-                tooltip: 'Reset',
-                icon: const Icon(Icons.restart_alt),
+                tooltip: active ? 'Reset' : 'Dismiss',
+                icon: Icon(active ? Icons.restart_alt : Icons.close),
                 onPressed: focus.reset,
               ),
             ),
@@ -318,6 +323,16 @@ class _TimerPanel extends StatelessWidget {
                     ),
                   ),
                 ),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: 320,
+          child: SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text("Play a sound when time's up"),
+            value: focus.playsSound,
+            onChanged: (on) => focus.playsSound = on,
+          ),
         ),
       ],
     );

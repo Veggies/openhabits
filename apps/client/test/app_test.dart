@@ -542,6 +542,57 @@ void main() {
     expect(find.widgetWithText(TextField, '25'), findsOneWidget);
   });
 
+  testWidgets('focus: the end is a quiet note that goes away by itself', (
+    tester,
+  ) async {
+    final sounds = <Object?>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'SystemSound.play') sounds.add(call.arguments);
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    final repo = await pumpApp(tester, const Size(1400, 900));
+    await go(tester, 'Focus');
+
+    Future<void> runOut(int minutes) async {
+      await tester.tap(find.text('Start'));
+      await go(tester, 'Today');
+      sounds.clear();
+      await tester.pump(Duration(minutes: minutes, seconds: 1));
+      await tester.pump();
+    }
+
+    await runOut(25);
+    expect(find.byType(SnackBar), findsNothing);
+    expect(find.text("Time's up"), findsOneWidget);
+    expect(sounds, ['SystemSoundType.alert']);
+    expect(repo.focusSessions, hasLength(1));
+    await tester.pump(const Duration(minutes: 1, seconds: 1));
+    expect(find.text("Time's up"), findsNothing);
+
+    // With the sound off, there's only the note.
+    await go(tester, 'Focus');
+    await tester.tap(find.byType(Switch));
+    await tester.pump();
+    await runOut(5);
+    expect(find.text("Break's over"), findsOneWidget);
+    expect(sounds, isEmpty);
+
+    // It can be dismissed early.
+    await go(tester, 'Focus');
+    await tester.tap(find.byTooltip('Dismiss'));
+    await go(tester, 'Today');
+    expect(find.text("Break's over"), findsNothing);
+  });
+
   testWidgets('phone: a habit opens as its own page', (tester) async {
     final repo = await pumpApp(tester, const Size(400, 860));
     final id = repo.createHabit({'name': 'Read', 'twoMinute': 'Read one page'});

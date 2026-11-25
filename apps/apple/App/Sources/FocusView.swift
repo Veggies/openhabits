@@ -27,10 +27,40 @@ final class FocusTimer {
     private(set) var pausedRemaining: TimeInterval?
     @ObservationIgnored private var finisher: Task<Void, Never>?
 
+    /// The phase whose time ran out, and when. Goes away after a minute, or
+    /// sooner if the next one starts or it's dismissed. Nothing starts on its
+    /// own, so working past the end is fine.
+    private(set) var ended: (phase: Phase, at: Date)?
+
+    /// The end has been seen in the menu bar panel, so the menu bar needn't
+    /// say it any more. The timer itself still does, until `ended` goes.
+    private var endSeen = false
+
+    func markEndSeen() { if ended != nil { endSeen = true } }
+
+    /// Whether the end makes a sound. Kept per device.
+    var playsSound = UserDefaults.standard.object(forKey: "focusSound") as? Bool ?? true {
+        didSet {
+            UserDefaults.standard.set(playsSound, forKey: "focusSound")
+            if let endsAt { scheduleNotification(at: endsAt) }
+            // Lets you hear it when you turn it on.
+            if playsSound { playSound() }
+        }
+    }
+
+    #if os(macOS)
+    /// Held while the timer runs, so macOS doesn't put the app to sleep in
+    /// the background and end the session late.
+    @ObservationIgnored private var activity: NSObjectProtocol?
+    /// Kept here so it isn't let go while it plays. Hero, because most of the
+    /// system sounds are quiet enough to miss.
+    @ObservationIgnored private let sound = NSSound(named: "Hero")
+    #endif
+
     /// Bumped when a phase finishes, for a haptic.
     private(set) var finishedCount = 0
 
-    /// Updated every second while running, for the menu bar countdown.
+    /// Updated every second while running, for the menu bar.
     private(set) var now = Date()
     @ObservationIgnored private var ticker: Task<Void, Never>?
 
@@ -48,6 +78,13 @@ final class FocusTimer {
 
     init(repo: Repo) { self.repo = repo }
 
+    /// What the menu bar says once time's up, while that's still news.
+    var endedText: String? {
+        endSeen ? nil : ended.flatMap {
+            FocusEnding.menuBarText(wasFocus: $0.phase == .focus, elapsed: now.timeIntervalSince($0.at))
+        }
+    }
+
     var running: Bool { endsAt != nil }
     var paused: Bool { pausedRemaining != nil }
     var total: TimeInterval { TimeInterval(minutes[phase, default: 25] * 60) }
@@ -60,6 +97,7 @@ final class FocusTimer {
 
     func start() {
         let left = remaining(at: Date())
+        ended = nil
         startedAt = startedAt ?? Date()
         let end = Date().addingTimeInterval(left)
         endsAt = end
@@ -68,10 +106,11 @@ final class FocusTimer {
         finisher = Task { [weak self] in
             try? await Task.sleep(for: .seconds(left))
             guard !Task.isCancelled else { return }
-            self?.finish(record: true)
+            self?.timeRanOut(at: end)
         }
         scheduleNotification(at: end)
         tick(true)
+        keepAwake(true)
     }
 
     func pause() {
@@ -81,19 +120,69 @@ final class FocusTimer {
         finisher?.cancel()
         cancelNotification()
         tick(false)
+        keepAwake(false)
     }
 
+    /// Stops the timer, or clears the note that time's up.
     func reset() {
+        cancelNotification()
+        clear()
+    }
+
+    private func clear() {
         finisher?.cancel()
         endsAt = nil
         startedAt = nil
         pausedRemaining = nil
-        cancelNotification()
+        ended = nil
         tick(false)
+        keepAwake(false)
     }
 
     /// Ends the phase now. A skipped focus session isn't recorded.
-    func skip() { finish(record: false) }
+    func skip() {
+        cancelNotification()
+        finish(record: false)
+    }
+
+    /// The notification is left alone here: it's due at this same moment,
+    /// and cancelling it could silence it.
+    private func timeRanOut(at end: Date) {
+        let phase = self.phase
+        finish(record: true)
+        // Counted from now, so if the Mac slept through the end you still see it.
+        ended = (phase, Date())
+        endSeen = false
+        now = Date()
+        #if os(macOS)
+        // Just a sound and the menu bar, with no banner. If the Mac was
+        // asleep when time ran out, a late sound would only be confusing.
+        if playsSound && Date().timeIntervalSince(end) < 10 { playSound() }
+        #endif
+        ticker?.cancel()
+        ticker = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(FocusEnding.showsFor))
+            guard !Task.isCancelled else { return }
+            self?.ended = nil
+        }
+    }
+
+    private func playSound() {
+        #if os(macOS)
+        sound?.stop()
+        sound?.play()
+        #endif
+    }
+
+    private func keepAwake(_ on: Bool) {
+        #if os(macOS)
+        if let activity { ProcessInfo.processInfo.endActivity(activity) }
+        activity = on
+            ? ProcessInfo.processInfo.beginActivity(
+                options: .userInitiatedAllowingIdleSystemSleep, reason: "Focus timer")
+            : nil
+        #endif
+    }
 
     /// Looks at a phase. While the timer is going, that's all it does.
     func show(_ p: Phase) {
@@ -124,25 +213,29 @@ final class FocusTimer {
         } else {
             phase = .focus
         }
-        reset()
+        clear()
         finishedCount += 1
     }
 
-    // MARK: Notifications, for when the app isn't open
+    // MARK: Notifications, for when the iPhone or iPad app isn't open
 
     private func scheduleNotification(at date: Date) {
+        #if !os(macOS)
         let center = UNUserNotificationCenter.current()
         let content = UNMutableNotificationContent()
         content.title = phase == .focus ? "That's a focus session done" : "Your break's over"
         content.body = phase == .focus
             ? "Nice work. Take a short break before the next one."
             : "Ready to focus again?"
-        content.sound = .default
+        content.sound = playsSound ? .default : nil
+        // Without a sound, it waits quietly in Notification Center.
+        content.interruptionLevel = playsSound ? .active : .passive
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, date.timeIntervalSinceNow), repeats: false)
         Task {
             _ = try? await center.requestAuthorization(options: [.alert, .sound])
             try? await center.add(UNNotificationRequest(identifier: "focus", content: content, trigger: trigger))
         }
+        #endif
     }
 
     private func cancelNotification() {
@@ -184,6 +277,7 @@ struct TimerPanel: View {
         // Looking at the other phase while the timer goes on.
         let away = focus.shown != focus.phase
         let active = (focus.running || focus.paused) && !away
+        let canReset = active || (focus.ended != nil && !away)
         let length = focus.minutes[focus.shown, default: 25]
         let habits = app.repo.habits.filter { !$0.isQuit }
 
@@ -229,12 +323,13 @@ struct TimerPanel: View {
             }
 
             HStack(spacing: 20) {
-                Button("Reset", systemImage: "arrow.counterclockwise", action: focus.reset)
+                Button(active ? "Reset" : "Dismiss", systemImage: active ? "arrow.counterclockwise" : "xmark",
+                    action: focus.reset)
                     .labelStyle(.iconOnly)
                     .buttonStyle(.glass)
                     .controlSize(.large)
-                    .opacity(active ? 1 : 0)
-                    .disabled(!active)
+                    .opacity(canReset ? 1 : 0)
+                    .disabled(!canReset)
                 Button {
                     if away { focus.show(focus.phase) } else if focus.running { focus.pause() } else { focus.start() }
                 } label: {
@@ -266,8 +361,16 @@ struct TimerPanel: View {
                     }
                 }
                 .disabled(active)
-                if focus.shown == .focus {
-                    Divider().padding(.vertical, 10)
+                Divider().padding(.vertical, 10)
+                Toggle(isOn: $focus.playsSound) {
+                    Text("Play a sound when time's up").frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .toggleStyle(.switch)
+                // The menu bar panel keeps this space during a break, so the
+                // panel doesn't change size under the pointer.
+                if focus.shown == .focus || compact {
+                    let showing = focus.shown == .focus
+                    Divider().padding(.vertical, 10).opacity(showing ? 1 : 0)
                     let picker = Picker("Focusing on", selection: $focus.habitId) {
                         Text("Nothing in particular").tag(String?.none)
                         ForEach(habits) { Text($0.name).tag(String?.some($0.id)) }
@@ -278,6 +381,9 @@ struct TimerPanel: View {
                             Text("Focusing on").font(.caption).foregroundStyle(.secondary)
                             picker.frame(maxWidth: .infinity, alignment: .leading)
                         }
+                        .opacity(showing ? 1 : 0)
+                        .disabled(!showing)
+                        .accessibilityHidden(!showing)
                     } else {
                         LabeledContent("Focusing on") { picker.fixedSize() }
                     }
@@ -305,6 +411,11 @@ struct TimerPanel: View {
                 : "Your break is \(focus.paused ? "paused" : "still going")."
         }
         if focus.paused { return "Paused" }
+        if !focus.running, let ended = focus.ended {
+            return ended.phase == .focus
+                ? "Time's up. Keep going, or take your break."
+                : "Your break's over. Start when you're ready."
+        }
         return focus.phase == .focus
             ? "Work on one thing until the timer ends." : "Rest before the next session."
     }
