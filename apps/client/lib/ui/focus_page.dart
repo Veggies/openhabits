@@ -422,11 +422,15 @@ class _MinutesFieldState extends State<_MinutesField> {
   late final _controller = TextEditingController(text: '$_minutes');
   final _focusNode = FocusNode();
 
+  /// The phase whose length is showing.
+  late FocusPhase _phase;
+
   int get _minutes => widget.focus.minutes[widget.focus.shown]!;
 
   @override
   void initState() {
     super.initState();
+    _phase = widget.focus.shown;
     _focusNode.addListener(() {
       if (!_focusNode.hasFocus) _commit();
     });
@@ -435,17 +439,19 @@ class _MinutesFieldState extends State<_MinutesField> {
   @override
   void didUpdateWidget(_MinutesField oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Follow the −/+ buttons and phase changes, unless the person is typing.
-    if (!_focusNode.hasFocus && _controller.text != '$_minutes') {
+    // Follow the −/+ buttons, unless the person is typing. Another phase
+    // always shows its own length.
+    final switched = _phase != widget.focus.shown;
+    _phase = widget.focus.shown;
+    if ((switched || !_focusNode.hasFocus) && _controller.text != '$_minutes') {
       _controller.text = '$_minutes';
     }
   }
 
-  void _commit() {
-    final value = int.tryParse(_controller.text.trim());
-    if (value != null) widget.focus.setMinutes(widget.focus.shown, value);
-    _controller.text = '$_minutes';
-  }
+  /// Shows the length as it was understood. It's already been set, as it
+  /// was typed; setting it again here could reach the other phase, if that's
+  /// the one on screen by now.
+  void _commit() => _controller.text = '$_minutes';
 
   @override
   void dispose() {

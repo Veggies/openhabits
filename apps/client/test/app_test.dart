@@ -534,8 +534,12 @@ void main() {
     await tester.tap(find.text('Back to Timer'));
     await tester.pump();
     expect(find.text('24:00'), findsOneWidget);
+    await tester.pump();
     await tester.tap(find.byTooltip('Reset'));
     await tester.pump();
+    // And it doesn't follow you back to Focus.
+    expect(find.text('25:00'), findsOneWidget);
+    expect(find.widgetWithText(TextField, '25'), findsOneWidget);
   });
 
   testWidgets('phone: a habit opens as its own page', (tester) async {
