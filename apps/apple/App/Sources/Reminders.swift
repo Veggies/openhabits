@@ -164,7 +164,9 @@ final class Reminders: NSObject, UNUserNotificationCenterDelegate {
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
         willPresent notification: UNNotification) async -> UNNotificationPresentationOptions
     {
-        [.banner, .sound, .list]
+        // With the app open, the Focus screen already shows that time's up,
+        // so there's no need for a banner over it.
+        notification.request.identifier == "focus" ? [.sound, .list] : [.banner, .sound, .list]
     }
 
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,

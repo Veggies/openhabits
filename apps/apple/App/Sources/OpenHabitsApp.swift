@@ -63,6 +63,8 @@ final class AppModel {
     /// The Mac window's tab, and the habit shown in Today's preview panel.
     var macTab: MacTab = .today
     var previewHabit: String?
+    /// Whether the menu bar panel is open (see MenuBarFocusLabel).
+    var menuBarPanelOpen = false
     #endif
 
     /// The app's accent colour: "system" follows the device (your accent

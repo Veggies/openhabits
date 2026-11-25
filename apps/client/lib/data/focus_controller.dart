@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import 'repo.dart';
 
@@ -19,6 +20,13 @@ class FocusController extends ChangeNotifier {
   /// runs, without stopping it.
   FocusPhase shown = FocusPhase.focus;
 
+  /// The phase whose time ran out. Goes away after a minute, or sooner if
+  /// the next one starts or it's dismissed. Nothing starts on its own, so
+  /// working past the end is fine.
+  FocusPhase? ended;
+  Timer? _endedTimer;
+  static const endedShowsFor = Duration(minutes: 1);
+
   Map<FocusPhase, int> minutes = {FocusPhase.focus: 25, FocusPhase.rest: 5};
 
   /// The habit this session is for, if one was picked.
@@ -32,6 +40,16 @@ class FocusController extends ChangeNotifier {
 
   FocusController(this.repo, {DateTime Function()? clock})
     : _clock = clock ?? DateTime.now;
+
+  /// Whether the end makes a sound. Kept per device.
+  bool get playsSound => repo.store.meta('focusSound') != '0';
+
+  set playsSound(bool on) {
+    repo.store.setMeta('focusSound', on ? null : '0');
+    // Lets you hear it when you turn it on.
+    if (on) SystemSound.play(SystemSoundType.alert);
+    notifyListeners();
+  }
 
   bool get running => _endsAt != null;
   bool get paused => _pausedRemaining != null;
@@ -48,6 +66,7 @@ class FocusController extends ChangeNotifier {
   double get progress => 1 - remaining.inMilliseconds / total.inMilliseconds;
 
   void start() {
+    _clearEnded();
     _startedAt ??= _clock();
     _endsAt = _clock().add(_pausedRemaining ?? remaining);
     _pausedRemaining = null;
@@ -64,8 +83,10 @@ class FocusController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Stops the timer, or clears the note that time's up.
   void reset() {
     _ticker?.cancel();
+    _clearEnded();
     _endsAt = null;
     _startedAt = null;
     _pausedRemaining = null;
@@ -74,6 +95,11 @@ class FocusController extends ChangeNotifier {
 
   /// Ends the current phase now. Skipping a focus session doesn't record it.
   void skip() => _finish(record: false);
+
+  void _clearEnded() {
+    _endedTimer?.cancel();
+    ended = null;
+  }
 
   /// Looks at a phase. While the timer is going, that's all it does.
   void show(FocusPhase p) {
@@ -104,10 +130,25 @@ class FocusController extends ChangeNotifier {
 
   void _tick() {
     if (remaining == Duration.zero) {
-      _finish(record: true);
+      _timeRanOut();
     } else {
       notifyListeners();
     }
+  }
+
+  void _timeRanOut() {
+    final finished = phase;
+    // If the computer slept through the end, a late sound would only be
+    // confusing.
+    final onTime = _clock().difference(_endsAt!) < const Duration(seconds: 10);
+    _finish(record: true);
+    ended = finished;
+    _endedTimer = Timer(endedShowsFor, () {
+      ended = null;
+      notifyListeners();
+    });
+    if (playsSound && onTime) SystemSound.play(SystemSoundType.alert);
+    notifyListeners();
   }
 
   void _finish({required bool record}) {
@@ -125,15 +166,12 @@ class FocusController extends ChangeNotifier {
     }
     shown = phase;
     reset();
-    onPhaseComplete?.call(phase);
   }
-
-  /// Called with the next phase whenever one ends, e.g. to show a message.
-  void Function(FocusPhase next)? onPhaseComplete;
 
   @override
   void dispose() {
     _ticker?.cancel();
+    _endedTimer?.cancel();
     super.dispose();
   }
 }

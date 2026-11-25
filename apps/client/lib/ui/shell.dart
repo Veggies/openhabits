@@ -39,18 +39,6 @@ class _ShellState extends State<Shell> {
   ];
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    AppScope.of(context).focus.onPhaseComplete = (next) {
-      final message = next == FocusPhase.focus
-          ? "Break's over. Ready to get back to it?"
-          : "Nice work, that's a tomato earned. Time for a break.";
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
-    };
-  }
-
-  @override
   Widget build(BuildContext context) {
     final scope = AppScope.of(context);
     final nav = scope.nav;
@@ -78,9 +66,11 @@ class _ShellState extends State<Shell> {
             onDestinationSelected: (i) => nav.go(AppTab.values[i]),
             labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
             destinations: [
-              for (final (_, icon, selected, label) in _destinations)
+              for (final (tab, icon, selected, label) in _destinations)
                 NavigationDestination(
-                  icon: Icon(icon),
+                  icon: tab == AppTab.focus
+                      ? _EndedDot(Icon(icon))
+                      : Icon(icon),
                   selectedIcon: Icon(selected),
                   label: label,
                 ),
@@ -88,6 +78,22 @@ class _ShellState extends State<Shell> {
           ),
         );
       },
+    );
+  }
+}
+
+/// A small dot on the Focus tab while there's a note that time's up.
+class _EndedDot extends StatelessWidget {
+  final Widget icon;
+  const _EndedDot(this.icon);
+
+  @override
+  Widget build(BuildContext context) {
+    final focus = AppScope.of(context).focus;
+    return ListenableBuilder(
+      listenable: focus,
+      builder: (context, _) =>
+          Badge(isLabelVisible: focus.ended != null, child: icon),
     );
   }
 }
@@ -131,11 +137,16 @@ class _TopBar extends StatelessWidget {
             child: ListenableBuilder(
               listenable: focus,
               builder: (context, _) =>
-                  (focus.running || focus.paused) && nav.tab != AppTab.focus
+                  (focus.running || focus.paused || focus.ended != null) &&
+                      nav.tab != AppTab.focus
                   ? TextButton.icon(
                       icon: Icon(focus.paused ? Icons.pause : Icons.timer),
                       label: Text(
-                        _clock(focus.remaining),
+                        switch (focus.ended) {
+                          FocusPhase.focus => "Time's up",
+                          FocusPhase.rest => "Break's over",
+                          null => _clock(focus.remaining),
+                        },
                         style: const TextStyle(
                           fontFeatures: [FontFeature.tabularFigures()],
                         ),
