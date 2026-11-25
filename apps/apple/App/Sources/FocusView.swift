@@ -233,13 +233,16 @@ struct TimerPanel: View {
             }
 
             VStack(spacing: 0) {
-                Stepper(value: Binding(
-                    get: { focus.minutes[focus.phase, default: 25] },
-                    set: { focus.setMinutes($0, for: focus.phase) }),
-                    in: 1...180, step: focus.phase == .focus ? 5 : 1
-                ) {
-                    LabeledContent("\(focus.phase.rawValue) length",
-                        value: "\(focus.minutes[focus.phase, default: 25]) min")
+                LabeledContent("\(focus.phase.rawValue) length") {
+                    HStack(spacing: 8) {
+                        MinutesField(focus: focus, enabled: !active && onScreen)
+                        Text("min").foregroundStyle(.secondary).fixedSize()
+                        Stepper("\(focus.phase.rawValue) length", value: Binding(
+                            get: { focus.minutes[focus.phase, default: 25] },
+                            set: { focus.setMinutes($0, for: focus.phase) }),
+                            in: 1...180, step: focus.phase == .focus ? 5 : 1)
+                            .labelsHidden()
+                    }
                 }
                 .disabled(active)
                 if focus.phase == .focus {
@@ -264,10 +267,74 @@ struct TimerPanel: View {
         }
     }
 
+    /// The Mac keeps hidden tabs alive, so the field is turned off there;
+    /// otherwise the Tab key could reach it and typing would change it.
+    private var onScreen: Bool {
+        #if os(macOS)
+        compact || app.macTab == .focus
+        #else
+        true
+        #endif
+    }
+
     private func clock(_ t: TimeInterval) -> String {
         let s = Int(t.rounded(.up))
         return String(format: "%02d:%02d", s / 60, s % 60)
     }
+}
+
+/// The current phase's length in minutes, to type in. What's typed counts
+/// straight away, since clicking Start on a Mac doesn't end editing.
+private struct MinutesField: View {
+    let focus: FocusTimer
+    let enabled: Bool
+    @State private var text = ""
+    @FocusState private var editing: Bool
+
+    private var minutes: Int { focus.minutes[focus.phase, default: 25] }
+
+    var body: some View {
+        TextField("Minutes", text: $text)
+            .labelsHidden()
+            .textFieldStyle(.roundedBorder)
+            .multilineTextAlignment(.trailing)
+            .monospacedDigit()
+            .frame(width: 60)
+            .focused($editing)
+            .disabled(!enabled)
+            .help("Type a length from 1 to 180 minutes")
+            .accessibilityLabel("\(focus.phase.rawValue) length in minutes")
+            .onSubmit {
+                showMinutes()
+                editing = false
+            }
+            .onChange(of: text) { _, typed in
+                let digits = String(typed.filter { ("0"..."9").contains($0) }.prefix(3))
+                if digits != typed { text = digits }
+                if enabled, let value = Int(digits), value != minutes { focus.setMinutes(value, for: focus.phase) }
+            }
+            // Follows the buttons and phase changes, but leaves half-typed
+            // text alone (such as 200, which counts as 180).
+            .onChange(of: minutes, initial: true) { _, value in
+                if Int(text).map({ min(180, max(1, $0)) }) != value { showMinutes() }
+            }
+            .onChange(of: editing) { _, now in if !now { showMinutes() } }
+            .onChange(of: enabled) { _, _ in showMinutes() }
+            #if os(iOS)
+            .keyboardType(.numberPad)
+            .toolbar {
+                // The number pad has no Return key.
+                if editing {
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button("Done") { editing = false }
+                    }
+                }
+            }
+            #endif
+    }
+
+    private func showMinutes() { text = "\(minutes)" }
 }
 
 private struct FocusStats: View {

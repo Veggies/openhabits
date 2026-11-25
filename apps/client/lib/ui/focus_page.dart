@@ -442,6 +442,11 @@ class _MinutesFieldState extends State<_MinutesField> {
         isDense: true,
         border: OutlineInputBorder(),
       ),
+      // Counts straight away, since clicking Start doesn't always end editing.
+      onChanged: (typed) {
+        final value = int.tryParse(typed);
+        if (value != null) widget.focus.setMinutes(widget.focus.phase, value);
+      },
       onSubmitted: (_) => _commit(),
     ),
   );

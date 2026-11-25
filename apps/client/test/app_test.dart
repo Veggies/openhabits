@@ -490,6 +490,20 @@ void main() {
     },
   );
 
+  testWidgets('focus: a typed length counts when you go straight to Start', (
+    tester,
+  ) async {
+    await pumpApp(tester, const Size(1400, 900));
+    await go(tester, 'Focus');
+    await tester.enterText(find.widgetWithText(TextField, '25'), '40');
+    await tester.tap(find.text('Start'));
+    await tester.pump();
+    // A second may already have gone.
+    expect(find.textContaining(RegExp('^(40:00|39:59)\$')), findsOneWidget);
+    await tester.tap(find.byTooltip('Reset'));
+    await tester.pump();
+  });
+
   testWidgets('phone: a habit opens as its own page', (tester) async {
     final repo = await pumpApp(tester, const Size(400, 860));
     final id = repo.createHabit({'name': 'Read', 'twoMinute': 'Read one page'});
