@@ -34,7 +34,7 @@ dependencies:
     path: ../../packages/core
   flutter:
     sdk: flutter
-  material_ui: ^1.1.0
+  material_ui: ^1.11.1
 
   sqlite3: ^3.9.1
   path_provider: ^2.1.6
@@ -45,7 +45,7 @@ dependencies:
   pointycastle: ^4.0.0
   url_launcher: ^6.3.3
   dynamic_color: ^2.1.0
-  flutter_local_notifications: ^23.0.2
+  flutter_local_notifications: ^23.0.3
   timezone: ^0.11.2
   flutter_timezone: ^5.1.1
   emoji_picker_flutter: ^4.5.4
