@@ -88,6 +88,7 @@ class AppNav extends ChangeNotifier {
   void focusOn(Habit habit, FocusController focus) {
     if (focus.running || focus.paused) {
       focus.selectHabit(habit.id);
+      focus.show(focus.phase);
     } else {
       focus.selectPhase(FocusPhase.focus);
       focus.selectHabit(habit.id);

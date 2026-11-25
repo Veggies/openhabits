@@ -11,7 +11,10 @@ final class FocusTimer {
     enum Phase: String, CaseIterable { case focus = "Focus", rest = "Break" }
 
     let repo: Repo
-    var phase = Phase.focus
+    private(set) var phase = Phase.focus { didSet { shown = phase } }
+    /// The phase on screen. You can look at the other one while the timer
+    /// runs, without stopping it.
+    private(set) var shown = Phase.focus
     var minutes: [Phase: Int] = [
         .focus: UserDefaults.standard.object(forKey: "focusMinutes") as? Int ?? 25,
         .rest: UserDefaults.standard.object(forKey: "restMinutes") as? Int ?? 5,
@@ -92,6 +95,15 @@ final class FocusTimer {
     /// Ends the phase now. A skipped focus session isn't recorded.
     func skip() { finish(record: false) }
 
+    /// Looks at a phase. While the timer is going, that's all it does.
+    func show(_ p: Phase) {
+        if running || paused {
+            shown = p
+        } else if p != phase {
+            select(p)
+        }
+    }
+
     func select(_ p: Phase) {
         reset()
         phase = p
@@ -168,12 +180,15 @@ struct TimerPanel: View {
     @Environment(AppModel.self) private var app
 
     var body: some View {
-        let color: Color = focus.phase == .focus ? app.accent : .teal
-        let active = focus.running || focus.paused
+        let color: Color = focus.shown == .focus ? app.accent : .teal
+        // Looking at the other phase while the timer goes on.
+        let away = focus.shown != focus.phase
+        let active = (focus.running || focus.paused) && !away
+        let length = focus.minutes[focus.shown, default: 25]
         let habits = app.repo.habits.filter { !$0.isQuit }
 
         VStack(spacing: compact ? 16 : 24) {
-            Picker("Phase", selection: Binding(get: { focus.phase }, set: { focus.select($0) })) {
+            Picker("Phase", selection: Binding(get: { focus.shown }, set: { focus.show($0) })) {
                 ForEach(FocusTimer.Phase.allCases, id: \.self) { Text($0.rawValue) }
             }
             .pickerStyle(.segmented)
@@ -181,8 +196,8 @@ struct TimerPanel: View {
             .frame(maxWidth: 280)
 
             TimelineView(TickWhileRunning(running: focus.running)) { context in
-                let left = focus.remaining(at: context.date)
-                let progress = 1 - left / focus.total
+                let left = away ? TimeInterval(length * 60) : focus.remaining(at: context.date)
+                let progress = away ? 0 : 1 - left / focus.total
                 ZStack {
                     Circle().stroke(color.opacity(0.15), lineWidth: compact ? 10 : 14)
                     Circle()
@@ -190,17 +205,23 @@ struct TimerPanel: View {
                         .stroke(color, style: StrokeStyle(lineWidth: compact ? 10 : 14, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                         .animation(.linear(duration: 0.25), value: progress)
+                        // A circle for each phase, so switching doesn't
+                        // animate from one's progress to the other's.
+                        .id(focus.shown)
                     VStack(spacing: 4) {
                         Text(clock(left))
                             .font(.system(size: compact ? 44 : 64, weight: .light, design: .rounded))
                             .monospacedDigit()
                             .contentTransition(.numericText(countsDown: true))
-                        Text(focus.paused ? "Paused" : focus.phase == .focus
-                            ? "Work on one thing until the timer ends." : "Rest before the next session.")
+                        Text(hint)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
-                            .frame(maxWidth: 180)
+                            .lineLimit(3)
+                            .minimumScaleFactor(0.7)
+                            // Narrow enough to stay inside the ring, which
+                            // closes in below the time.
+                            .frame(maxWidth: compact ? 130 : 180)
                     }
                 }
                 .frame(width: compact ? 190 : 270, height: compact ? 190 : 270)
@@ -215,10 +236,10 @@ struct TimerPanel: View {
                     .opacity(active ? 1 : 0)
                     .disabled(!active)
                 Button {
-                    if focus.running { focus.pause() } else { focus.start() }
+                    if away { focus.show(focus.phase) } else if focus.running { focus.pause() } else { focus.start() }
                 } label: {
-                    Label(focus.running ? "Pause" : focus.paused ? "Resume" : "Start",
-                        systemImage: focus.running ? "pause.fill" : "play.fill")
+                    Label(away ? "Back to Timer" : focus.running ? "Pause" : focus.paused ? "Resume" : "Start",
+                        systemImage: away ? "arrow.uturn.backward" : focus.running ? "pause.fill" : "play.fill")
                         .frame(minWidth: 120)
                 }
                 .buttonStyle(.glassProminent)
@@ -233,19 +254,19 @@ struct TimerPanel: View {
             }
 
             VStack(spacing: 0) {
-                LabeledContent("\(focus.phase.rawValue) length") {
+                LabeledContent("\(focus.shown.rawValue) length") {
                     HStack(spacing: 8) {
                         MinutesField(focus: focus, enabled: !active && onScreen)
                         Text("min").foregroundStyle(.secondary).fixedSize()
-                        Stepper("\(focus.phase.rawValue) length", value: Binding(
-                            get: { focus.minutes[focus.phase, default: 25] },
-                            set: { focus.setMinutes($0, for: focus.phase) }),
-                            in: 1...180, step: focus.phase == .focus ? 5 : 1)
+                        Stepper("\(focus.shown.rawValue) length", value: Binding(
+                            get: { length },
+                            set: { focus.setMinutes($0, for: focus.shown) }),
+                            in: 1...180, step: focus.shown == .focus ? 5 : 1)
                             .labelsHidden()
                     }
                 }
                 .disabled(active)
-                if focus.phase == .focus {
+                if focus.shown == .focus {
                     Divider().padding(.vertical, 10)
                     let picker = Picker("Focusing on", selection: $focus.habitId) {
                         Text("Nothing in particular").tag(String?.none)
@@ -277,6 +298,17 @@ struct TimerPanel: View {
         #endif
     }
 
+    private var hint: String {
+        if focus.shown != focus.phase {
+            return focus.phase == .focus
+                ? "Your focus session is \(focus.paused ? "paused" : "still going")."
+                : "Your break is \(focus.paused ? "paused" : "still going")."
+        }
+        if focus.paused { return "Paused" }
+        return focus.phase == .focus
+            ? "Work on one thing until the timer ends." : "Rest before the next session."
+    }
+
     private func clock(_ t: TimeInterval) -> String {
         let s = Int(t.rounded(.up))
         return String(format: "%02d:%02d", s / 60, s % 60)
@@ -291,7 +323,7 @@ private struct MinutesField: View {
     @State private var text = ""
     @FocusState private var editing: Bool
 
-    private var minutes: Int { focus.minutes[focus.phase, default: 25] }
+    private var minutes: Int { focus.minutes[focus.shown, default: 25] }
 
     var body: some View {
         TextField("Minutes", text: $text)
@@ -303,7 +335,7 @@ private struct MinutesField: View {
             .focused($editing)
             .disabled(!enabled)
             .help("Type a length from 1 to 180 minutes")
-            .accessibilityLabel("\(focus.phase.rawValue) length in minutes")
+            .accessibilityLabel("\(focus.shown.rawValue) length in minutes")
             .onSubmit {
                 showMinutes()
                 editing = false
@@ -311,7 +343,7 @@ private struct MinutesField: View {
             .onChange(of: text) { _, typed in
                 let digits = String(typed.filter { ("0"..."9").contains($0) }.prefix(3))
                 if digits != typed { text = digits }
-                if enabled, let value = Int(digits), value != minutes { focus.setMinutes(value, for: focus.phase) }
+                if enabled, let value = Int(digits), value != minutes { focus.setMinutes(value, for: focus.shown) }
             }
             // Follows the buttons and phase changes, but leaves half-typed
             // text alone (such as 200, which counts as 180).

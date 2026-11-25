@@ -14,6 +14,11 @@ class FocusController extends ChangeNotifier {
   Timer? _ticker;
 
   FocusPhase phase = FocusPhase.focus;
+
+  /// The phase on screen. You can look at the other one while the timer
+  /// runs, without stopping it.
+  FocusPhase shown = FocusPhase.focus;
+
   Map<FocusPhase, int> minutes = {FocusPhase.focus: 25, FocusPhase.rest: 5};
 
   /// The habit this session is for, if one was picked.
@@ -23,7 +28,10 @@ class FocusController extends ChangeNotifier {
   DateTime? _startedAt;
   Duration? _pausedRemaining;
 
-  FocusController(this.repo);
+  final DateTime Function() _clock;
+
+  FocusController(this.repo, {DateTime Function()? clock})
+    : _clock = clock ?? DateTime.now;
 
   bool get running => _endsAt != null;
   bool get paused => _pausedRemaining != null;
@@ -33,15 +41,15 @@ class FocusController extends ChangeNotifier {
   Duration get remaining {
     if (_pausedRemaining != null) return _pausedRemaining!;
     if (_endsAt == null) return total;
-    final left = _endsAt!.difference(DateTime.now());
+    final left = _endsAt!.difference(_clock());
     return left.isNegative ? Duration.zero : left;
   }
 
   double get progress => 1 - remaining.inMilliseconds / total.inMilliseconds;
 
   void start() {
-    _startedAt ??= DateTime.now();
-    _endsAt = DateTime.now().add(_pausedRemaining ?? remaining);
+    _startedAt ??= _clock();
+    _endsAt = _clock().add(_pausedRemaining ?? remaining);
     _pausedRemaining = null;
     _ticker?.cancel();
     _ticker = Timer.periodic(const Duration(milliseconds: 250), (_) => _tick());
@@ -67,9 +75,20 @@ class FocusController extends ChangeNotifier {
   /// Ends the current phase now. Skipping a focus session doesn't record it.
   void skip() => _finish(record: false);
 
+  /// Looks at a phase. While the timer is going, that's all it does.
+  void show(FocusPhase p) {
+    if (running || paused) {
+      shown = p;
+      notifyListeners();
+    } else if (p != phase) {
+      selectPhase(p);
+    }
+  }
+
   void selectPhase(FocusPhase p) {
     reset();
     phase = p;
+    shown = p;
     notifyListeners();
   }
 
@@ -104,6 +123,7 @@ class FocusController extends ChangeNotifier {
     } else {
       phase = FocusPhase.focus;
     }
+    shown = phase;
     reset();
     onPhaseComplete?.call(phase);
   }
