@@ -504,9 +504,10 @@ Handler buildHandler(
       return _json({
         'cursor': store.cursor,
         'cursorTag': store.cursorTag,
-        // The server was restored from a backup taken after this device
-        // last synced, so it may be missing changes the device sent. The
-        // device sends everything again and starts over from cursor 0.
+        // The server was restored from a backup that doesn't have the point
+        // this device last saw, so it may be missing changes the device
+        // sent. The device sends everything again and starts over from
+        // cursor 0.
         if (rewound) 'rewound': true,
         // Lets devices follow the server's remote address if it changes.
         // remoteEnabled tells devices to forget the remote address only
