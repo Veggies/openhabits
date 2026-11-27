@@ -8,6 +8,7 @@ import 'package:client/ui/common.dart';
 import 'package:client/ui/habit_editor.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -652,6 +653,83 @@ void main() {
     expect(repo.isHabitDone(id, wednesday), isTrue);
     repo.setHabitDone(id, wednesday, false);
     expect(repo.isHabitOff(id, wednesday), isFalse);
+  });
+
+  testWidgets('rewards spend only the tomatoes earned today', (tester) async {
+    final now = DateTime(2026, 11, 27, 15);
+    final repo = await pumpApp(
+      tester,
+      const Size(1400, 1000),
+      clock: () => now,
+    );
+    repo.createHabit({'name': 'Read'});
+    await go(tester, 'Focus');
+    expect(find.text('🍅 0 to spend today'), findsOneWidget);
+
+    await tester.tap(find.text('Add a reward'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find
+          .descendant(
+            of: find.byType(AlertDialog),
+            matching: find.byType(TextField),
+          )
+          .first,
+      'An episode of a show',
+    );
+    // Tap a tomato to set the price, or type it.
+    await tester.tap(find.bySemanticsLabel('6 tomatoes'));
+    await tester.pump();
+    expect(find.widgetWithText(TextField, '6'), findsOneWidget);
+    // A screen reader's tap picks a price too.
+    tester
+        .getSemantics(find.bySemanticsLabel('3 tomatoes'))
+        .owner!
+        .performAction(
+          tester.getSemantics(find.bySemanticsLabel('3 tomatoes')).id,
+          SemanticsAction.tap,
+        );
+    await tester.pump();
+    expect(find.widgetWithText(TextField, '3'), findsOneWidget);
+    await tester.enterText(find.widgetWithText(TextField, '3'), '6');
+    await tester.pump();
+    await tester.enterText(find.widgetWithText(TextField, '6'), '2');
+    await tester.pump();
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(find.text('2 more to go'), findsOneWidget);
+
+    // Yesterday's tomatoes don't count today.
+    repo.recordFocus(start: DateTime(2026, 11, 26, 9), minutes: 25);
+    repo.recordFocus(start: DateTime(2026, 11, 27, 9), minutes: 25);
+    await tester.pumpAndSettle();
+    expect(find.text('1 more to go'), findsOneWidget);
+    repo.recordFocus(start: DateTime(2026, 11, 27, 10), minutes: 25);
+    await tester.pumpAndSettle();
+    // Today says so, and takes you to it.
+    await go(tester, 'Today');
+    expect(find.text("You've earned a reward"), findsOneWidget);
+    expect(
+      find.text(
+        'You can enjoy An episode of a show. You have 2 tomatoes to spend today.',
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.text("You've earned a reward"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Enjoy'));
+    await tester.pumpAndSettle();
+    expect(find.text('🍅 0 to spend today'), findsOneWidget);
+    expect(find.text('Enjoyed today'), findsOneWidget);
+    expect(repo.rewardSpends.single.name, 'An episode of a show');
+    // Nothing left to afford: Today stays quiet.
+    await go(tester, 'Today');
+    expect(find.text("You've earned a reward"), findsNothing);
+    await go(tester, 'Focus');
+
+    await tester.tap(find.text('Take back'));
+    await tester.pumpAndSettle();
+    expect(find.text('🍅 2 to spend today'), findsOneWidget);
   });
 
   testWidgets('phone: a habit opens as its own page', (tester) async {
