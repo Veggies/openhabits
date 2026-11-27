@@ -710,6 +710,11 @@ class _RewardDialogState extends State<_RewardDialog> {
     super.dispose();
   }
 
+  void _pick(int n) => setState(() {
+    _cost = n;
+    _price.text = '$n';
+  });
+
   void _save() {
     final repo = AppScope.read(context).repo;
     final name = _name.text.trim();
@@ -725,6 +730,8 @@ class _RewardDialogState extends State<_RewardDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
+    // Scrolls in a short window, or with large text.
+    scrollable: true,
     title: Text(widget.existing == null ? 'New reward' : 'Edit reward'),
     content: Column(
       mainAxisSize: MainAxisSize.min,
@@ -781,13 +788,13 @@ class _RewardDialogState extends State<_RewardDialog> {
                   button: true,
                   selected: n == _cost,
                   label: n == 1 ? '1 tomato' : '$n tomatoes',
+                  // Screen readers tap here, since the child's own action
+                  // is hidden along with its semantics.
+                  onTap: () => _pick(n),
                   excludeSemantics: true,
                   child: InkResponse(
                     radius: 18,
-                    onTap: () => setState(() {
-                      _cost = n;
-                      _price.text = '$n';
-                    }),
+                    onTap: () => _pick(n),
                     child: SizedBox(
                       width: 34,
                       height: 36,

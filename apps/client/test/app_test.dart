@@ -8,6 +8,7 @@ import 'package:client/ui/common.dart';
 import 'package:client/ui/habit_editor.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -680,6 +681,18 @@ void main() {
     await tester.tap(find.bySemanticsLabel('6 tomatoes'));
     await tester.pump();
     expect(find.widgetWithText(TextField, '6'), findsOneWidget);
+    // A screen reader's tap picks a price too.
+    tester
+        .getSemantics(find.bySemanticsLabel('3 tomatoes'))
+        .owner!
+        .performAction(
+          tester.getSemantics(find.bySemanticsLabel('3 tomatoes')).id,
+          SemanticsAction.tap,
+        );
+    await tester.pump();
+    expect(find.widgetWithText(TextField, '3'), findsOneWidget);
+    await tester.enterText(find.widgetWithText(TextField, '3'), '6');
+    await tester.pump();
     await tester.enterText(find.widgetWithText(TextField, '6'), '2');
     await tester.pump();
     await tester.tap(find.text('Save'));

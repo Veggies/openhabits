@@ -6,7 +6,9 @@
     {"id": "free", "fields": {"name": "No price yet"}, "cost": 1},
     {"id": "huge", "fields": {"name": "A day trip", "cost": 99}, "cost": 20},
     {"id": "odd", "fields": {"name": "Odd price", "cost": 2.6}, "cost": 3},
-    {"id": "zero", "fields": {"name": "Free", "cost": 0}, "cost": 1}
+    {"id": "zero", "fields": {"name": "Free", "cost": 0}, "cost": 1},
+    {"id": "vast", "fields": {"name": "Too big for a whole number", "cost": 1e20}, "cost": 20},
+    {"id": "text", "fields": {"name": "Not a number", "cost": "4"}, "cost": 1}
   ],
   "cases": [
     {"name": "nothing spent yet", "earned": 5, "spends": [], "toSpend": 5},

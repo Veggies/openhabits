@@ -426,7 +426,8 @@ class Reward {
   static const maxCost = 20;
 }
 
-int _cost(Object? v) => v is num ? v.round().clamp(1, Reward.maxCost) : 1;
+int _cost(Object? v) =>
+    v is num && v.isFinite ? v.clamp(1, Reward.maxCost).round() : 1;
 
 /// Tomatoes spent on a reward. The reward's name and price are kept as they
 /// were, so renaming or deleting the reward later doesn't change the past.

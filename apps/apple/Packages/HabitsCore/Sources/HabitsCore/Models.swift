@@ -367,8 +367,9 @@ public struct Reward: Identifiable, Sendable, Hashable {
 }
 
 private func rewardCost(_ v: JSONValue?) -> Int {
-    guard let n = v?.number else { return 1 }
-    return min(Reward.maxCost, max(1, Int(n.rounded())))
+    // Clamped before it becomes an Int: a huge number would crash.
+    guard let n = v?.number, n.isFinite else { return 1 }
+    return Int(min(Double(Reward.maxCost), max(1, n.rounded())))
 }
 
 /// Tomatoes spent on a reward. The reward's name and price are kept as they
