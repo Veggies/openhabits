@@ -729,14 +729,28 @@ class _DayToggle extends StatelessWidget {
     final outline = Theme.of(context).colorScheme.outlineVariant;
     // A check-in is always good news: done, or for a habit being broken,
     // a day you stayed clear. Today's circle is a little bigger and ringed
-    // in the habit's colour, so it's easy to find down the list.
-    final size = isToday ? 32.0 : 26.0;
+    // in the habit's colour, so it's easy to find down the list, but only
+    // on a habit that's due today. A day that isn't one of the habit's days
+    // is a small dot rather than a circle, unless it was ticked before.
+    final due = isToday && scheduled;
+    final dot = !scheduled && !checked;
+    final size = due ? 32.0 : 26.0;
     final theme = Theme.of(context);
     final circle = SizedBox(
       width: _daySlot,
       height: 38,
       child: Center(
-        child: off
+        child: dot
+            ? Container(
+                key: const ValueKey('not-scheduled'),
+                width: 5,
+                height: 5,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: outline,
+                ),
+              )
+            : off
             ? DashedCircle(
                 size: size,
                 color: color.withValues(alpha: 0.7),
@@ -749,7 +763,7 @@ class _DayToggle extends StatelessWidget {
                   shape: BoxShape.circle,
                   color: checked ? color : null,
                   border: Border.all(
-                    color: checked || isToday
+                    color: checked || due
                         ? color
                         : (scheduled && !upcoming
                               ? outline
@@ -760,7 +774,7 @@ class _DayToggle extends StatelessWidget {
                 child: checked
                     ? Icon(
                         Icons.check,
-                        size: isToday ? 20 : 16,
+                        size: due ? 20 : 16,
                         color: Colors.white,
                       )
                     : null,

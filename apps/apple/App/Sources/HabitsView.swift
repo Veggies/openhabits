@@ -482,7 +482,12 @@ struct DayCircle: View {
         let off = app.repo.isOff(habit.id, day)
         let scheduled = habit.isScheduled(day)
         let upcoming = day > app.repo.today
-        let size: CGFloat = isToday ? 30 : 24
+        // Today is bigger and ringed, but only on a habit that's due today.
+        let due = isToday && scheduled
+        // A day that isn't one of the habit's days is a small dot rather
+        // than a circle, unless it was ticked before.
+        let dot = !scheduled && !done
+        let size: CGFloat = due ? 30 : 24
         Button {
             // A later day, or one the habit isn't scheduled on, takes the
             // tap without doing anything, so it doesn't fall through and
@@ -491,16 +496,20 @@ struct DayCircle: View {
             withAnimation(.snappy(duration: 0.25)) { app.repo.toggle(habit.id, day) }
         } label: {
             ZStack {
-                if off {
+                if dot {
+                    Circle()
+                        .fill(Color.secondary.opacity(0.3))
+                        .frame(width: 5, height: 5)
+                } else if off {
                     // Dashed: the habit has the day off, so it isn't missed.
                     Circle()
                         .strokeBorder(habit.tint.opacity(0.7),
-                            style: StrokeStyle(lineWidth: isToday ? 2.5 : 1.5, dash: [3, 3]))
+                            style: StrokeStyle(lineWidth: due ? 2.5 : 1.5, dash: [3, 3]))
                 } else {
                     Circle()
                         .strokeBorder(
-                            done || isToday ? habit.tint : Color.secondary.opacity(scheduled && !upcoming ? 0.35 : 0.12),
-                            lineWidth: isToday ? 2.5 : 1.5)
+                            done || due ? habit.tint : Color.secondary.opacity(scheduled && !upcoming ? 0.35 : 0.12),
+                            lineWidth: due ? 2.5 : 1.5)
                 }
                 if done {
                     Circle().fill(habit.tint)

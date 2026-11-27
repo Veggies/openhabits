@@ -673,6 +673,14 @@ void main() {
       tester.getTopLeft(find.text('Read')).dy,
       lessThan(tester.getTopLeft(find.text('Inbox zero')).dy),
     );
+    // Its Saturday and Sunday are small dots, not circles.
+    expect(
+      find.descendant(
+        of: find.byKey(ValueKey('today-$work')),
+        matching: find.byKey(const ValueKey('not-scheduled')),
+      ),
+      findsOneWidget,
+    );
     // Saturday isn't one of its days, so it can't be ticked, and the tap
     // doesn't open the habit either.
     await tester.tap(find.byKey(ValueKey('today-$work')));
