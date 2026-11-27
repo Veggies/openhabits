@@ -1,0 +1,49 @@
+{
+  "about": "Streaks, 'never miss twice' and completion with days off. Days are in November 2026; today is Friday the 13th. Weekdays are 1 (Monday) to 7 (Sunday). Each habit was created on the 1st. 'record' is done and scheduled days in the 7 days up to today.",
+  "today": "2026-11-13",
+  "created": "2026-11-01",
+  "cases": [
+    {
+      "name": "a day off neither counts nor breaks a streak",
+      "weekdays": [1, 2, 3, 4, 5, 6, 7],
+      "done": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13],
+      "off": [11],
+      "streak": 12, "forgivingStreak": 12, "missedLastTime": false, "record": [6, 6]
+    },
+    {
+      "name": "the same day missed instead",
+      "weekdays": [1, 2, 3, 4, 5, 6, 7],
+      "done": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13],
+      "off": [],
+      "streak": 2, "forgivingStreak": 12, "missedLastTime": false, "record": [6, 7]
+    },
+    {
+      "name": "a workday habit through four days of time off",
+      "weekdays": [1, 2, 3, 4, 5],
+      "done": [2, 3, 4, 5, 6],
+      "off": [9, 10, 11, 12],
+      "streak": 5, "forgivingStreak": 5, "missedLastTime": false, "record": [0, 1]
+    },
+    {
+      "name": "a miss before the time off is still last time",
+      "weekdays": [1, 2, 3, 4, 5],
+      "done": [2, 3, 4, 5],
+      "off": [9, 10, 11, 12],
+      "streak": 0, "forgivingStreak": 4, "missedLastTime": true, "record": [0, 1]
+    },
+    {
+      "name": "no nudge about yesterday on a day off",
+      "weekdays": [1, 2, 3, 4, 5, 6, 7],
+      "done": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+      "off": [13],
+      "streak": 0, "forgivingStreak": 11, "missedLastTime": false, "record": [5, 6]
+    },
+    {
+      "name": "a day that was done counts, even if it's also marked off",
+      "weekdays": [1, 2, 3, 4, 5, 6, 7],
+      "done": [10, 11, 12, 13],
+      "off": [12, 13],
+      "streak": 4, "forgivingStreak": 4, "missedLastTime": false, "record": [4, 7]
+    }
+  ]
+}

@@ -116,6 +116,49 @@ const accentChoices = <(String, String, Color)>[
   ('graphite', 'Graphite', Color(0xFF8E8E93)),
 ];
 
+/// A dashed ring: a day the habit has off.
+class DashedCircle extends StatelessWidget {
+  final double size;
+  final Color color;
+  final double width;
+  const DashedCircle({
+    super.key,
+    required this.size,
+    required this.color,
+    this.width = 1.5,
+  });
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    size: Size.square(size),
+    painter: _DashedCirclePainter(color, width),
+  );
+}
+
+class _DashedCirclePainter extends CustomPainter {
+  final Color color;
+  final double width;
+  _DashedCirclePainter(this.color, this.width);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = width;
+    final rect = (Offset.zero & size).deflate(width / 2);
+    const dashes = 12;
+    const sweep = 2 * pi / dashes;
+    for (var i = 0; i < dashes; i++) {
+      canvas.drawArc(rect, i * sweep, sweep / 2, false, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedCirclePainter old) =>
+      old.color != color || old.width != width;
+}
+
 /// Rebuilds whenever local data changes (local edits or synced changes).
 class DataBuilder extends StatelessWidget {
   final Widget Function(BuildContext context, Repo repo) builder;

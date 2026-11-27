@@ -139,6 +139,42 @@ import Testing
         #expect(r.missedLastTime(h))
     }
 
+    @Test(arguments: try daysOffCases())
+    func daysOff(_ value: JSONValue) throws {
+        let c = value.object!
+        let f = try fixture("days_off.json")
+        let now = Days.parse(f["today"]!.string!)!
+        let h = Habit(id: "h", fields: [
+            "weekdays": c["weekdays"]!, "createdAt": .string(Timestamp.format(Days.parse(f["created"]!.string!)!)),
+        ])
+        func on(_ key: String) -> (Date) -> Bool {
+            let days = Set(c[key]!.array!.compactMap { $0.int })
+            return { Days.calendar.component(.month, from: $0) == 11 && days.contains(Days.calendar.component(.day, from: $0)) }
+        }
+        let done = on("done"), off = on("off")
+        let name = c["name"]!.string!
+        #expect(h.streak(isDone: done, today: now, isOff: off) == c["streak"]!.int, "\(name)")
+        #expect(h.streak(isDone: done, today: now, forgiving: true, isOff: off) == c["forgivingStreak"]!.int, "\(name)")
+        #expect(h.missedLastTime(isDone: done, today: now, isOff: off) == c["missedLastTime"]!.bool, "\(name)")
+        let r = h.record(isDone: done, end: now, days: 7, isOff: off)
+        #expect([r.done, r.scheduled] == c["record"]!.array!.compactMap { $0.int }, "\(name)")
+    }
+
+    @Test func aDayOffIsSavedAndEndsWhenDone() throws {
+        let r = try repo()
+        let h = habit(r)
+        for d in [0, 1, 3] { r.setDone(h.id, Days.add(today, -d), true) }
+        r.setOff(h.id, Days.add(today, -2), true)
+        #expect(r.isOff(h.id, Days.add(today, -2)))
+        #expect(r.streak(h) == 3)
+        #expect(r.daysClean(h) == 3)
+        r.setDone(h.id, Days.add(today, -2), true)
+        #expect(!r.isOff(h.id, Days.add(today, -2)))
+        #expect(r.streak(h) == 4)
+        r.setOff(h.id, Days.add(today, -2), false)
+        #expect(r.streak(h) == 3)  // back to a plain miss, forgiven once
+    }
+
     @Test func breakingAHabitCountsDaysClear() throws {
         let r = try repo()
         let h = habit(r, ["kind": "quit"])
@@ -236,3 +272,5 @@ import Testing
         #expect(SyncEngine.normalize("localhost:8080") == "http://localhost:8080")
     }
 }
+
+func daysOffCases() throws -> [JSONValue] { try fixture("days_off.json")["cases"]!.array! }

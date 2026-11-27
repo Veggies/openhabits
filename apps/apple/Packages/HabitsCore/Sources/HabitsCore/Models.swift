@@ -208,7 +208,13 @@ public struct Habit: Identifiable, Sendable, Hashable {
     /// Scheduled days done in a row, ending today. If today isn't done yet,
     /// it counts up to yesterday so the streak doesn't reset each morning.
     /// With `forgiving` ("never miss twice"), one missed day doesn't end it.
-    public func streak(isDone: (Date) -> Bool, today: Date, forgiving: Bool = false) -> Int {
+    ///
+    /// Days off (`isOff`) are passed over like days the habit isn't
+    /// scheduled: they neither count nor break the streak. A day that was
+    /// done counts, even if it was also marked off.
+    public func streak(
+        isDone: (Date) -> Bool, today: Date, forgiving: Bool = false, isOff: (Date) -> Bool = { _ in false }
+    ) -> Int {
         var day = Days.start(today)
         if !isDone(day) { day = Days.add(day, -1) }
         let start = startDay
@@ -224,6 +230,8 @@ public struct Habit: Identifiable, Sendable, Hashable {
             if isDone(day) {
                 count += 1
                 missedLast = false
+            } else if isOff(day) {
+                continue
             } else if forgiving && !missedLast {
                 missedLast = true
             } else {
@@ -234,17 +242,46 @@ public struct Habit: Identifiable, Sendable, Hashable {
     }
 
     /// The last scheduled day before today was missed, and today isn't done:
-    /// the moment "never miss twice" is about.
-    public func missedLastTime(isDone: (Date) -> Bool, today: Date) -> Bool {
+    /// the moment "never miss twice" is about. Days off are passed over, and
+    /// there's nothing to say on a day off.
+    public func missedLastTime(isDone: (Date) -> Bool, today: Date, isOff: (Date) -> Bool = { _ in false }) -> Bool {
         let t = Days.start(today)
-        if isDone(t) { return false }
+        if isDone(t) || isOff(t) { return false }
         var day = Days.add(t, -1)
         while day >= startDay {
-            if isScheduled(day) { return !isDone(day) }
-            day = Days.add(day, -1)
+            defer { day = Days.add(day, -1) }
+            guard isScheduled(day) else { continue }
+            if isDone(day) { return false }
+            if isOff(day) { continue }
+            return true
         }
         return false
     }
+
+    /// Scheduled days done, out of scheduled days, in the `days` up to and
+    /// including `end`, counting only days since the habit started. Days off
+    /// don't count either way, unless they were done anyway.
+    public func record(
+        isDone: (Date) -> Bool, end: Date, days: Int, isOff: (Date) -> Bool = { _ in false }
+    ) -> (done: Int, scheduled: Int) {
+        var done = 0, scheduled = 0
+        let last = Days.start(end)
+        for i in 0..<max(0, days) {
+            let day = Days.add(last, -i)
+            if day < startDay || !isScheduled(day) { continue }
+            if isDone(day) {
+                done += 1
+                scheduled += 1
+            } else if !isOff(day) {
+                scheduled += 1
+            }
+        }
+        return (done, scheduled)
+    }
+
+    /// The `habit_checks` field that marks a day off: the habit gets the day
+    /// off, so it isn't missed. Older apps ignore it and see a missed day.
+    public static let offField = "off"
 }
 
 /// A line on the habits scorecard, rated "+", "-" or "=".

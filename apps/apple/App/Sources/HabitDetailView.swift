@@ -204,7 +204,9 @@ struct StatTile: View {
     }
 }
 
-/// A month of check-ins. Tap any day up to today to change it.
+/// A month of check-ins. Tap any day up to today to change it, or long-press
+/// a day (right-click on a Mac) to give the habit that day off. Months ahead
+/// are there for planning time off.
 struct MonthCalendar: View {
     let habit: Habit
     @Binding var month: Date
@@ -229,7 +231,7 @@ struct MonthCalendar: View {
                     .labelStyle(.iconOnly)
                 Button("Next Month", systemImage: "chevron.right") { month = Days.addMonths(first, 1) }
                     .labelStyle(.iconOnly)
-                    .disabled(Days.addMonths(first, 1) > today)
+                    .disabled(Days.addMonths(first, 1) > Days.addMonths(today, 12))
             }
             .buttonStyle(.borderless)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 7), spacing: 6) {
@@ -248,14 +250,27 @@ struct MonthCalendar: View {
             }
         }
         .padding(.vertical, 6)
+        #if os(macOS)
+        // The list row's menu wins over one on a single day, so the whole
+        // calendar has one, for the day under the pointer.
+        .contextMenu {
+            if let pointed = app.pointedDay, pointed.habitId == habit.id {
+                DayOffMenu(habit: habit, day: pointed.day, named: true)
+            }
+        }
+        #endif
     }
 
     private func dayCell(_ day: Date, today: Date) -> some View {
         let repo = app.repo
         let done = repo.isDone(habit.id, day)
+        let off = repo.isOff(habit.id, day)
         let open = day <= today && day >= habit.startDay
         let scheduled = habit.isScheduled(day)
         return Button {
+            // Later days can't be ticked yet, but can be given the day off
+            // from the menu.
+            guard open else { return }
             withAnimation(.snappy(duration: 0.2)) { repo.toggle(habit.id, day) }
         } label: {
             Text("\(Days.calendar.component(.day, from: day))")
@@ -267,6 +282,8 @@ struct MonthCalendar: View {
                 .background {
                     if done {
                         Circle().fill(habit.tint)
+                    } else if off {
+                        Circle().strokeBorder(habit.tint.opacity(0.7), style: StrokeStyle(lineWidth: 1.5, dash: [3, 3]))
                     } else if day == today {
                         Circle().strokeBorder(habit.tint, lineWidth: 2)
                     }
@@ -274,9 +291,20 @@ struct MonthCalendar: View {
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderless)
-        .disabled(!open)
+        .disabled(day < habit.startDay)
+        #if os(macOS)
+        .onHover { inside in
+            if inside {
+                app.pointedDay = (habit.id, day)
+            } else if app.pointedDay?.habitId == habit.id && app.pointedDay?.day == day {
+                app.pointedDay = nil
+            }
+        }
+        #else
+        .contextMenu { DayOffMenu(habit: habit, day: day) }
+        #endif
         .accessibilityLabel(day.formatted(date: .complete, time: .omitted))
-        .accessibilityValue(done ? "Done" : "Not done")
+        .accessibilityValue(off ? "Day off" : done ? "Done" : "Not done")
     }
 }
 

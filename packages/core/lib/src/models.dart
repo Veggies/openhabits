@@ -251,10 +251,15 @@ class Habit {
   ///
   /// With [forgiving] ("never miss twice"), a single missed day doesn't end
   /// the streak; two scheduled misses in a row do. Missed days don't count.
+  ///
+  /// Days off ([isOff]) are passed over like days the habit isn't scheduled:
+  /// they neither count nor break the streak. A day that was done counts,
+  /// even if it was also marked off.
   int streak(
     bool Function(DateTime day) isDone,
     DateTime today, {
     bool forgiving = false,
+    bool Function(DateTime day)? isOff,
   }) {
     var day = dateOnly(today);
     if (!isDone(day)) day = addDays(day, -1);
@@ -270,6 +275,8 @@ class Habit {
       if (isDone(day)) {
         count++;
         missedLast = false;
+      } else if (isOff?.call(day) ?? false) {
+        continue;
       } else if (forgiving && !missedLast) {
         missedLast = true;
       } else {
@@ -280,24 +287,60 @@ class Habit {
   }
 
   /// True when the most recent scheduled day before today was missed and
-  /// today isn't done yet: the moment "never miss twice" is about.
-  bool missedLastTime(bool Function(DateTime day) isDone, DateTime today) {
+  /// today isn't done yet: the moment "never miss twice" is about. Days off
+  /// are passed over, and there's nothing to say on a day off.
+  bool missedLastTime(
+    bool Function(DateTime day) isDone,
+    DateTime today, {
+    bool Function(DateTime day)? isOff,
+  }) {
     final t = dateOnly(today);
-    if (isDone(t)) return false;
+    if (isDone(t) || (isOff?.call(t) ?? false)) return false;
     for (
       var day = addDays(t, -1);
       !day.isBefore(_startDay);
       day = addDays(day, -1)
     ) {
-      if (isScheduled(day)) return !isDone(day);
+      if (!isScheduled(day)) continue;
+      if (isDone(day)) return false;
+      if (isOff?.call(day) ?? false) continue;
+      return true;
     }
     return false;
+  }
+
+  /// Scheduled days done, out of scheduled days, in the [days] up to and
+  /// including [end], counting only days since the habit started. Days off
+  /// don't count either way, unless they were done anyway.
+  ({int done, int scheduled}) record(
+    bool Function(DateTime day) isDone,
+    DateTime end,
+    int days, {
+    bool Function(DateTime day)? isOff,
+  }) {
+    var scheduled = 0;
+    var done = 0;
+    for (var i = 0; i < days; i++) {
+      final day = addDays(dateOnly(end), -i);
+      if (day.isBefore(_startDay) || !isScheduled(day)) continue;
+      if (isDone(day)) {
+        done++;
+        scheduled++;
+      } else if (!(isOff?.call(day) ?? false)) {
+        scheduled++;
+      }
+    }
+    return (done: done, scheduled: scheduled);
   }
 
   /// For habits being broken, a check-in means "I stayed clear today", so
   /// days clean is the run of marked days, like a strict streak.
   int daysClean(bool Function(DateTime day) stayedClear, DateTime today) =>
       streak(stayedClear, today);
+
+  /// The `habit_checks` field that marks a day off: the habit gets the day
+  /// off, so it isn't missed. Older apps ignore it and see a missed day.
+  static const offField = 'off';
 }
 
 /// A line on the Atomic Habits "habits scorecard": an existing habit rated

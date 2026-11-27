@@ -414,6 +414,49 @@ void main() {
             ),
         ]);
 
+    test('a day off is left out of the calendar', () async {
+      await habit('read', {
+        'name': 'Read',
+        'time': '21:00',
+        'createdAt': '2026-11-01T10:00:00.000Z',
+      });
+      Change check(String day, String field, Object value, int at) => Change(
+        table: Tables.habitChecks,
+        rowId: 'read@$day',
+        field: field,
+        value: value,
+        hlc: Hlc(2000 + at, 0, 'phone'),
+      );
+      await api.sync(ownerToken, 0, [
+        for (final (i, (day, done, off)) in [
+          ('2026-12-24', false, true),
+          ('2026-12-25', false, true),
+          ('2026-12-26', true, true), // done anyway: still on the calendar
+          ('2026-12-27', false, false), // a day off, taken back
+        ].indexed) ...[
+          check(day, 'habitId', 'read', i * 4),
+          check(day, 'date', day, i * 4 + 1),
+          check(day, 'done', done, i * 4 + 2),
+          check(day, Habit.offField, off, i * 4 + 3),
+        ],
+      ]);
+      final link = (await api.call(
+        'GET',
+        '/calendar-link',
+        token: ownerToken,
+      )).$2;
+      final ics =
+          (await api.call(
+                'GET',
+                Uri.parse(link['url'] as String).path,
+              )).$2['body']
+              as String;
+      expect(ics, contains('EXDATE:20261224T210000\r\n'));
+      expect(ics, contains('EXDATE:20261225T210000\r\n'));
+      expect(ics, isNot(contains('EXDATE:20261226')));
+      expect(ics, isNot(contains('EXDATE:20261227')));
+    });
+
     test('habits with a time become repeating calendar events', () async {
       await habit('read', {
         'name': 'Read',

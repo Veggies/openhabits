@@ -593,6 +593,50 @@ void main() {
     expect(find.text("Break's over"), findsNothing);
   });
 
+  testWidgets('a day off keeps the streak and the nudge away', (tester) async {
+    // A Wednesday, with weeks starting on Monday.
+    final now = DateTime(2026, 11, 18, 12);
+    final repo = await pumpApp(tester, const Size(420, 900), clock: () => now);
+    repo.setPrefs({'weekStart': DateTime.monday});
+    final id = repo.createHabit({'name': 'Inbox zero'});
+    repo.updateHabit(id, {
+      'createdAt': DateTime(2026, 11, 10).toUtc().toIso8601String(),
+    });
+    for (final d in [12, 13, 14, 15, 16]) {
+      repo.setHabitDone(id, DateTime(2026, 11, d), true);
+    }
+    await tester.pumpAndSettle();
+    // Tuesday was missed.
+    expect(repo.missedLastTime(repo.habit(id)!), isTrue);
+    expect(repo.streak(repo.habit(id)!), 5);
+
+    await tester.longPress(find.text('Tue'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Take the day off'));
+    await tester.pumpAndSettle();
+    final tuesday = DateTime(2026, 11, 17);
+    expect(repo.isHabitOff(id, tuesday), isTrue);
+    expect(repo.missedLastTime(repo.habit(id)!), isFalse);
+    expect(repo.streak(repo.habit(id)!), 5);
+    expect(find.byType(DashedCircle), findsOneWidget);
+
+    // Ticking it anyway ends the day off and counts.
+    await tester.tap(find.text('Tue'));
+    await tester.pumpAndSettle();
+    expect(repo.isHabitOff(id, tuesday), isFalse);
+    expect(repo.streak(repo.habit(id)!), 6);
+
+    // Days ahead can be given the day off too, but done days can't.
+    await tester.longPress(find.text('Fri'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Take the day off'));
+    await tester.pumpAndSettle();
+    expect(repo.isHabitOff(id, DateTime(2026, 11, 20)), isTrue);
+    await tester.longPress(find.text('Tue'));
+    await tester.pumpAndSettle();
+    expect(find.text('Take the day off'), findsNothing);
+  });
+
   testWidgets('phone: a habit opens as its own page', (tester) async {
     final repo = await pumpApp(tester, const Size(400, 860));
     final id = repo.createHabit({'name': 'Read', 'twoMinute': 'Read one page'});

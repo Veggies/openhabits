@@ -121,18 +121,41 @@ class Repo {
       store.row(Tables.habitChecks, Habit.checkId(habitId, day))?['done'] ==
       true;
 
+  /// The habit has [day] off, so the day isn't missed. A day that was done
+  /// anyway counts as done.
+  bool isHabitOff(String habitId, DateTime day) {
+    final row = store.row(Tables.habitChecks, Habit.checkId(habitId, day));
+    return row?[Habit.offField] == true && row?['done'] != true;
+  }
+
   /// Checks a habit in for [day]. For a habit being broken, a check-in
-  /// means "I stayed clear today".
-  void setHabitDone(String habitId, DateTime day, bool done) => store.write(
-    Tables.habitChecks,
-    Habit.checkId(habitId, day),
-    {'habitId': habitId, 'date': dateKey(day), 'done': done},
-  );
+  /// means "I stayed clear today". It also ends a day off.
+  void setHabitDone(String habitId, DateTime day, bool done) =>
+      store.write(Tables.habitChecks, Habit.checkId(habitId, day), {
+        'habitId': habitId,
+        'date': dateKey(day),
+        'done': done,
+        if (done && isHabitOff(habitId, day)) Habit.offField: false,
+      });
+
+  /// Gives a habit [day] off, or takes it back. It doesn't count as missed,
+  /// and the streak carries on past it.
+  void setHabitOff(String habitId, DateTime day, bool off) =>
+      store.write(Tables.habitChecks, Habit.checkId(habitId, day), {
+        'habitId': habitId,
+        'date': dateKey(day),
+        'done': false,
+        Habit.offField: off,
+      });
 
   /// For build habits: scheduled days done in a row. A single miss is
   /// forgiven ("never miss twice").
-  int streak(Habit habit) =>
-      habit.streak((d) => isHabitDone(habit.id, d), clock(), forgiving: true);
+  int streak(Habit habit) => habit.streak(
+    (d) => isHabitDone(habit.id, d),
+    clock(),
+    forgiving: true,
+    isOff: (d) => isHabitOff(habit.id, d),
+  );
 
   /// The Goldilocks rule: keep each habit at a size that's a little
   /// challenging but still easy to keep doing. Consistency can't tell how
@@ -216,12 +239,18 @@ class Repo {
       .where((c) => c['habitId'] == habitId && c['done'] == true)
       .length;
 
-  bool missedLastTime(Habit habit) =>
-      habit.missedLastTime((d) => isHabitDone(habit.id, d), clock());
+  bool missedLastTime(Habit habit) => habit.missedLastTime(
+    (d) => isHabitDone(habit.id, d),
+    clock(),
+    isOff: (d) => isHabitOff(habit.id, d),
+  );
 
   /// For quit habits, a check-in means a day you stayed clear.
-  int daysClean(Habit habit) =>
-      habit.daysClean((d) => isHabitDone(habit.id, d), clock());
+  int daysClean(Habit habit) => habit.streak(
+    (d) => isHabitDone(habit.id, d),
+    clock(),
+    isOff: (d) => isHabitOff(habit.id, d),
+  );
 
   /// Fraction of scheduled days done in the [days] before and including
   /// [end], counting only days since the habit started.
@@ -231,20 +260,15 @@ class Repo {
   }
 
   /// Scheduled days done, out of scheduled days, in the [days] before and
-  /// including [end] (only counting days since the habit started).
-  ({int done, int scheduled}) record(Habit habit, DateTime end, int days) {
-    var scheduled = 0;
-    var done = 0;
-    final start = dateOnly(habit.createdAt.toLocal());
-    for (var i = 0; i < days; i++) {
-      final day = addDays(dateOnly(end), -i);
-      if (day.isBefore(start) || !habit.isScheduled(day)) continue;
-      scheduled++;
-      final hit = isHabitDone(habit.id, day);
-      if (hit) done++;
-    }
-    return (done: done, scheduled: scheduled);
-  }
+  /// including [end] (only counting days since the habit started). Days off
+  /// don't count either way.
+  ({int done, int scheduled}) record(Habit habit, DateTime end, int days) =>
+      habit.record(
+        (d) => isHabitDone(habit.id, d),
+        end,
+        days,
+        isOff: (d) => isHabitOff(habit.id, d),
+      );
 
   // ---- Focus ----
 

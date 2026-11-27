@@ -523,6 +523,7 @@ class _HabitRow extends StatelessWidget {
               labelled: !wide,
               isToday: day == today,
               checked: repo.isHabitDone(habit.id, day),
+              off: repo.isHabitOff(habit.id, day),
               scheduled: habit.isScheduled(day),
               upcoming: day.isAfter(today),
               color: color,
@@ -531,6 +532,7 @@ class _HabitRow extends StatelessWidget {
                 day,
                 !repo.isHabitDone(habit.id, day),
               ),
+              onMenu: (at) => showDayOffMenu(context, habit, day, at),
             ),
           ),
       ],
@@ -626,6 +628,37 @@ class _Stat extends StatelessWidget {
   );
 }
 
+/// What a long press (or a right-click) on a day offers: giving the habit
+/// that day off, or taking it back. Only for days it's scheduled, from when
+/// it started. Habits you're breaking don't take days off.
+Future<void> showDayOffMenu(
+  BuildContext context,
+  Habit habit,
+  DateTime day,
+  Offset position,
+) async {
+  final repo = AppScope.read(context).repo;
+  final start = dateOnly(habit.createdAt.toLocal());
+  if (habit.isQuit || !habit.isScheduled(day) || day.isBefore(start)) return;
+  final off = repo.isHabitOff(habit.id, day);
+  if (!off && repo.isHabitDone(habit.id, day)) return;
+  final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+  final choice = await showMenu<bool>(
+    context: context,
+    position: RelativeRect.fromRect(
+      position & const Size(1, 1),
+      Offset.zero & overlay.size,
+    ),
+    items: [
+      PopupMenuItem(
+        value: !off,
+        child: Text(off ? 'Undo the day off' : 'Take the day off'),
+      ),
+    ],
+  );
+  if (choice != null) repo.setHabitOff(habit.id, day, choice);
+}
+
 /// In a spread-out week each day takes an equal share of the row.
 Widget _spreadIf(bool spread, Widget child) =>
     spread ? Expanded(child: Center(child: child)) : child;
@@ -644,12 +677,18 @@ class _DayToggle extends StatelessWidget {
   final bool labelled;
   final bool isToday;
   final bool checked;
+
+  /// The habit has the day off, so it isn't missed.
+  final bool off;
   final bool scheduled;
 
   /// Later this week: shown faintly, and can't be ticked yet.
   final bool upcoming;
   final Color color;
   final VoidCallback onTap;
+
+  /// A long press, or a right-click: the day off menu, at that point.
+  final void Function(Offset at) onMenu;
   const _DayToggle({
     super.key,
     required this.tooltip,
@@ -659,10 +698,12 @@ class _DayToggle extends StatelessWidget {
     this.labelled = false,
     required this.isToday,
     required this.checked,
+    this.off = false,
     required this.scheduled,
     this.upcoming = false,
     required this.color,
     required this.onTap,
+    required this.onMenu,
   });
 
   @override
@@ -677,65 +718,81 @@ class _DayToggle extends StatelessWidget {
       width: _daySlot,
       height: 38,
       child: Center(
-        child: Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: checked ? color : null,
-            border: Border.all(
-              color: checked || isToday
-                  ? color
-                  : (scheduled && !upcoming
-                        ? outline
-                        : outline.withValues(alpha: 0.3)),
-              width: 2,
-            ),
-          ),
-          child: checked
-              ? Icon(Icons.check, size: isToday ? 20 : 16, color: Colors.white)
-              : null,
-        ),
+        child: off
+            ? DashedCircle(
+                size: size,
+                color: color.withValues(alpha: 0.7),
+                width: 2,
+              )
+            : Container(
+                width: size,
+                height: size,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: checked ? color : null,
+                  border: Border.all(
+                    color: checked || isToday
+                        ? color
+                        : (scheduled && !upcoming
+                              ? outline
+                              : outline.withValues(alpha: 0.3)),
+                    width: 2,
+                  ),
+                ),
+                child: checked
+                    ? Icon(
+                        Icons.check,
+                        size: isToday ? 20 : 16,
+                        color: Colors.white,
+                      )
+                    : null,
+              ),
       ),
     );
     return Semantics(
       button: true,
       label: dayName,
-      value: upcoming
+      value: off
+          ? 'Day off'
+          : upcoming
           ? 'Upcoming'
           : checked
           ? doneWord
           : 'Not done',
       excludeSemantics: true,
       child: Tooltip(
-        message: tooltip,
-        child: InkResponse(
-          // A later day takes the tap without doing anything, so it
-          // doesn't fall through and open the habit.
-          onTap: upcoming ? () {} : onTap,
-          splashColor: upcoming ? Colors.transparent : null,
-          highlightColor: upcoming ? Colors.transparent : null,
-          enableFeedback: !upcoming,
-          radius: 20,
-          child: labelled
-              ? Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    circle,
-                    Text(
-                      shortName,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: isToday
-                            ? theme.colorScheme.primary
-                            : theme.colorScheme.outline.withValues(
-                                alpha: upcoming ? 0.5 : 1,
-                              ),
-                        fontWeight: isToday ? FontWeight.w700 : null,
+        message: off ? "A day off, so it won't count as missed" : tooltip,
+        child: GestureDetector(
+          onLongPressStart: (d) => onMenu(d.globalPosition),
+          onSecondaryTapDown: (d) => onMenu(d.globalPosition),
+          child: InkResponse(
+            // A later day takes the tap without doing anything, so it
+            // doesn't fall through and open the habit.
+            onTap: upcoming ? () {} : onTap,
+            splashColor: upcoming ? Colors.transparent : null,
+            highlightColor: upcoming ? Colors.transparent : null,
+            enableFeedback: !upcoming,
+            radius: 20,
+            child: labelled
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      circle,
+                      Text(
+                        shortName,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: isToday
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.outline.withValues(
+                                  alpha: upcoming ? 0.5 : 1,
+                                ),
+                          fontWeight: isToday ? FontWeight.w700 : null,
+                        ),
                       ),
-                    ),
-                  ],
-                )
-              : circle,
+                    ],
+                  )
+                : circle,
+          ),
         ),
       ),
     );

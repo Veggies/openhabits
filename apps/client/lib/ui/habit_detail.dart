@@ -332,7 +332,8 @@ class _MonthCalendar extends StatelessWidget {
             IconButton(
               tooltip: 'Next month',
               icon: const Icon(Icons.chevron_right),
-              onPressed: addMonths(first, 1).isAfter(today)
+              // Months ahead are there for planning time off.
+              onPressed: addMonths(first, 1).isAfter(addMonths(today, 12))
                   ? null
                   : () => onMonth(addMonths(first, 1)),
             ),
@@ -360,6 +361,7 @@ class _MonthCalendar extends StatelessWidget {
                 Builder(
                   builder: (context) {
                     final done = repo.isHabitDone(habit.id, day);
+                    final off = repo.isHabitOff(habit.id, day);
                     final open = !day.isAfter(today) && !day.isBefore(start);
                     final scheduled = habit.isScheduled(day);
                     return Center(
@@ -367,39 +369,65 @@ class _MonthCalendar extends StatelessWidget {
                         button: open,
                         label: MaterialLocalizations.of(context)
                             .formatFullDate(day),
-                        value: done
+                        value: off
+                            ? 'Day off'
+                            : done
                             ? (habit.isQuit ? 'Stayed clear' : 'Done')
                             : 'Not done',
                         excludeSemantics: true,
-                        child: InkResponse(
-                          radius: 20,
-                          onTap: open
-                              ? () => repo.setHabitDone(habit.id, day, !done)
-                              : null,
-                          child: Container(
-                            width: 36,
-                            height: 36,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: done ? color : null,
-                              border: day == today && !done
-                                  ? Border.all(color: color, width: 2)
-                                  : null,
-                            ),
-                            child: Text(
-                              '${day.day}',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                fontWeight: day == today
-                                    ? FontWeight.bold
+                        child: GestureDetector(
+                          // Any day ahead can be given the day off too.
+                          onLongPressStart: (d) => showDayOffMenu(
+                            context,
+                            habit,
+                            day,
+                            d.globalPosition,
+                          ),
+                          onSecondaryTapDown: (d) => showDayOffMenu(
+                            context,
+                            habit,
+                            day,
+                            d.globalPosition,
+                          ),
+                          child: InkResponse(
+                            radius: 20,
+                            onTap: open
+                                ? () => repo.setHabitDone(habit.id, day, !done)
+                                : null,
+                            child: Container(
+                              width: 36,
+                              height: 36,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: done ? color : null,
+                                border: day == today && !done && !off
+                                    ? Border.all(color: color, width: 2)
                                     : null,
-                                color: done
-                                    ? Colors.white
-                                    : open && scheduled
-                                    ? null
-                                    : theme.colorScheme.outline.withValues(
-                                        alpha: 0.5,
-                                      ),
+                              ),
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  if (off)
+                                    DashedCircle(
+                                      size: 36,
+                                      color: color.withValues(alpha: 0.7),
+                                    ),
+                                  Text(
+                                    '${day.day}',
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      fontWeight: day == today
+                                          ? FontWeight.bold
+                                          : null,
+                                      color: done
+                                          ? Colors.white
+                                          : open && scheduled
+                                          ? null
+                                          : theme.colorScheme.outline
+                                                .withValues(alpha: 0.5),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
