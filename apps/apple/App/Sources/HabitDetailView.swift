@@ -270,7 +270,7 @@ struct MonthCalendar: View {
         return Button {
             // Later days can't be ticked yet, but can be given the day off
             // from the menu.
-            guard open else { return }
+            guard open, scheduled || done else { return }
             withAnimation(.snappy(duration: 0.2)) { repo.toggle(habit.id, day) }
         } label: {
             Text("\(Days.calendar.component(.day, from: day))")
@@ -304,7 +304,9 @@ struct MonthCalendar: View {
         .contextMenu { DayOffMenu(habit: habit, day: day) }
         #endif
         .accessibilityLabel(day.formatted(date: .complete, time: .omitted))
-        .accessibilityValue(off ? "Day off" : done ? "Done" : "Not done")
+        .accessibilityValue(off ? "Day off" : done ? "Done" : scheduled ? "Not done" : "Not scheduled")
+        // A day that can't be ticked isn't offered as a button.
+        .accessibilityRemoveTraits(scheduled || done ? [] : .isButton)
     }
 }
 

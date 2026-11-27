@@ -366,14 +366,17 @@ class _MonthCalendar extends StatelessWidget {
                     final scheduled = habit.isScheduled(day);
                     return Center(
                       child: Semantics(
-                        button: open,
+                        // A day that can't be ticked isn't a button.
+                        button: open && (scheduled || done),
                         label: MaterialLocalizations.of(context)
                             .formatFullDate(day),
                         value: off
                             ? 'Day off'
                             : done
                             ? (habit.isQuit ? 'Stayed clear' : 'Done')
-                            : 'Not done',
+                            : scheduled
+                            ? 'Not done'
+                            : 'Not scheduled',
                         excludeSemantics: true,
                         child: GestureDetector(
                           // Any day ahead can be given the day off too.
@@ -391,7 +394,9 @@ class _MonthCalendar extends StatelessWidget {
                           ),
                           child: InkResponse(
                             radius: 20,
-                            onTap: open
+                            // Days the habit isn't scheduled on can't be
+                            // ticked, but a tick already there can be undone.
+                            onTap: open && (scheduled || done)
                                 ? () => repo.setHabitDone(habit.id, day, !done)
                                 : null,
                             child: Container(

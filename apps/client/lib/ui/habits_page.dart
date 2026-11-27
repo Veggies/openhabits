@@ -159,8 +159,16 @@ class _HabitList extends StatelessWidget {
   Widget _build(BuildContext context) {
     final repo = AppScope.of(context).repo;
     final habits = repo.habits;
-    final build = habits.where((h) => !h.isQuit).toList();
+    // Habits due today come first. The rest wait underneath, so you can
+    // still see their week.
+    final today = dateOnly(repo.clock());
+    final build = habits
+        .where((h) => !h.isQuit && h.isScheduled(today))
+        .toList();
     final quit = habits.where((h) => h.isQuit).toList();
+    final notToday = habits
+        .where((h) => !h.isQuit && !h.isScheduled(today))
+        .toList();
     final theme = Theme.of(context);
     final both = build.isNotEmpty && quit.isNotEmpty;
     final due = [
@@ -270,12 +278,16 @@ class _HabitList extends StatelessWidget {
             ),
           ),
         if (build.isNotEmpty)
-          _Section(title: both ? 'BUILDING' : null, habits: build),
+          _Section(
+            title: both || notToday.isNotEmpty ? 'BUILDING' : null,
+            habits: build,
+          ),
         if (quit.isNotEmpty)
           _Section(
-            title: both || build.isEmpty ? 'BREAKING' : null,
+            title: both || notToday.isNotEmpty ? 'BREAKING' : null,
             habits: quit,
           ),
+        if (notToday.isNotEmpty) _Section(title: 'NOT TODAY', habits: notToday),
         // A nudge toward the scorecard while there's little to track yet.
         if (habits.length < 3 && repo.scorecard.isEmpty) ...[
           const SizedBox(height: 16),
@@ -540,11 +552,15 @@ class _HabitRow extends StatelessWidget {
               scheduled: habit.isScheduled(day),
               upcoming: day.isAfter(today),
               color: color,
-              onTap: () => repo.setHabitDone(
-                habit.id,
-                day,
-                !repo.isHabitDone(habit.id, day),
-              ),
+              // A day the habit isn't scheduled on can't be ticked, but a
+              // tick already there can be undone.
+              onTap: habit.isScheduled(day) || repo.isHabitDone(habit.id, day)
+                  ? () => repo.setHabitDone(
+                      habit.id,
+                      day,
+                      !repo.isHabitDone(habit.id, day),
+                    )
+                  : null,
               onMenu: (at) => showDayOffMenu(context, habit, day, at),
             ),
           ),
@@ -698,7 +714,9 @@ class _DayToggle extends StatelessWidget {
   /// Later this week: shown faintly, and can't be ticked yet.
   final bool upcoming;
   final Color color;
-  final VoidCallback onTap;
+
+  /// Null on a day that can't be ticked.
+  final VoidCallback? onTap;
 
   /// A long press, or a right-click: the day off menu, at that point.
   final void Function(Offset at) onMenu;
@@ -724,14 +742,28 @@ class _DayToggle extends StatelessWidget {
     final outline = Theme.of(context).colorScheme.outlineVariant;
     // A check-in is always good news: done, or for a habit being broken,
     // a day you stayed clear. Today's circle is a little bigger and ringed
-    // in the habit's colour, so it's easy to find down the list.
-    final size = isToday ? 32.0 : 26.0;
+    // in the habit's colour, so it's easy to find down the list, but only
+    // on a habit that's due today. A day that isn't one of the habit's days
+    // is a small dot rather than a circle, unless it was ticked before.
+    final due = isToday && scheduled;
+    final dot = !scheduled && !checked;
+    final size = due ? 32.0 : 26.0;
     final theme = Theme.of(context);
     final circle = SizedBox(
       width: _daySlot,
       height: 38,
       child: Center(
-        child: off
+        child: dot
+            ? Container(
+                key: const ValueKey('not-scheduled'),
+                width: 5,
+                height: 5,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: outline,
+                ),
+              )
+            : off
             ? DashedCircle(
                 size: size,
                 color: color.withValues(alpha: 0.7),
@@ -744,7 +776,7 @@ class _DayToggle extends StatelessWidget {
                   shape: BoxShape.circle,
                   color: checked ? color : null,
                   border: Border.all(
-                    color: checked || isToday
+                    color: checked || due
                         ? color
                         : (scheduled && !upcoming
                               ? outline
@@ -755,13 +787,16 @@ class _DayToggle extends StatelessWidget {
                 child: checked
                     ? Icon(
                         Icons.check,
-                        size: isToday ? 20 : 16,
+                        size: due ? 20 : 16,
                         color: Colors.white,
                       )
                     : null,
               ),
       ),
     );
+    // A later day, or one that can't be ticked, takes the tap without doing
+    // anything, so it doesn't fall through and open the habit.
+    final inert = upcoming || onTap == null;
     return Semantics(
       button: true,
       label: dayName,
@@ -771,20 +806,24 @@ class _DayToggle extends StatelessWidget {
           ? 'Upcoming'
           : checked
           ? doneWord
-          : 'Not done',
+          : scheduled
+          ? 'Not done'
+          : 'Not scheduled',
       excludeSemantics: true,
       child: Tooltip(
-        message: off ? "A day off, so it won't count as missed" : tooltip,
+        message: off
+            ? "A day off, so it won't count as missed"
+            : !scheduled && !checked
+            ? "Not one of this habit's days"
+            : tooltip,
         child: GestureDetector(
           onLongPressStart: (d) => onMenu(d.globalPosition),
           onSecondaryTapDown: (d) => onMenu(d.globalPosition),
           child: InkResponse(
-            // A later day takes the tap without doing anything, so it
-            // doesn't fall through and open the habit.
-            onTap: upcoming ? () {} : onTap,
-            splashColor: upcoming ? Colors.transparent : null,
-            highlightColor: upcoming ? Colors.transparent : null,
-            enableFeedback: !upcoming,
+            onTap: inert ? () {} : onTap,
+            splashColor: inert ? Colors.transparent : null,
+            highlightColor: inert ? Colors.transparent : null,
+            enableFeedback: !inert,
             radius: 20,
             child: labelled
                 ? Column(
