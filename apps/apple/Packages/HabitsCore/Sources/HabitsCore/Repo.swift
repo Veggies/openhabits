@@ -101,11 +101,33 @@ public final class Repo {
         store.row(Tables.habitChecks, Habit.checkId(habitId, day))?["done"]?.bool == true
     }
 
+    /// The habit has the day off, so the day isn't missed. A day that was
+    /// done anyway counts as done.
+    public func isOff(_ habitId: String, _ day: Date) -> Bool {
+        guard let row = store.row(Tables.habitChecks, Habit.checkId(habitId, day)) else { return false }
+        return row[Habit.offField]?.bool == true && row["done"]?.bool != true
+    }
+
     /// Checks a habit in for a day. For a habit being broken, a check-in
-    /// means "I stayed clear today".
+    /// means "I stayed clear today". Checking in or out ends a day off, so
+    /// unticking a day doesn't bring one back.
     public func setDone(_ habitId: String, _ day: Date, _ done: Bool) {
-        store.write(Tables.habitChecks, Habit.checkId(habitId, day), [
+        let row = store.row(Tables.habitChecks, Habit.checkId(habitId, day))
+        var fields: Fields = [
             "habitId": .string(habitId), "date": .string(Days.key(day)), "done": .bool(done),
+        ]
+        if row?[Habit.offField]?.bool == true { fields[Habit.offField] = .bool(false) }
+        store.write(Tables.habitChecks, Habit.checkId(habitId, day), fields)
+    }
+
+    /// Gives a habit the day off, or takes it back. It doesn't count as
+    /// missed, and the streak carries on past it. A day that's done stays
+    /// done, and this never writes `done`, so it can't undo a check-in made
+    /// on another device before the two synced.
+    public func setOff(_ habitId: String, _ day: Date, _ off: Bool) {
+        guard !isDone(habitId, day) else { return }
+        store.write(Tables.habitChecks, Habit.checkId(habitId, day), [
+            "habitId": .string(habitId), "date": .string(Days.key(day)), Habit.offField: .bool(off),
         ])
     }
 
@@ -117,32 +139,23 @@ public final class Repo {
     /// miss twice").
     public func streak(_ h: Habit) -> Int {
         remember("streak\(h.id)") {
-            h.streak(isDone: { isDone(h.id, $0) }, today: clock(), forgiving: true)
+            h.streak(isDone: { isDone(h.id, $0) }, today: clock(), forgiving: true, isOff: { isOff(h.id, $0) })
         }
     }
 
     /// For habits being broken: the run of days marked clear.
     public func daysClean(_ h: Habit) -> Int {
-        remember("clean\(h.id)") { h.streak(isDone: { isDone(h.id, $0) }, today: clock()) }
+        remember("clean\(h.id)") { h.streak(isDone: { isDone(h.id, $0) }, today: clock(), isOff: { isOff(h.id, $0) }) }
     }
 
     public func missedLastTime(_ h: Habit) -> Bool {
-        remember("missed\(h.id)") { h.missedLastTime(isDone: { isDone(h.id, $0) }, today: clock()) }
+        remember("missed\(h.id)") { h.missedLastTime(isDone: { isDone(h.id, $0) }, today: clock(), isOff: { isOff(h.id, $0) }) }
     }
 
     /// Scheduled days done, out of scheduled days, in the `days` up to and
     /// including `end`, counting only days since the habit started.
     public func record(_ h: Habit, end: Date, days: Int) -> (done: Int, scheduled: Int) {
-        var done = 0, scheduled = 0
-        let start = h.startDay
-        let last = Days.start(end)
-        for i in 0..<max(0, days) {
-            let day = Days.add(last, -i)
-            if day < start || !h.isScheduled(day) { continue }
-            scheduled += 1
-            if isDone(h.id, day) { done += 1 }
-        }
-        return (done, scheduled)
+        h.record(isDone: { isDone(h.id, $0) }, end: end, days: days, isOff: { isOff(h.id, $0) })
     }
 
     public func completionRate(_ h: Habit, end: Date, days: Int) -> Double {

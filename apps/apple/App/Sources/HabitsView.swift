@@ -188,6 +188,7 @@ struct HabitsView: View {
                         }
                     }
                     .contextMenu {
+                        RowDayOffMenu(habit: habit, days: days)
                         if !habit.isQuit {
                             Button("Focus on This", systemImage: "timer") { app.focus(on: habit) }
                         }
@@ -474,6 +475,7 @@ struct DayCircle: View {
 
     var body: some View {
         let done = app.repo.isDone(habit.id, day)
+        let off = app.repo.isOff(habit.id, day)
         let scheduled = habit.isScheduled(day)
         let upcoming = day > app.repo.today
         let size: CGFloat = isToday ? 30 : 24
@@ -484,10 +486,17 @@ struct DayCircle: View {
             withAnimation(.snappy(duration: 0.25)) { app.repo.toggle(habit.id, day) }
         } label: {
             ZStack {
-                Circle()
-                    .strokeBorder(
-                        done || isToday ? habit.tint : Color.secondary.opacity(scheduled && !upcoming ? 0.35 : 0.12),
-                        lineWidth: isToday ? 2.5 : 1.5)
+                if off {
+                    // Dashed: the habit has the day off, so it isn't missed.
+                    Circle()
+                        .strokeBorder(habit.tint.opacity(0.7),
+                            style: StrokeStyle(lineWidth: isToday ? 2.5 : 1.5, dash: [3, 3]))
+                } else {
+                    Circle()
+                        .strokeBorder(
+                            done || isToday ? habit.tint : Color.secondary.opacity(scheduled && !upcoming ? 0.35 : 0.12),
+                            lineWidth: isToday ? 2.5 : 1.5)
+                }
                 if done {
                     Circle().fill(habit.tint)
                     Image(systemName: "checkmark")
@@ -511,10 +520,102 @@ struct DayCircle: View {
             .contentShape(.rect)
         }
         .buttonStyle(.borderless)
+        #if os(macOS)
+        .onHover { inside in pointing(at: day, inside) }
+        #else
+        .contextMenu { DayOffMenu(habit: habit, day: day) }
+        #endif
         .sensoryFeedback(.success, trigger: done) { old, new in isToday && !old && new }
         .accessibilityLabel(isToday ? "Today" : day.formatted(.dateTime.weekday(.wide)))
-        .accessibilityValue(upcoming ? "Upcoming" : done ? (habit.isQuit ? "Stayed clear" : "Done") : "Not done")
-        .help(isToday ? (habit.isQuit ? "Stayed clear today" : "Done today") : day.formatted(.dateTime.weekday(.wide)))
+        .accessibilityValue(off ? "Day off" : upcoming ? "Upcoming" : done ? (habit.isQuit ? "Stayed clear" : "Done") : "Not done")
+        .help(off ? "A day off, so it won't count as missed"
+            : isToday ? (habit.isQuit ? "Stayed clear today" : "Done today") : day.formatted(.dateTime.weekday(.wide)))
+    }
+}
+
+#if os(macOS)
+extension DayCircle {
+    /// Remembers the day under the pointer, for the row's right-click menu.
+    fileprivate func pointing(at day: Date, _ inside: Bool) {
+        if inside {
+            app.pointedDay = (habit.id, day)
+        } else if app.pointedDay?.habitId == habit.id && app.pointedDay?.day == day {
+            app.pointedDay = nil
+        }
+    }
+}
+#endif
+
+/// Whether a habit can be given `day` off, or have it back: only days it's
+/// scheduled, from when it started, and not days already done. Habits
+/// you're breaking don't take days off.
+@MainActor func canTakeOff(_ habit: Habit, _ day: Date, _ repo: Repo) -> Bool {
+    !habit.isQuit && habit.isScheduled(day) && day >= habit.startDay
+        && (repo.isOff(habit.id, day) || !repo.isDone(habit.id, day))
+}
+
+/// Giving a habit a day off, or taking it back. `named` puts the day in the
+/// words ("Take Wednesday Off"), for menus that aren't on the day itself.
+struct DayOffMenu: View {
+    let habit: Habit
+    let day: Date
+    var named = false
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        let repo = app.repo
+        if canTakeOff(habit, day, repo) {
+            let name = named ? dayName(day, today: repo.today) : "the Day"
+            if repo.isOff(habit.id, day) {
+                Button("Undo \(named ? name + "\u{2019}s" : "the") Day Off", systemImage: "arrow.uturn.backward") {
+                    withAnimation(.snappy(duration: 0.25)) { repo.setOff(habit.id, day, false) }
+                }
+            } else {
+                Button("Take \(name) Off", systemImage: "moon.zzz") {
+                    withAnimation(.snappy(duration: 0.25)) { repo.setOff(habit.id, day, true) }
+                }
+            }
+        }
+    }
+}
+
+/// What a habit row's own menu offers for days off: on a Mac, the day under
+/// the pointer first, then a Day Off menu with every day of the week shown
+/// that can be taken off.
+struct RowDayOffMenu: View {
+    let habit: Habit
+    let days: [Date]
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        let repo = app.repo
+        let open = days.filter { canTakeOff(habit, $0, repo) }
+        if !open.isEmpty {
+            #if os(macOS)
+            if let pointed = app.pointedDay, pointed.habitId == habit.id, open.contains(pointed.day) {
+                DayOffMenu(habit: habit, day: pointed.day, named: true)
+            }
+            #endif
+            Menu("Day Off", systemImage: "moon.zzz") {
+                ForEach(open, id: \.self) { day in
+                    DayOffMenu(habit: habit, day: day, named: true)
+                }
+            }
+            Divider()
+        }
+    }
+}
+
+/// "Today", "Tomorrow", the day's name within a week ("Wednesday"), or
+/// the date further away ("Dec 24").
+func dayName(_ day: Date, today: Date) -> String {
+    let away = Days.between(today, day)
+    switch away {
+    case 0: return "Today"
+    case 1: return "Tomorrow"
+    case -1: return "Yesterday"
+    case -6...6: return day.formatted(.dateTime.weekday(.wide))
+    default: return day.formatted(.dateTime.month(.abbreviated).day())
     }
 }
 

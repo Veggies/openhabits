@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:core/core.dart';
 import 'package:test/test.dart';
 
@@ -107,5 +110,33 @@ void main() {
     expect(startOfWeek(DateTime(2026, 11, 8)), DateTime(2026, 11, 8));
     expect(startOfWeek(today, DateTime.monday), DateTime(2026, 11, 9));
     expect(Prefs.fromFields(null).weekStart, DateTime.sunday);
+  });
+
+  group('days off (fixtures/days_off.json)', () {
+    final f = jsonDecode(
+      File('../../fixtures/days_off.json').readAsStringSync(),
+    ) as Map;
+    final now = DateTime.parse(f['today'] as String);
+    for (final c in (f['cases'] as List).cast<Map>()) {
+      test(c['name'], () {
+        final h = Habit.fromFields('h', {
+          'weekdays': c['weekdays'],
+          'createdAt': DateTime.parse(f['created'] as String)
+              .toUtc()
+              .toIso8601String(),
+        });
+        bool Function(DateTime) on(String key) =>
+            (d) => d.month == 11 && (c[key] as List).contains(d.day);
+        final done = on('done'), off = on('off');
+        expect(h.streak(done, now, isOff: off), c['streak']);
+        expect(
+          h.streak(done, now, forgiving: true, isOff: off),
+          c['forgivingStreak'],
+        );
+        expect(h.missedLastTime(done, now, isOff: off), c['missedLastTime']);
+        final r = h.record(done, now, 7, isOff: off);
+        expect([r.done, r.scheduled], c['record']);
+      });
+    }
   });
 }

@@ -246,7 +246,10 @@ Handler buildHandler(
       final user = auth.userForCalendarToken(token);
       if (user == null) return Response.notFound('Not found');
       return Response.ok(
-        habitsCalendar(store.rows(user.id, Tables.habits)),
+        habitsCalendar(
+          store.rows(user.id, Tables.habits),
+          checkRows: store.rows(user.id, Tables.habitChecks),
+        ),
         headers: {
           'content-type': 'text/calendar; charset=utf-8',
           'cache-control': 'no-cache',

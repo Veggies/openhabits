@@ -123,6 +123,7 @@ class Reminders extends ChangeNotifier {
       if (habitTimes) {
         for (final h in habits) {
           if (h.isQuit || !h.remind || !h.isScheduled(day)) continue;
+          if (repo.isHabitOff(h.id, day)) continue;
           if (h.plan.time.isEmpty) continue;
           final t = parseTime(h.plan.time);
           final at = DateTime(day.year, day.month, day.day, t.hour, t.minute);
@@ -143,10 +144,18 @@ class Reminders extends ChangeNotifier {
         if (!at.isAfter(now)) continue;
         final left = [
           for (final h in habits)
-            if (h.isScheduled(day) && !repo.isHabitDone(h.id, day)) h,
+            if (h.isScheduled(day) &&
+                !repo.isHabitDone(h.id, day) &&
+                !repo.isHabitOff(h.id, day))
+              h,
         ];
-        // Nothing left today: no need to remind.
+        // Nothing left today: no need to remind. Nor on a day when every
+        // habit due has the day off.
         if (offset == 0 && left.isEmpty) continue;
+        final due = habits.where((h) => h.isScheduled(day));
+        if (due.isNotEmpty && due.every((h) => repo.isHabitOff(h.id, day))) {
+          continue;
+        }
         requests.add((
           at: at,
           id: offset + 1,

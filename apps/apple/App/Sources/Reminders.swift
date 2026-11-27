@@ -102,7 +102,7 @@ final class Reminders: NSObject, UNUserNotificationCenterDelegate {
         for offset in 0..<60 {
             let day = Days.add(today, offset)
             if habitTimes {
-                for h in habits where !h.isQuit && h.remind && h.isScheduled(day) {
+                for h in habits where !h.isQuit && h.remind && h.isScheduled(day) && !repo.isOff(h.id, day) {
                     guard let time = TimeOfDay(h.plan.time) else { continue }
                     let at = time.date(on: day)
                     guard at > now, !repo.isDone(h.id, day) else { continue }
@@ -119,9 +119,12 @@ final class Reminders: NSObject, UNUserNotificationCenterDelegate {
             if checkIn {
                 let at = TimeOfDay(checkInTime).date(on: day)
                 guard at > now else { continue }
-                let left = habits.filter { $0.isScheduled(day) && !repo.isDone($0.id, day) }
-                // Nothing left today: no need to remind.
+                let left = habits.filter { $0.isScheduled(day) && !repo.isDone($0.id, day) && !repo.isOff($0.id, day) }
+                // Nothing left today: no need to remind. Nor on a day when
+                // every habit due has the day off.
                 if offset == 0 && left.isEmpty { continue }
+                let due = habits.filter { $0.isScheduled(day) }
+                if !due.isEmpty && due.allSatisfy({ repo.isOff($0.id, day) }) { continue }
                 let content = UNMutableNotificationContent()
                 content.title = "Time to check in on your habits"
                 content.body = offset != 0

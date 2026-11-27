@@ -65,6 +65,10 @@ final class AppModel {
     var previewHabit: String?
     /// Whether the menu bar panel is open (see MenuBarFocusLabel).
     var menuBarPanelOpen = false
+    /// The habit and day under the pointer, so a right-click menu can offer
+    /// that day off. A row's own menu wins over one on a single circle, so
+    /// the row's menu does it instead.
+    var pointedDay: (habitId: String, day: Date)?
     #endif
 
     /// The app's accent colour: "system" follows the device (your accent

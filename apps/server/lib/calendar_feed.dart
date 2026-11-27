@@ -5,12 +5,13 @@ import 'package:core/core.dart';
 /// Turns a person's habits into an iCalendar file that calendar apps
 /// (Apple, Google, Outlook) can subscribe to. Each habit with a time becomes
 /// a repeating event on the days it's scheduled, lasting as long as the
-/// habit takes.
+/// habit takes. Days a habit has off ([checkRows]) are left out.
 ///
 /// Times are "floating" (no time zone): 9:00 PM shows at 9:00 PM wherever
 /// the calendar is, the same way the habit works in the app.
 String habitsCalendar(
   Map<String, Map<String, Object?>> habitRows, {
+  Map<String, Map<String, Object?>> checkRows = const {},
   String name = 'Habits',
   DateTime? now,
 }) {
@@ -31,6 +32,17 @@ String habitsCalendar(
     for (final MapEntry(:key, :value) in habitRows.entries)
       Habit.fromFields(key, value),
   ]..sort((a, b) => a.plan.time.compareTo(b.plan.time));
+
+  // Each habit's days off, as date keys. A day that was done anyway isn't
+  // one.
+  final daysOff = <String, List<String>>{};
+  for (final c in checkRows.values) {
+    if (c[Habit.offField] != true || c['done'] == true) continue;
+    final (id, date) = (c['habitId'], c['date']);
+    if (id is String && date is String && tryParseDateKey(date) != null) {
+      daysOff.putIfAbsent(id, () => []).add(date.replaceAll('-', ''));
+    }
+  }
 
   for (final h in habits) {
     if (h.deleted || h.archived || h.isQuit || h.plan.time.isEmpty) continue;
@@ -63,6 +75,8 @@ String habitsCalendar(
       'DTSTART:${date}T${_two(t.hour)}${_two(t.minute)}00',
       'DURATION:PT${h.duration}M',
       'RRULE:$rule',
+      for (final day in [...?daysOff[h.id]]..sort())
+        'EXDATE:${day}T${_two(t.hour)}${_two(t.minute)}00',
       'SUMMARY:${_escape(h.name)}',
       if (notes.isNotEmpty) 'DESCRIPTION:${_escape(notes.join('\n'))}',
       if (h.plan.location.isNotEmpty) 'LOCATION:${_escape(h.plan.location)}',
