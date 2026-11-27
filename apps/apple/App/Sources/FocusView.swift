@@ -254,6 +254,9 @@ struct FocusView: View {
                 TomatoRow()
                     .padding()
                     .background(.background.secondary, in: .rect(cornerRadius: 20))
+                RewardsCard()
+                    .padding()
+                    .background(.background.secondary, in: .rect(cornerRadius: 20))
                 FocusStats()
             }
             .padding()
@@ -576,6 +579,217 @@ struct TomatoRow: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(earned) of \(goal) pomodoros today")
+    }
+}
+
+/// Rewards bought with today's tomatoes: something you enjoy, once the work
+/// is done. Tomatoes only count on the day they're earned.
+struct RewardsCard: View {
+    @Environment(AppModel.self) private var app
+    @State private var editing: RewardDraft?
+
+    var body: some View {
+        let repo = app.repo
+        let left = repo.tomatoesToSpend
+        let rewards = repo.rewards
+        let today = Days.key(repo.today)
+        let spentToday = repo.rewardSpends.filter { $0.day == today }
+
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Rewards").font(.headline)
+                Spacer()
+                Text(left == 1 ? "🍅 1 to spend today" : "🍅 \(left) to spend today")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .contentTransition(.numericText())
+            }
+            Text(rewards.isEmpty
+                ? "Pick something you enjoy, like an episode of a show, and how many tomatoes it costs. You'll earn them with today's focus sessions."
+                : "Spend today's tomatoes on something you enjoy. Whatever you don't spend resets at midnight.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            ForEach(rewards) { reward in
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(reward.name)
+                        Text("\(reward.cost) 🍅").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if left >= reward.cost {
+                        Button("Enjoy") {
+                            withAnimation(.snappy) { repo.spend(on: reward) }
+                        }
+                        .buttonStyle(.glassProminent)
+                        .help("Spend \(reward.cost) of today's tomatoes on this")
+                    } else {
+                        let more = reward.cost - left
+                        Text(more == 1 ? "1 more to go" : "\(more) more to go")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .contentShape(.rect)
+                .contextMenu {
+                    Button("Edit", systemImage: "pencil") { editing = RewardDraft(reward) }
+                    Button("Delete", systemImage: "trash", role: .destructive) {
+                        withAnimation { repo.deleteReward(reward.id) }
+                    }
+                }
+                if reward.id != rewards.last?.id { Divider() }
+            }
+
+            Button("Add a Reward", systemImage: "plus") { editing = RewardDraft() }
+                .buttonStyle(.borderless)
+
+            if !spentToday.isEmpty {
+                Divider()
+                Text("Enjoyed today").font(.subheadline.weight(.semibold))
+                ForEach(spentToday) { spend in
+                    HStack {
+                        Text(spend.name)
+                        Text("\(spend.cost) 🍅").font(.caption).foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Take Back") { withAnimation(.snappy) { repo.takeBack(spend) } }
+                            .buttonStyle(.borderless)
+                            .help("Get these tomatoes back, if you didn't enjoy it after all")
+                    }
+                }
+            }
+        }
+        .animation(.snappy, value: left)
+        .sheet(item: $editing) { RewardEditor(draft: $0) }
+    }
+}
+
+/// A reward being added or changed.
+struct RewardDraft: Identifiable {
+    let id: String?
+    var name: String
+    var cost: Int
+
+    init(_ reward: Reward? = nil) {
+        id = reward?.id
+        name = reward?.name ?? ""
+        cost = reward?.cost ?? 4
+    }
+}
+
+private struct RewardEditor: View {
+    @State var draft: RewardDraft
+    @Environment(AppModel.self) private var app
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("What you'll enjoy", text: $draft.name, prompt: Text("An episode of a show"))
+                }
+                Section {
+                    LabeledContent("Price") {
+                        HStack(spacing: 6) {
+                            PriceField(cost: $draft.cost)
+                            Text(draft.cost == 1 ? "tomato" : "tomatoes").foregroundStyle(.secondary)
+                        }
+                    }
+                    TomatoPicker(cost: $draft.cost)
+                } footer: {
+                    Text("Tap a tomato to set the price, or type it. Each focus session you finish earns a tomato, so a price you can reach on a good day works best.")
+                }
+            }
+            .formStyle(.grouped)
+            .navigationTitle(draft.id == nil ? "New Reward" : "Edit Reward")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        let name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if let id = draft.id {
+                            app.repo.updateReward(id, name: name, cost: draft.cost)
+                        } else {
+                            app.repo.addReward(name: name, cost: draft.cost)
+                        }
+                        dismiss()
+                    }
+                    .disabled(draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+        #if os(macOS)
+        .frame(minWidth: 380, minHeight: 240)
+        #endif
+    }
+}
+
+/// The price as tomatoes to tap, like stars: tapping the fourth makes it 4.
+private struct TomatoPicker: View {
+    @Binding var cost: Int
+
+    var body: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 10), spacing: 6) {
+            ForEach(1...Reward.maxCost, id: \.self) { n in
+                Button {
+                    withAnimation(.snappy(duration: 0.2)) { cost = n }
+                } label: {
+                    Text("🍅")
+                        .font(.system(size: 22))
+                        .grayscale(n <= cost ? 0 : 1)
+                        .opacity(n <= cost ? 1 : 0.3)
+                        .scaleEffect(n == cost ? 1.15 : 1)
+                        .frame(maxWidth: .infinity, minHeight: 30)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(n == 1 ? "1 tomato" : "\(n) tomatoes")
+                .accessibilityAddTraits(n == cost ? .isSelected : [])
+            }
+        }
+        .padding(.vertical, 4)
+        .sensoryFeedback(.selection, trigger: cost)
+    }
+}
+
+/// The price, to type. What's typed counts straight away, since clicking
+/// Save on a Mac doesn't end editing.
+private struct PriceField: View {
+    @Binding var cost: Int
+    @State private var text = ""
+    @FocusState private var editing: Bool
+
+    var body: some View {
+        TextField("Price", text: $text)
+            .labelsHidden()
+            .textFieldStyle(.roundedBorder)
+            .multilineTextAlignment(.trailing)
+            .monospacedDigit()
+            .frame(width: 52)
+            .focused($editing)
+            .accessibilityLabel("Price in tomatoes")
+            #if os(iOS)
+            .keyboardType(.numberPad)
+            .toolbar {
+                // The number pad has no Return key.
+                if editing {
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button("Done") { editing = false }
+                    }
+                }
+            }
+            #endif
+            .onChange(of: text) { _, typed in
+                let digits = String(typed.filter { ("0"..."9").contains($0) }.prefix(2))
+                if digits != typed { text = digits }
+                if let n = Int(digits), n >= 1 { cost = min(Reward.maxCost, n) }
+            }
+            .onChange(of: cost, initial: true) { _, value in
+                if Int(text).map({ min(Reward.maxCost, max(1, $0)) }) != value { text = "\(value)" }
+            }
+            .onChange(of: editing) { _, now in if !now { text = "\(cost)" } }
+            .onSubmit { text = "\(cost)" }
     }
 }
 

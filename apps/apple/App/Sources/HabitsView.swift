@@ -19,6 +19,7 @@ struct HabitsView: View {
         let breaking = habits.filter(\.isQuit)
         let notToday = habits.filter { !$0.isQuit && !$0.isScheduled(repo.today) }
         let due = habits.filter { repo.sizeSuggestion($0) != nil }
+        let ready = repo.rewardsReady
         // This calendar week, starting on the day chosen in Settings. Days
         // still to come show faintly until they arrive.
         let weekStart = Days.startOfWeek(repo.today, firstDay: repo.weekStart)
@@ -54,8 +55,20 @@ struct HabitsView: View {
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
                     #endif
-                    if repo.lastWeekReviewDue || !due.isEmpty {
+                    if repo.lastWeekReviewDue || !due.isEmpty || !ready.isEmpty {
                         Section {
+                            if !ready.isEmpty {
+                                Button {
+                                    app.tab = .focus
+                                    #if os(macOS)
+                                    app.macTab = .focus
+                                    #endif
+                                } label: {
+                                    Banner(symbol: "gift", color: .red,
+                                        title: "You've earned a reward",
+                                        message: rewardsReadyMessage(ready, left: repo.tomatoesToSpend))
+                                }
+                            }
                             if repo.lastWeekReviewDue {
                                 Button {
                                     app.tab = .reflect
@@ -213,6 +226,15 @@ struct HabitsView: View {
             }
         }
     }
+}
+
+/// "You can enjoy an episode of a show. You have 4 tomatoes to spend today."
+func rewardsReadyMessage(_ ready: [Reward], left: Int) -> String {
+    let shown = ready.prefix(3).map(\.name)
+    let list = shown.count <= 1 ? shown.joined()
+        : shown.dropLast().joined(separator: ", ") + " or " + shown.last!
+    let more = ready.count > 3 ? ", or something else" : ""
+    return "You can enjoy \(list)\(more). You have \(left) tomato\(left == 1 ? "" : "es") to spend today."
 }
 
 /// "Read", "Read and Walk", "Read, Walk and Journal".

@@ -213,6 +213,19 @@ class _HabitList extends StatelessWidget {
               ],
             ),
           ),
+        if (repo.rewardsReady.isNotEmpty)
+          Card(
+            color: theme.colorScheme.secondaryContainer,
+            child: ListTile(
+              leading: const Icon(Icons.card_giftcard),
+              title: const Text("You've earned a reward"),
+              subtitle: Text(
+                rewardsReadyMessage(repo.rewardsReady, repo.tomatoesLeftToday),
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => AppScope.read(context).nav.go(AppTab.focus),
+            ),
+          ),
         if (repo.lastWeekReviewDue)
           Card(
             color: theme.colorScheme.tertiaryContainer,
@@ -969,3 +982,15 @@ Future<bool> sizeCheckIn(
 }
 
 enum _SizeChoice { change, keep, settle }
+
+/// "You can enjoy An episode of a show. You have 4 tomatoes to spend
+/// today."
+String rewardsReadyMessage(List<Reward> ready, int left) {
+  final shown = [for (final r in ready.take(3)) r.name];
+  final list = shown.length <= 1
+      ? shown.join()
+      : '${shown.sublist(0, shown.length - 1).join(', ')} or ${shown.last}';
+  final more = ready.length > 3 ? ', or something else' : '';
+  return 'You can enjoy $list$more. '
+      'You have $left tomato${left == 1 ? '' : 'es'} to spend today.';
+}
