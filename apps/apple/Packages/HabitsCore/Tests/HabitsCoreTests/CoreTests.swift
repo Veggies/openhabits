@@ -172,7 +172,28 @@ import Testing
         #expect(!r.isOff(h.id, Days.add(today, -2)))
         #expect(r.streak(h) == 4)
         r.setOff(h.id, Days.add(today, -2), false)
+        #expect(r.streak(h) == 4)  // a done day stays done
+        r.setDone(h.id, Days.add(today, -2), false)
         #expect(r.streak(h) == 3)  // back to a plain miss, forgiven once
+    }
+
+    @Test func aDayOffNeverUndoesACheckIn() throws {
+        let r = try repo()
+        let h = habit(r)
+        let day = Days.add(today, -1)
+        r.setOff(h.id, day, true)
+        // Taking a day off writes only the off field, so it can't overwrite
+        // a check-in from another device when the two sync.
+        let id = Habit.checkId(h.id, day)
+        #expect(r.store.row(Tables.habitChecks, id)?["done"] == nil)
+        // As if a check-in arrived from another device: done and off.
+        r.store.write(Tables.habitChecks, id, ["done": true])
+        #expect(!r.isOff(h.id, day))
+        r.setOff(h.id, day, true)
+        #expect(r.isDone(h.id, day))
+        // Unticking it doesn't bring the day off back.
+        r.setDone(h.id, day, false)
+        #expect(!r.isOff(h.id, day))
     }
 
     @Test func breakingAHabitCountsDaysClear() throws {

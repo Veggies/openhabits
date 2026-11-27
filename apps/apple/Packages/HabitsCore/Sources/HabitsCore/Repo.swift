@@ -109,21 +109,25 @@ public final class Repo {
     }
 
     /// Checks a habit in for a day. For a habit being broken, a check-in
-    /// means "I stayed clear today". It also ends a day off.
+    /// means "I stayed clear today". Checking in or out ends a day off, so
+    /// unticking a day doesn't bring one back.
     public func setDone(_ habitId: String, _ day: Date, _ done: Bool) {
+        let row = store.row(Tables.habitChecks, Habit.checkId(habitId, day))
         var fields: Fields = [
             "habitId": .string(habitId), "date": .string(Days.key(day)), "done": .bool(done),
         ]
-        if done && isOff(habitId, day) { fields[Habit.offField] = .bool(false) }
+        if row?[Habit.offField]?.bool == true { fields[Habit.offField] = .bool(false) }
         store.write(Tables.habitChecks, Habit.checkId(habitId, day), fields)
     }
 
     /// Gives a habit the day off, or takes it back. It doesn't count as
-    /// missed, and the streak carries on past it.
+    /// missed, and the streak carries on past it. A day that's done stays
+    /// done, and this never writes `done`, so it can't undo a check-in made
+    /// on another device before the two synced.
     public func setOff(_ habitId: String, _ day: Date, _ off: Bool) {
+        guard !isDone(habitId, day) else { return }
         store.write(Tables.habitChecks, Habit.checkId(habitId, day), [
-            "habitId": .string(habitId), "date": .string(Days.key(day)),
-            "done": .bool(false), Habit.offField: .bool(off),
+            "habitId": .string(habitId), "date": .string(Days.key(day)), Habit.offField: .bool(off),
         ])
     }
 

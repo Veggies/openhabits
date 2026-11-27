@@ -635,6 +635,23 @@ void main() {
     await tester.longPress(find.text('Tue'));
     await tester.pumpAndSettle();
     expect(find.text('Take the day off'), findsNothing);
+
+    // Taking a day off never writes done, so it can't undo a check-in
+    // from another device; and unticking doesn't bring a day off back.
+    final wednesday = DateTime(2026, 11, 19);
+    repo.setHabitOff(id, wednesday, true);
+    final row = repo.store.row(
+      Tables.habitChecks,
+      Habit.checkId(id, wednesday),
+    );
+    expect(row?.containsKey('done'), isFalse);
+    repo.store.write(Tables.habitChecks, Habit.checkId(id, wednesday), {
+      'done': true,
+    });
+    repo.setHabitOff(id, wednesday, true);
+    expect(repo.isHabitDone(id, wednesday), isTrue);
+    repo.setHabitDone(id, wednesday, false);
+    expect(repo.isHabitOff(id, wednesday), isFalse);
   });
 
   testWidgets('phone: a habit opens as its own page', (tester) async {

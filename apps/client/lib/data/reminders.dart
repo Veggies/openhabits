@@ -149,8 +149,13 @@ class Reminders extends ChangeNotifier {
                 !repo.isHabitOff(h.id, day))
               h,
         ];
-        // Nothing left today: no need to remind.
+        // Nothing left today: no need to remind. Nor on a day when every
+        // habit due has the day off.
         if (offset == 0 && left.isEmpty) continue;
+        final due = habits.where((h) => h.isScheduled(day));
+        if (due.isNotEmpty && due.every((h) => repo.isHabitOff(h.id, day))) {
+          continue;
+        }
         requests.add((
           at: at,
           id: offset + 1,

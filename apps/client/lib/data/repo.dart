@@ -129,24 +129,30 @@ class Repo {
   }
 
   /// Checks a habit in for [day]. For a habit being broken, a check-in
-  /// means "I stayed clear today". It also ends a day off.
-  void setHabitDone(String habitId, DateTime day, bool done) =>
-      store.write(Tables.habitChecks, Habit.checkId(habitId, day), {
-        'habitId': habitId,
-        'date': dateKey(day),
-        'done': done,
-        if (done && isHabitOff(habitId, day)) Habit.offField: false,
-      });
+  /// means "I stayed clear today". Checking in or out ends a day off, so
+  /// unticking a day doesn't bring one back.
+  void setHabitDone(String habitId, DateTime day, bool done) {
+    final row = store.row(Tables.habitChecks, Habit.checkId(habitId, day));
+    store.write(Tables.habitChecks, Habit.checkId(habitId, day), {
+      'habitId': habitId,
+      'date': dateKey(day),
+      'done': done,
+      if (row?[Habit.offField] == true) Habit.offField: false,
+    });
+  }
 
   /// Gives a habit [day] off, or takes it back. It doesn't count as missed,
-  /// and the streak carries on past it.
-  void setHabitOff(String habitId, DateTime day, bool off) =>
-      store.write(Tables.habitChecks, Habit.checkId(habitId, day), {
-        'habitId': habitId,
-        'date': dateKey(day),
-        'done': false,
-        Habit.offField: off,
-      });
+  /// and the streak carries on past it. A day that's done stays done, and
+  /// this never writes `done`, so it can't undo a check-in made on another
+  /// device before the two synced.
+  void setHabitOff(String habitId, DateTime day, bool off) {
+    if (isHabitDone(habitId, day)) return;
+    store.write(Tables.habitChecks, Habit.checkId(habitId, day), {
+      'habitId': habitId,
+      'date': dateKey(day),
+      Habit.offField: off,
+    });
+  }
 
   /// For build habits: scheduled days done in a row. A single miss is
   /// forgiven ("never miss twice").
