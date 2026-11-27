@@ -304,7 +304,9 @@ struct MonthCalendar: View {
         .contextMenu { DayOffMenu(habit: habit, day: day) }
         #endif
         .accessibilityLabel(day.formatted(date: .complete, time: .omitted))
-        .accessibilityValue(off ? "Day off" : done ? "Done" : "Not done")
+        .accessibilityValue(off ? "Day off" : done ? "Done" : scheduled ? "Not done" : "Not scheduled")
+        // A day that can't be ticked isn't offered as a button.
+        .accessibilityRemoveTraits(scheduled || done ? [] : .isButton)
     }
 }
 
