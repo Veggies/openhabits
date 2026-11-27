@@ -270,7 +270,7 @@ struct MonthCalendar: View {
         return Button {
             // Later days can't be ticked yet, but can be given the day off
             // from the menu.
-            guard open else { return }
+            guard open, scheduled || done else { return }
             withAnimation(.snappy(duration: 0.2)) { repo.toggle(habit.id, day) }
         } label: {
             Text("\(Days.calendar.component(.day, from: day))")

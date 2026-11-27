@@ -654,6 +654,39 @@ void main() {
     expect(repo.isHabitOff(id, wednesday), isFalse);
   });
 
+  testWidgets("Today puts habits that aren't due underneath", (tester) async {
+    // A Saturday, with weeks starting on Monday.
+    final now = DateTime(2026, 11, 21, 12);
+    final repo = await pumpApp(tester, const Size(420, 900), clock: () => now);
+    repo.setPrefs({'weekStart': DateTime.monday});
+    final work = repo.createHabit({
+      'name': 'Inbox zero',
+      'weekdays': [1, 2, 3, 4, 5],
+    });
+    repo.createHabit({'name': 'Read'});
+    repo.updateHabit(work, {
+      'createdAt': DateTime(2026, 11, 1).toUtc().toIso8601String(),
+    });
+    await tester.pumpAndSettle();
+    expect(find.text('NOT TODAY'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('Read')).dy,
+      lessThan(tester.getTopLeft(find.text('Inbox zero')).dy),
+    );
+    // Saturday isn't one of its days, so it can't be ticked, and the tap
+    // doesn't open the habit either.
+    await tester.tap(find.byKey(ValueKey('today-$work')));
+    await tester.pumpAndSettle();
+    expect(repo.isHabitDone(work, now), isFalse);
+    expect(find.text('Your plan'), findsNothing);
+    // A tick from before (say, from an older version) can still be undone.
+    repo.setHabitDone(work, now, true);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ValueKey('today-$work')));
+    await tester.pumpAndSettle();
+    expect(repo.isHabitDone(work, now), isFalse);
+  });
+
   testWidgets('phone: a habit opens as its own page', (tester) async {
     final repo = await pumpApp(tester, const Size(400, 860));
     final id = repo.createHabit({'name': 'Read', 'twoMinute': 'Read one page'});

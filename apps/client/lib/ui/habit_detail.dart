@@ -391,7 +391,9 @@ class _MonthCalendar extends StatelessWidget {
                           ),
                           child: InkResponse(
                             radius: 20,
-                            onTap: open
+                            // Days the habit isn't scheduled on can't be
+                            // ticked, but a tick already there can be undone.
+                            onTap: open && (scheduled || done)
                                 ? () => repo.setHabitDone(habit.id, day, !done)
                                 : null,
                             child: Container(

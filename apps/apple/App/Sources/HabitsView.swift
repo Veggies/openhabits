@@ -13,8 +13,11 @@ struct HabitsView: View {
         @Bindable var app = app
         let repo = app.repo
         let habits = repo.habits
-        let building = habits.filter { !$0.isQuit }
+        // Habits due today come first. The rest wait underneath, so you can
+        // still see their week.
+        let building = habits.filter { !$0.isQuit && $0.isScheduled(repo.today) }
         let breaking = habits.filter(\.isQuit)
+        let notToday = habits.filter { !$0.isQuit && !$0.isScheduled(repo.today) }
         let due = habits.filter { repo.sizeSuggestion($0) != nil }
         // This calendar week, starting on the day chosen in Settings. Days
         // still to come show faintly until they arrive.
@@ -77,8 +80,9 @@ struct HabitsView: View {
                         }
                         .buttonStyle(.plain)
                     }
-                    habitSection(building.isEmpty || breaking.isEmpty ? nil : "Building", building, days)
-                    habitSection(breaking.isEmpty ? nil : "Breaking", breaking, days)
+                    habitSection(breaking.isEmpty && notToday.isEmpty ? nil : "Building", building, days)
+                    habitSection(building.isEmpty && notToday.isEmpty ? nil : "Breaking", breaking, days)
+                    habitSection("Not Today", notToday, days)
                 }
                 .groupedList()
                 .animation(.default, value: habits.map(\.id))
@@ -480,9 +484,10 @@ struct DayCircle: View {
         let upcoming = day > app.repo.today
         let size: CGFloat = isToday ? 30 : 24
         Button {
-            // A later day takes the tap without doing anything, so it
-            // doesn't fall through and open the habit.
-            guard !upcoming else { return }
+            // A later day, or one the habit isn't scheduled on, takes the
+            // tap without doing anything, so it doesn't fall through and
+            // open the habit. A tick already there can still be undone.
+            guard !upcoming, scheduled || done else { return }
             withAnimation(.snappy(duration: 0.25)) { app.repo.toggle(habit.id, day) }
         } label: {
             ZStack {
@@ -527,8 +532,10 @@ struct DayCircle: View {
         #endif
         .sensoryFeedback(.success, trigger: done) { old, new in isToday && !old && new }
         .accessibilityLabel(isToday ? "Today" : day.formatted(.dateTime.weekday(.wide)))
-        .accessibilityValue(off ? "Day off" : upcoming ? "Upcoming" : done ? (habit.isQuit ? "Stayed clear" : "Done") : "Not done")
+        .accessibilityValue(off ? "Day off" : upcoming ? "Upcoming" : done ? (habit.isQuit ? "Stayed clear" : "Done")
+            : scheduled ? "Not done" : "Not scheduled")
         .help(off ? "A day off, so it won't count as missed"
+            : !scheduled && !done ? "Not one of this habit's days"
             : isToday ? (habit.isQuit ? "Stayed clear today" : "Done today") : day.formatted(.dateTime.weekday(.wide)))
     }
 }
