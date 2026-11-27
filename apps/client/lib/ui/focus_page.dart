@@ -378,6 +378,8 @@ class _Stats extends StatelessWidget {
       children: [
         const TomatoRow(),
         const SizedBox(height: 24),
+        const RewardsCard(),
+        const SizedBox(height: 24),
         Text('Overview', style: theme.textTheme.titleMedium),
         const SizedBox(height: 12),
         Row(
@@ -574,5 +576,254 @@ class TomatoRow extends StatelessWidget {
         ],
       );
     },
+  );
+}
+
+/// Rewards bought with today's tomatoes: something you enjoy, once the work
+/// is done. Tomatoes only count on the day they're earned.
+class RewardsCard extends StatelessWidget {
+  const RewardsCard({super.key});
+
+  @override
+  Widget build(BuildContext context) => DataBuilder(
+    builder: (context, repo) {
+      final theme = Theme.of(context);
+      final left = repo.tomatoesLeftToday;
+      final rewards = repo.rewards;
+      final today = dateKey(repo.clock());
+      final spentToday = [
+        for (final s in repo.rewardSpends)
+          if (s.day == today) s,
+      ];
+      final small = theme.textTheme.bodySmall?.copyWith(
+        color: theme.colorScheme.outline,
+      );
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text('Rewards', style: theme.textTheme.titleMedium),
+              ),
+              Text(
+                left == 1 ? '🍅 1 to spend today' : '🍅 $left to spend today',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: theme.colorScheme.outline,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            rewards.isEmpty
+                ? "Pick something you enjoy, like an episode of a show, and "
+                      "how many tomatoes it costs. You'll earn them with "
+                      "today's focus sessions."
+                : "Spend today's tomatoes on something you enjoy. Whatever "
+                      "you don't spend resets at midnight.",
+            style: small,
+          ),
+          for (final r in rewards)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(r.name),
+              subtitle: Text('${r.cost} 🍅'),
+              onLongPress: () => editReward(context, existing: r),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (left >= r.cost)
+                    FilledButton(
+                      onPressed: () => repo.spendOn(r),
+                      child: const Text('Enjoy'),
+                    )
+                  else
+                    Text(
+                      r.cost - left == 1
+                          ? '1 more to go'
+                          : '${r.cost - left} more to go',
+                      style: small,
+                    ),
+                  PopupMenuButton<String>(
+                    tooltip: 'More',
+                    onSelected: (v) => v == 'edit'
+                        ? editReward(context, existing: r)
+                        : repo.deleteReward(r.id),
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 'edit', child: Text('Edit')),
+                      PopupMenuItem(value: 'delete', child: Text('Delete')),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          TextButton.icon(
+            icon: const Icon(Icons.add),
+            label: const Text('Add a reward'),
+            onPressed: () => editReward(context),
+          ),
+          if (spentToday.isNotEmpty) ...[
+            const Divider(),
+            Text('Enjoyed today', style: theme.textTheme.titleSmall),
+            for (final s in spentToday)
+              ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: Text(s.name),
+                subtitle: Text('${s.cost} 🍅'),
+                trailing: TextButton(
+                  onPressed: () => repo.takeBack(s),
+                  child: const Text('Take back'),
+                ),
+              ),
+          ],
+        ],
+      );
+    },
+  );
+}
+
+/// Adds a reward, or changes [existing].
+Future<void> editReward(BuildContext context, {Reward? existing}) => showDialog(
+  context: context,
+  builder: (_) => _RewardDialog(existing: existing),
+);
+
+class _RewardDialog extends StatefulWidget {
+  final Reward? existing;
+  const _RewardDialog({this.existing});
+
+  @override
+  State<_RewardDialog> createState() => _RewardDialogState();
+}
+
+class _RewardDialogState extends State<_RewardDialog> {
+  late final _name = TextEditingController(text: widget.existing?.name);
+  late int _cost = widget.existing?.cost ?? 4;
+  late final _price = TextEditingController(text: '$_cost');
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _price.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final repo = AppScope.read(context).repo;
+    final name = _name.text.trim();
+    if (name.isEmpty) return;
+    final existing = widget.existing;
+    if (existing == null) {
+      repo.addReward(name, _cost);
+    } else {
+      repo.updateReward(existing.id, name, _cost);
+    }
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(widget.existing == null ? 'New reward' : 'Edit reward'),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _name,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: "What you'll enjoy",
+            hintText: 'An episode of a show',
+          ),
+          onChanged: (_) => setState(() {}),
+          onSubmitted: (_) => _save(),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            const Expanded(child: Text('Price')),
+            SizedBox(
+              width: 64,
+              child: TextField(
+                controller: _price,
+                textAlign: TextAlign.end,
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(2),
+                ],
+                decoration: const InputDecoration(isDense: true),
+                // Counts straight away, as it's typed.
+                onChanged: (typed) {
+                  final n = int.tryParse(typed);
+                  if (n != null && n >= 1) {
+                    setState(() => _cost = n.clamp(1, Reward.maxCost));
+                  }
+                },
+                onSubmitted: (_) => _save(),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(_cost == 1 ? 'tomato' : 'tomatoes'),
+          ],
+        ),
+        const SizedBox(height: 12),
+        // The price as tomatoes to tap, like stars: tapping the fourth
+        // makes it 4.
+        SizedBox(
+          width: 340,
+          child: Wrap(
+            children: [
+              for (var n = 1; n <= Reward.maxCost; n++)
+                Semantics(
+                  button: true,
+                  selected: n == _cost,
+                  label: n == 1 ? '1 tomato' : '$n tomatoes',
+                  excludeSemantics: true,
+                  child: InkResponse(
+                    radius: 18,
+                    onTap: () => setState(() {
+                      _cost = n;
+                      _price.text = '$n';
+                    }),
+                    child: SizedBox(
+                      width: 34,
+                      height: 36,
+                      child: Center(
+                        child: Opacity(
+                          opacity: n <= _cost ? 1 : 0.25,
+                          child: Text(
+                            '🍅',
+                            style: TextStyle(fontSize: n == _cost ? 24 : 20),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Tap a tomato to set the price, or type it. Each focus session '
+          'you finish earns a tomato, so a price you can reach on a good day '
+          'works best.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        onPressed: _name.text.trim().isEmpty ? null : _save,
+        child: const Text('Save'),
+      ),
+    ],
   );
 }

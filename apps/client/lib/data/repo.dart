@@ -295,4 +295,75 @@ class Repo {
     'minutes': minutes,
     'habitId': habitId,
   });
+
+  // ---- Rewards ----
+
+  List<Reward> get rewards =>
+      [
+        for (final MapEntry(:key, :value)
+            in store.table(Tables.rewards).entries)
+          Reward.fromFields(key, value),
+      ].where((r) => !r.deleted).toList()..sort(
+        (a, b) => a.order != b.order
+            ? a.order.compareTo(b.order)
+            : a.name.compareTo(b.name),
+      );
+
+  String addReward(String name, int cost) {
+    final id = store.newId();
+    final last = rewards.fold<double>(0, (m, r) => r.order > m ? r.order : m);
+    store.write(Tables.rewards, id, {
+      'name': name.trim(),
+      'cost': cost.clamp(1, Reward.maxCost),
+      'order': last + 1,
+    });
+    return id;
+  }
+
+  void updateReward(String id, String name, int cost) => store.write(
+    Tables.rewards,
+    id,
+    {'name': name.trim(), 'cost': cost.clamp(1, Reward.maxCost)},
+  );
+
+  void deleteReward(String id) =>
+      store.write(Tables.rewards, id, {deletedField: true});
+
+  /// Everything tomatoes were spent on, newest first.
+  List<RewardSpend> get rewardSpends => [
+    for (final MapEntry(:key, :value)
+        in store.table(Tables.rewardSpends).entries)
+      RewardSpend.fromFields(key, value),
+  ].where((s) => !s.deleted).toList()..sort((a, b) => b.at.compareTo(a.at));
+
+  /// Tomatoes left to spend today. Unspent ones reset at midnight.
+  int get tomatoesLeftToday =>
+      tomatoesToSpend(pomodorosToday, rewardSpends, dateKey(clock()));
+
+  /// Rewards today's tomatoes can pay for now, cheapest first.
+  List<Reward> get rewardsReady {
+    final left = tomatoesLeftToday;
+    return [
+      for (final r in rewards)
+        if (r.cost <= left) r,
+    ]..sort((a, b) => a.cost.compareTo(b.cost));
+  }
+
+  /// Spends today's tomatoes on [reward]. Does nothing if there aren't
+  /// enough.
+  void spendOn(Reward reward) {
+    if (tomatoesLeftToday < reward.cost) return;
+    store.write(Tables.rewardSpends, store.newId(), {
+      'rewardId': reward.id,
+      'name': reward.name,
+      'cost': reward.cost,
+      'day': dateKey(clock()),
+      'at': clock().toUtc().toIso8601String(),
+    });
+  }
+
+  /// Takes a spend back, so its tomatoes can be spent again (if it was
+  /// today).
+  void takeBack(RewardSpend spend) =>
+      store.write(Tables.rewardSpends, spend.id, {deletedField: true});
 }

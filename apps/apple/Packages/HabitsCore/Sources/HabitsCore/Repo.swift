@@ -324,4 +324,75 @@ public final class Repo {
             "habitId": habitId.map(JSONValue.string) ?? .null,
         ])
     }
+
+    /// Tomatoes earned today: one for each focus session finished today.
+    public var tomatoesToday: Int {
+        let today = self.today
+        return focusSessions.filter { Days.start($0.start) == today }.count
+    }
+
+    // MARK: Rewards
+
+    public var rewards: [Reward] {
+        store.table(Tables.rewards)
+            .map { Reward(id: $0.key, fields: $0.value) }
+            .filter { !$0.deleted }
+            .sorted { ($0.order, $0.name) < ($1.order, $1.name) }
+    }
+
+    @discardableResult
+    public func addReward(name: String, cost: Int) -> String {
+        let id = store.newId()
+        store.write(Tables.rewards, id, [
+            "name": .string(name.trimmingCharacters(in: .whitespacesAndNewlines)),
+            "cost": .int(min(Reward.maxCost, max(1, cost))),
+            "order": .double((rewards.map(\.order).max() ?? 0) + 1),
+        ])
+        return id
+    }
+
+    public func updateReward(_ id: String, name: String, cost: Int) {
+        store.write(Tables.rewards, id, [
+            "name": .string(name.trimmingCharacters(in: .whitespacesAndNewlines)),
+            "cost": .int(min(Reward.maxCost, max(1, cost))),
+        ])
+    }
+
+    public func deleteReward(_ id: String) {
+        store.write(Tables.rewards, id, [deletedField: true])
+    }
+
+    /// Everything tomatoes were spent on, newest first.
+    public var rewardSpends: [RewardSpend] {
+        store.table(Tables.rewardSpends)
+            .map { RewardSpend(id: $0.key, fields: $0.value) }
+            .filter { !$0.deleted }
+            .sorted { $0.at > $1.at }
+    }
+
+    public var tomatoesToSpend: Int {
+        HabitsCore.tomatoesToSpend(earnedToday: tomatoesToday, spends: rewardSpends, todayKey: Days.key(clock()))
+    }
+
+    /// Rewards today's tomatoes can pay for now, cheapest first.
+    public var rewardsReady: [Reward] {
+        let left = tomatoesToSpend
+        return rewards.filter { $0.cost <= left }.sorted { $0.cost < $1.cost }
+    }
+
+    /// Spends today's tomatoes on a reward. Does nothing if there aren't
+    /// enough.
+    public func spend(on reward: Reward) {
+        guard tomatoesToSpend >= reward.cost else { return }
+        store.write(Tables.rewardSpends, store.newId(), [
+            "rewardId": .string(reward.id), "name": .string(reward.name), "cost": .int(reward.cost),
+            "day": .string(Days.key(clock())), "at": .string(Timestamp.format(clock())),
+        ])
+    }
+
+    /// Takes a spend back, so its tomatoes can be spent again (if it was
+    /// today).
+    public func takeBack(_ spend: RewardSpend) {
+        store.write(Tables.rewardSpends, spend.id, [deletedField: true])
+    }
 }

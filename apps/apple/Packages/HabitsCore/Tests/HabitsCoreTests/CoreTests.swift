@@ -295,3 +295,52 @@ import Testing
 }
 
 func daysOffCases() throws -> [JSONValue] { try fixture("days_off.json")["cases"]!.array! }
+
+@MainActor
+@Suite struct Rewards {
+    @Test func rewardsReadTheirNameAndPrice() throws {
+        let f = try fixture("rewards.json")
+        for r in f["rewards"]!.array! {
+            let o = r.object!
+            let reward = Reward(id: o["id"]!.string!, fields: o["fields"]!.object!)
+            #expect(reward.cost == o["cost"]!.int, "\(reward.id)")
+            #expect(reward.name == o["fields"]!.object!["name"]!.string)
+        }
+    }
+
+    @Test(arguments: try fixture("rewards.json")["cases"]!.array!)
+    func tomatoesLeft(_ value: JSONValue) throws {
+        let c = value.object!
+        let today = try fixture("rewards.json")["today"]!.string!
+        let spends = c["spends"]!.array!.enumerated().map { RewardSpend(id: "s\($0.offset)", fields: $0.element.object!) }
+        #expect(tomatoesToSpend(earnedToday: c["earned"]!.int!, spends: spends, todayKey: today) == c["toSpend"]!.int,
+            "\(c["name"]!.string!)")
+    }
+
+    @Test func spendingAndTakingBack() throws {
+        let store = try LocalStore()
+        let now = Days.parse("2026-11-27")!.addingTimeInterval(15 * 3600)
+        let r = Repo(store: store, clock: { now })
+        let show = r.addReward(name: " An episode of a show ", cost: 4)
+        let reward = r.rewards.first { $0.id == show }!
+        #expect(reward.name == "An episode of a show")
+        for h in [9, 10, 11] { r.recordFocus(start: Days.parse("2026-11-27")!.addingTimeInterval(Double(h) * 3600), minutes: 25, habitId: nil) }
+        r.recordFocus(start: Days.parse("2026-11-26")!.addingTimeInterval(9 * 3600), minutes: 25, habitId: nil)
+        #expect(r.tomatoesToday == 3)  // yesterday's doesn't count
+        r.spend(on: reward)
+        #expect(r.rewardSpends.isEmpty)  // not enough yet
+        r.recordFocus(start: now, minutes: 25, habitId: nil)
+        let trip = r.addReward(name: "A day trip", cost: 20)
+        #expect(r.rewardsReady.map(\.id) == [show])  // the trip is too dear
+        _ = trip
+        r.spend(on: reward)
+        #expect(r.rewardsReady.isEmpty)
+        #expect(r.tomatoesToSpend == 0)
+        #expect(r.rewardSpends.first?.name == "An episode of a show")
+        // Renaming the reward doesn't change what was spent.
+        r.updateReward(show, name: "Two episodes", cost: 8)
+        #expect(r.rewardSpends.first?.cost == 4)
+        r.takeBack(r.rewardSpends[0])
+        #expect(r.tomatoesToSpend == 4)
+    }
+}

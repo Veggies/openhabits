@@ -7,6 +7,10 @@ public enum Tables {
     public static let focusSessions = "focus_sessions"
     public static let scorecard = "scorecard"
     public static let reviews = "reviews"
+    /// Things you enjoy, each with a price in tomatoes (`Reward`).
+    public static let rewards = "rewards"
+    /// Tomatoes spent on a reward (`RewardSpend`).
+    public static let rewardSpends = "reward_spends"
     /// One row, `Prefs.rowId`: preferences that follow you to every device.
     public static let prefs = "prefs"
 }
@@ -338,4 +342,64 @@ public struct FocusSession: Identifiable, Sendable, Hashable {
         minutes = f["minutes"]?.int ?? 0
         deleted = isDeleted(f)
     }
+}
+
+/// Something you enjoy, bought with the day's tomatoes: "An episode of a
+/// show" for 4.
+public struct Reward: Identifiable, Sendable, Hashable {
+    public let id: String
+    public let name: String
+    /// The price in tomatoes, at least 1.
+    public let cost: Int
+    public let order: Double
+    public let deleted: Bool
+
+    /// The most a reward can cost: more than a long day's worth of sessions.
+    public static let maxCost = 20
+
+    public init(id: String, fields f: Fields) {
+        self.id = id
+        name = text(f["name"])
+        cost = rewardCost(f["cost"])
+        order = f["order"]?.number ?? 0
+        deleted = isDeleted(f)
+    }
+}
+
+private func rewardCost(_ v: JSONValue?) -> Int {
+    guard let n = v?.number else { return 1 }
+    return min(Reward.maxCost, max(1, Int(n.rounded())))
+}
+
+/// Tomatoes spent on a reward. The reward's name and price are kept as they
+/// were, so renaming or deleting the reward later doesn't change the past.
+/// Taking it back deletes the row.
+public struct RewardSpend: Identifiable, Sendable, Hashable {
+    public let id: String
+    public let rewardId: String?
+    public let name: String
+    public let cost: Int
+    /// The day the tomatoes were spent (`Days.key`).
+    public let day: String
+    public let at: Date
+    public let deleted: Bool
+
+    public init(id: String, fields f: Fields) {
+        self.id = id
+        rewardId = f["rewardId"]?.string
+        name = text(f["name"])
+        cost = rewardCost(f["cost"])
+        day = text(f["day"])
+        at = f["at"]?.string.flatMap(Timestamp.parse) ?? Date(timeIntervalSince1970: 946_684_800)
+        deleted = isDeleted(f)
+    }
+}
+
+/// The tomatoes left to spend today: those earned today (focus sessions
+/// finished today), less what was spent today. Tomatoes only count on the
+/// day they're earned, so whatever isn't spent resets at midnight. Never
+/// below zero, even if two devices spent the same tomatoes before syncing.
+public func tomatoesToSpend(earnedToday: Int, spends: [RewardSpend], todayKey: String) -> Int {
+    let spent = spends.filter { !$0.deleted && $0.day == todayKey }.reduce(0) { $0 + $1.cost }
+    return max(0, earnedToday - spent)
 }

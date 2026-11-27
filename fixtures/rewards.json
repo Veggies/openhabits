@@ -1,0 +1,38 @@
+{
+  "about": "Spending the day's tomatoes on rewards. Rows are stored fields, as they sync. 'toSpend' is what's left today: tomatoes earned today, less what was spent today. Tomatoes only count on the day they're earned.",
+  "today": "2026-11-27",
+  "rewards": [
+    {"id": "show", "fields": {"name": "An episode of a show", "cost": 4}, "cost": 4},
+    {"id": "free", "fields": {"name": "No price yet"}, "cost": 1},
+    {"id": "huge", "fields": {"name": "A day trip", "cost": 99}, "cost": 20},
+    {"id": "odd", "fields": {"name": "Odd price", "cost": 2.6}, "cost": 3},
+    {"id": "zero", "fields": {"name": "Free", "cost": 0}, "cost": 1}
+  ],
+  "cases": [
+    {"name": "nothing spent yet", "earned": 5, "spends": [], "toSpend": 5},
+    {
+      "name": "spent today",
+      "earned": 5,
+      "spends": [{"day": "2026-11-27", "cost": 4}],
+      "toSpend": 1
+    },
+    {
+      "name": "yesterday's spending doesn't count today",
+      "earned": 3,
+      "spends": [{"day": "2026-11-26", "cost": 6}],
+      "toSpend": 3
+    },
+    {
+      "name": "a spend that was taken back",
+      "earned": 3,
+      "spends": [{"day": "2026-11-27", "cost": 3, "_deleted": true}],
+      "toSpend": 3
+    },
+    {
+      "name": "never below zero",
+      "earned": 4,
+      "spends": [{"day": "2026-11-27", "cost": 4}, {"day": "2026-11-27", "cost": 4}],
+      "toSpend": 0
+    }
+  ]
+}

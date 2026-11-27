@@ -9,6 +9,12 @@ abstract final class Tables {
   static const scorecard = 'scorecard';
   static const reviews = 'reviews';
 
+  /// Things you enjoy, each with a price in tomatoes ([Reward]).
+  static const rewards = 'rewards';
+
+  /// Tomatoes spent on a reward ([RewardSpend]).
+  static const rewardSpends = 'reward_spends';
+
   /// Per-person preferences that follow you to every device. One row,
   /// [Prefs.rowId].
   static const prefs = 'prefs';
@@ -397,4 +403,66 @@ class FocusSession {
       start = _dateTime(f['start'])?.toLocal() ?? DateTime(2000),
       minutes = f['minutes'] as int? ?? 0,
       deleted = _deleted(f);
+}
+
+/// Something you enjoy, bought with the day's tomatoes: "An episode of a
+/// show" for 4.
+class Reward {
+  final String id;
+  final String name;
+
+  /// The price in tomatoes, at least 1.
+  final int cost;
+  final double order;
+  final bool deleted;
+
+  Reward.fromFields(this.id, Fields f)
+    : name = _text(f['name']),
+      cost = _cost(f['cost']),
+      order = (f['order'] as num?)?.toDouble() ?? 0,
+      deleted = _deleted(f);
+
+  /// The most a reward can cost: more than a long day's worth of sessions.
+  static const maxCost = 20;
+}
+
+int _cost(Object? v) => v is num ? v.round().clamp(1, Reward.maxCost) : 1;
+
+/// Tomatoes spent on a reward. The reward's name and price are kept as they
+/// were, so renaming or deleting the reward later doesn't change the past.
+/// Taking it back deletes the row.
+class RewardSpend {
+  final String id;
+  final String? rewardId;
+  final String name;
+  final int cost;
+
+  /// The day the tomatoes were spent ([dateKey]).
+  final String day;
+  final DateTime at;
+  final bool deleted;
+
+  RewardSpend.fromFields(this.id, Fields f)
+    : rewardId = f['rewardId'] as String?,
+      name = _text(f['name']),
+      cost = _cost(f['cost']),
+      day = _text(f['day']),
+      at = _dateTime(f['at'])?.toLocal() ?? DateTime(2000),
+      deleted = _deleted(f);
+}
+
+/// The tomatoes left to spend today: those [earnedToday] (focus sessions
+/// finished today), less what was spent today. Tomatoes only count on the
+/// day they're earned, so whatever isn't spent resets at midnight. Never
+/// below zero, even if two devices spent the same tomatoes before syncing.
+int tomatoesToSpend(
+  int earnedToday,
+  Iterable<RewardSpend> spends,
+  String todayKey,
+) {
+  var spent = 0;
+  for (final s in spends) {
+    if (!s.deleted && s.day == todayKey) spent += s.cost;
+  }
+  return earnedToday - spent < 0 ? 0 : earnedToday - spent;
 }

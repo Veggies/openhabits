@@ -139,4 +139,29 @@ void main() {
       });
     }
   });
+
+  group('rewards (fixtures/rewards.json)', () {
+    final f = jsonDecode(
+      File('../../fixtures/rewards.json').readAsStringSync(),
+    ) as Map;
+    test('rewards read their name and price', () {
+      for (final r in (f['rewards'] as List).cast<Map>()) {
+        final reward = Reward.fromFields(r['id'], (r['fields'] as Map).cast());
+        expect(reward.cost, r['cost'], reason: r['id']);
+        expect(reward.name, (r['fields'] as Map)['name']);
+      }
+    });
+    for (final c in (f['cases'] as List).cast<Map>()) {
+      test(c['name'], () {
+        final spends = [
+          for (final (i, s) in (c['spends'] as List).indexed)
+            RewardSpend.fromFields('s$i', (s as Map).cast()),
+        ];
+        expect(
+          tomatoesToSpend(c['earned'] as int, spends, f['today'] as String),
+          c['toSpend'],
+        );
+      });
+    }
+  });
 }

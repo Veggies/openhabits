@@ -223,6 +223,7 @@ struct FocusMenu: View {
         VStack(spacing: 18) {
             TimerPanel(focus: app.focus, compact: true)
             TomatoRow()
+            ReadyRewards()
         }
         .padding(20)
         .frame(width: 340)
@@ -299,6 +300,34 @@ private struct PanelWatcher: NSViewRepresentable {
                 $0.isVisible && $0.className.contains("StatusBarWindow")
                     && $0.frame.midY > screen.visibleFrame.maxY - 1 && screen.frame.intersects($0.frame)
             }?.frame
+        }
+    }
+}
+/// In the menu bar panel: rewards today's tomatoes can pay for, to enjoy
+/// right after a session ends. Nothing shows until one is affordable;
+/// setting rewards up is on the Focus tab.
+private struct ReadyRewards: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        let repo = app.repo
+        let ready = repo.rewardsReady
+        if !ready.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Ready to enjoy · 🍅 \(repo.tomatoesToSpend) to spend")
+                    .font(.subheadline.weight(.semibold))
+                ForEach(ready.prefix(3)) { reward in
+                    HStack {
+                        Text(reward.name).lineLimit(1)
+                        Text("\(reward.cost) 🍅").font(.caption).foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Enjoy") { withAnimation(.snappy) { repo.spend(on: reward) } }
+                            .buttonStyle(.glassProminent)
+                            .controlSize(.small)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
