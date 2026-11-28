@@ -8,6 +8,7 @@ struct HabitsView: View {
     @State private var editing: EditorTarget?
     @State private var checkIns: CheckInQueue?
     @State private var confirmingDelete: Habit?
+    @State private var editingTask: TaskDraft?
 
     var body: some View {
         @Bindable var app = app
@@ -20,6 +21,7 @@ struct HabitsView: View {
         let notToday = habits.filter { !$0.isQuit && !$0.isScheduled(repo.today) }
         let due = habits.filter { repo.sizeSuggestion($0) != nil }
         let ready = repo.rewardsReady
+        let tasks = repo.tasksForToday
         // This calendar week, starting on the day chosen in Settings. Days
         // still to come show faintly until they arrive.
         let weekStart = Days.startOfWeek(repo.today, firstDay: repo.weekStart)
@@ -95,6 +97,7 @@ struct HabitsView: View {
                     }
                     habitSection(breaking.isEmpty && notToday.isEmpty ? nil : "Building", building, days)
                     habitSection(building.isEmpty && notToday.isEmpty ? nil : "Breaking", breaking, days)
+                    taskSection(tasks)
                     habitSection("Not Today", notToday, days)
                 }
                 .groupedList()
@@ -110,11 +113,21 @@ struct HabitsView: View {
         .navigationDestination(for: String.self) { HabitDetailView(habitId: $0) }
         #if os(iOS)
         .toolbar {
+            if isPhone {
+                ToolbarItem(placement: .topBarLeading) {
+                    NavigationLink {
+                        SettingsView()
+                    } label: {
+                        Label("Settings", systemImage: "gearshape")
+                    }
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button("New Habit", systemImage: "plus") { editing = .new }
             }
         }
         #endif
+        .sheet(item: $editingTask) { TaskEditor(draft: $0) }
         .sheet(item: $editing) { target in
             HabitEditor(existing: target.habit)
         }
@@ -167,6 +180,25 @@ struct HabitsView: View {
             HabitRow(habit: habit, days: days)
         }
         #endif
+    }
+
+    /// Tasks due today or overdue, and the ones you've ticked off today, so
+    /// the whole day is in one place.
+    @ViewBuilder
+    private func taskSection(_ tasks: [TaskItem]) -> some View {
+        if !tasks.isEmpty {
+            Section {
+                #if os(macOS)
+                Text("Tasks").font(.headline).foregroundStyle(.secondary)
+                    .listRowSeparator(.hidden)
+                #endif
+                ForEach(tasks) { TaskRow(task: $0, editing: $editingTask) }
+            } header: {
+                #if os(iOS)
+                Text("Tasks")
+                #endif
+            }
+        }
     }
 
     @ViewBuilder

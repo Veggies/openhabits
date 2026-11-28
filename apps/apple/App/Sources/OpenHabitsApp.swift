@@ -44,7 +44,7 @@ struct OpenHabitsApp: App {
 
 /// The screens in the main navigation.
 enum AppTab: Hashable {
-    case habits, progress, reflect, focus, settings
+    case habits, tasks, progress, reflect, focus, settings
 }
 
 /// Everything the screens share: the data, sync, the focus timer, and a few

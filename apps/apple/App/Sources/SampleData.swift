@@ -5,8 +5,8 @@ import SwiftUI
 /// For trying the app out during development. Launch with
 /// `-sampleData YES` to start from a fresh, separate database of sample
 /// habits (see AppModel.init) and skip
-/// setup, and `-startTab progress` (habits, progress, reflect, focus,
-/// settings) to open on a tab. On the habits tab, `-openScreen checkIn`
+/// setup, and `-startTab progress` (habits, tasks, progress, reflect,
+/// focus, settings) to open on a tab. On the habits tab, `-openScreen checkIn`
 /// or `-openScreen editor` opens that sheet. Not part of release builds.
 extension AppModel {
     func applyDebugLaunchOptions() {
@@ -28,6 +28,7 @@ extension AppModel {
             }
         }
         switch defaults.string(forKey: "startTab") {
+        case "tasks": macTab = .tasks
         case "progress": macTab = .progress
         case "reflect": macTab = .reflect
         case "focus": macTab = .focus
@@ -35,6 +36,7 @@ extension AppModel {
         }
         #endif
         switch defaults.string(forKey: "startTab") {
+        case "tasks": tab = .tasks
         case "progress": tab = .progress
         case "reflect": tab = .reflect
         case "focus": tab = .focus
@@ -91,6 +93,13 @@ extension AppModel {
             repo.recordFocus(start: Days.add(now, -d).addingTimeInterval(-3600), minutes: 25,
                 habitId: d % 2 == 0 ? repo.habits.first?.id : nil)
         }
+        repo.addTask(title: "Pay the rent", due: today, important: true, urgent: true)
+        repo.addTask(title: "Return the library book", due: Days.add(today, -2), urgent: true)
+        repo.addTask(title: "Renew the passport", due: Days.add(today, 6), important: true)
+        repo.addTask(title: "Call the dentist", due: Days.add(today, 1))
+        repo.addTask(title: "Learn to juggle")
+        let done = repo.addTask(title: "Book the flights", important: true)
+        repo.setTaskDone(done, true)
     }
 }
 #endif

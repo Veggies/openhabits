@@ -366,4 +366,84 @@ class Repo {
   /// today).
   void takeBack(RewardSpend spend) =>
       store.write(Tables.rewardSpends, spend.id, {deletedField: true});
+
+  // ---- Tasks ----
+
+  /// Every task that hasn't been deleted, in list order: important ones
+  /// first, then urgent ones, then by due date (no date last), then oldest
+  /// first. Done tasks come last, newest first.
+  List<TaskItem> get tasks => [
+    for (final MapEntry(:key, :value) in store.table(Tables.tasks).entries)
+      TaskItem.fromFields(key, value),
+  ].where((t) => !t.deleted).toList()..sort(_taskOrder);
+
+  static int _taskOrder(TaskItem a, TaskItem b) {
+    if (a.done != b.done) return a.done ? 1 : -1;
+    if (a.done) return (b.doneAt ?? b.created).compareTo(a.doneAt ?? a.created);
+    if (a.important != b.important) return a.important ? -1 : 1;
+    if (a.urgent != b.urgent) return a.urgent ? -1 : 1;
+    if (a.due != b.due) return (a.due ?? '9999').compareTo(b.due ?? '9999');
+    final c = a.created.compareTo(b.created);
+    return c != 0 ? c : a.id.compareTo(b.id);
+  }
+
+  DateTime get today => dateOnly(clock());
+
+  List<TaskItem> tasksIn(TaskGroup group) {
+    final day = today;
+    return tasks.where((t) => taskGroup(t, day) == group).toList();
+  }
+
+  /// Unfinished tasks in one box of the matrix.
+  List<TaskItem> tasksInBox(TaskQuadrant box) =>
+      tasks.where((t) => !t.done && taskQuadrant(t) == box).toList();
+
+  /// Unfinished tasks due today or overdue, plus the ones ticked off today,
+  /// for the Habits tab's Today list.
+  List<TaskItem> get tasksForToday {
+    final day = today;
+    return tasks.where((t) {
+      if (t.done) return t.doneAt != null && dateOnly(t.doneAt!) == day;
+      return taskGroup(t, day) == TaskGroup.today;
+    }).toList();
+  }
+
+  String addTask(
+    String title, {
+    DateTime? due,
+    bool important = false,
+    bool urgent = false,
+  }) {
+    final id = store.newId();
+    store.write(Tables.tasks, id, {
+      'title': title.trim(),
+      'due': due == null ? null : dateKey(due),
+      'important': important,
+      'urgent': urgent,
+      'done': false,
+      'created': clock().toUtc().toIso8601String(),
+    });
+    return id;
+  }
+
+  void updateTask(
+    String id, {
+    required String title,
+    required DateTime? due,
+    required bool important,
+    required bool urgent,
+  }) => store.write(Tables.tasks, id, {
+    'title': title.trim(),
+    'due': due == null ? null : dateKey(due),
+    'important': important,
+    'urgent': urgent,
+  });
+
+  void setTaskDone(String id, bool done) => store.write(Tables.tasks, id, {
+    'done': done,
+    'doneAt': done ? clock().toUtc().toIso8601String() : null,
+  });
+
+  void deleteTask(String id) =>
+      store.write(Tables.tasks, id, {deletedField: true});
 }

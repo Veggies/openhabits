@@ -4,7 +4,7 @@ import SwiftUI
 
 /// The Mac window's tabs, shown in the toolbar.
 enum MacTab: Hashable {
-    case today, progress, reflect, focus
+    case today, tasks, progress, reflect, focus
 }
 
 /// The Mac window: tabs in the toolbar, the same ones as on iPhone. The
@@ -57,6 +57,7 @@ struct MacMainView: View {
             }
             .animation(.smooth(duration: 0.32), value: app.previewHabit)
             .onExitCommand { closePreview() }
+        case .tasks: NavigationStack { TasksView() }
         case .progress: NavigationStack { ProgressScreen() }
         case .reflect: NavigationStack { ReflectView() }
         case .focus: NavigationStack { FocusView() }
@@ -64,7 +65,7 @@ struct MacMainView: View {
     }
 
     private let tabs: [(tab: MacTab, title: String)] = [
-        (.today, "Today"), (.progress, "Progress"), (.reflect, "Reflect"), (.focus, "Focus"),
+        (.today, "Today"), (.tasks, "Tasks"), (.progress, "Progress"), (.reflect, "Reflect"), (.focus, "Focus"),
     ]
 
     var body: some View {
