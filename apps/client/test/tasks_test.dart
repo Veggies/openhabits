@@ -70,7 +70,7 @@ void main() {
 
       // Added quickly, it has no date or marks.
       await tester.enterText(
-        find.widgetWithText(TextField, 'Add a task'),
+        find.widgetWithText(TextField, 'New task'),
         'Learn to juggle',
       );
       await tester.testTextInput.receiveAction(TextInputAction.done);
@@ -94,7 +94,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Save'));
       await tester.pumpAndSettle();
-      expect(find.text('Due today'), findsOneWidget);
+      expect(find.text('TODAY'), findsOneWidget);
 
       await tester.tap(find.text('Matrix'));
       await tester.pumpAndSettle();

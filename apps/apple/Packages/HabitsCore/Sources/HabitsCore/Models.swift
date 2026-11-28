@@ -472,15 +472,16 @@ public func taskGroup(_ t: TaskItem, today: Date) -> TaskGroup {
     return days <= 0 ? .today : .upcoming
 }
 
-/// How a task's due date reads in a list: "Overdue", "Due today", "Due
-/// tomorrow", "Due in 3 days". Nil if it has no date or is done.
+/// How a task's due date reads in a list when it's close: "Overdue",
+/// "Today" or "Tomorrow". Nil if it's further off (screens show the date
+/// instead), has no date or is done.
 public func dueLabel(_ t: TaskItem, today: Date) -> String? {
     guard !t.done, let days = t.daysUntilDue(today: today) else { return nil }
     switch days {
     case ..<0: return "Overdue"
-    case 0: return "Due today"
-    case 1: return "Due tomorrow"
-    default: return "Due in \(days) days"
+    case 0: return "Today"
+    case 1: return "Tomorrow"
+    default: return nil
     }
 }
 
@@ -492,9 +493,9 @@ public enum TaskQuadrant: Sendable, CaseIterable {
     public var label: String {
         switch self {
         case .doNow: "Do it now"
-        case .plan: "Plan a time for it"
-        case .keepQuick: "Get it done quickly"
-        case .letGo: "Maybe let it go"
+        case .plan: "Plan it"
+        case .keepQuick: "Do it quickly"
+        case .letGo: "Let it go"
         }
     }
 

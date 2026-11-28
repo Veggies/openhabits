@@ -192,7 +192,7 @@ struct HabitsView: View {
                 Text("Tasks").font(.headline).foregroundStyle(.secondary)
                     .listRowSeparator(.hidden)
                 #endif
-                ForEach(tasks) { TaskRow(task: $0, editing: $editingTask) }
+                ForEach(tasks) { TaskRow(task: $0, editing: $editingTask, inToday: true) }
             } header: {
                 #if os(iOS)
                 Text("Tasks")

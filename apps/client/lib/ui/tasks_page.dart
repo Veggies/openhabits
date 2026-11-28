@@ -5,8 +5,8 @@ import '../data/repo.dart';
 import 'common.dart';
 
 /// The Tasks tab: one-off to-dos, listed as Today (with anything overdue),
-/// Upcoming, Someday and Done, or sorted into the four boxes of the
-/// Eisenhower matrix. Matches the Apple app's TasksView.
+/// Upcoming and Someday, or sorted into the four boxes of the Eisenhower
+/// matrix. Matches the Apple app's TasksView.
 class TasksPage extends StatefulWidget {
   const TasksPage({super.key});
 
@@ -31,53 +31,59 @@ class _TasksPageState extends State<TasksPage> {
       onSelectionChanged: (s) => setState(() => _matrix = s.first),
     );
     return Scaffold(
-      appBar: wide ? null : AppBar(title: const Text('Tasks')),
-      floatingActionButton: wide
+      appBar: wide
           ? null
-          : FloatingActionButton.extended(
-              heroTag: null,
-              icon: const Icon(Icons.add),
-              label: const Text('New task'),
-              onPressed: () => editTask(context),
+          : AppBar(
+              title: picker,
+              centerTitle: true,
+              actions: [
+                IconButton(
+                  tooltip: 'New task',
+                  icon: const Icon(Icons.add),
+                  onPressed: () => editTask(context),
+                ),
+              ],
             ),
-      body: DataBuilder(
-        builder: (context, repo) => CenteredListView(
-          maxWidth: _matrix ? 1000 : 760,
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
-          children: [
-            if (wide)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(4, 12, 4, 16),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Tasks',
-                        style: theme.textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (wide)
+            Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: _matrix ? 1100 : 760),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Tasks',
+                          style: theme.textTheme.headlineMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
-                    ),
-                    FilledButton.icon(
-                      icon: const Icon(Icons.add),
-                      label: const Text('New task'),
-                      onPressed: () => editTask(context),
-                    ),
-                  ],
+                      picker,
+                      const SizedBox(width: 12),
+                      FilledButton.icon(
+                        icon: const Icon(Icons.add),
+                        label: const Text('New task'),
+                        onPressed: () => editTask(context),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            picker,
-            const SizedBox(height: 12),
-            if (_matrix) const _Matrix() else const _TaskList(),
-          ],
-        ),
+            ),
+          Expanded(child: _matrix ? const _Matrix() : const _TaskList()),
+        ],
       ),
     );
   }
 }
 
-/// Today, Upcoming, Someday and Done, with a box at the top to add a task
-/// quickly. Done tasks stay hidden until you ask to see them.
+/// Today, Upcoming and Someday, like a list in a reminders app: a row to
+/// add a task straight away, and finished tasks out of sight until you ask.
 class _TaskList extends StatefulWidget {
   const _TaskList();
 
@@ -87,11 +93,13 @@ class _TaskList extends StatefulWidget {
 
 class _TaskListState extends State<_TaskList> {
   final _add = TextEditingController();
+  final _addFocus = FocusNode();
   bool _showDone = false;
 
   @override
   void dispose() {
     _add.dispose();
+    _addFocus.dispose();
     super.dispose();
   }
 
@@ -99,6 +107,7 @@ class _TaskListState extends State<_TaskList> {
     if (text.trim().isEmpty) return;
     AppScope.read(context).repo.addTask(text);
     _add.clear();
+    _addFocus.requestFocus(); // ready for the next one
   }
 
   // Rebuilds on every data change; a const instance would otherwise never
@@ -110,24 +119,44 @@ class _TaskListState extends State<_TaskList> {
   Widget _build(BuildContext context, Repo repo) {
     final theme = Theme.of(context);
     final done = repo.tasksIn(TaskGroup.done);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return CenteredListView(
+      maxWidth: 760,
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 48),
       children: [
-        TextField(
-          controller: _add,
-          decoration: const InputDecoration(
-            hintText: 'Add a task',
-            prefixIcon: Icon(Icons.add),
-            border: OutlineInputBorder(),
+        Card(
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 48,
+                  child: Icon(
+                    Icons.add_circle,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+                Expanded(
+                  child: TextField(
+                    controller: _add,
+                    focusNode: _addFocus,
+                    decoration: const InputDecoration(
+                      hintText: 'New task',
+                      border: InputBorder.none,
+                    ),
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: _submit,
+                  ),
+                ),
+              ],
+            ),
           ),
-          textInputAction: TextInputAction.done,
-          onSubmitted: _submit,
         ),
         if (repo.tasks.isEmpty)
           Padding(
-            padding: const EdgeInsets.fromLTRB(8, 12, 8, 0),
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
             child: Text(
-              'Write down anything you need to do once, like renewing your '
+              'Add anything you need to do once, like renewing your '
               'passport. Tap a task to give it a due date, or to mark it as '
               'important or urgent.',
               style: TextStyle(color: theme.colorScheme.outline),
@@ -139,33 +168,50 @@ class _TaskListState extends State<_TaskList> {
           TaskGroup.someday,
         ])
           if (repo.tasksIn(group) case final tasks when tasks.isNotEmpty)
-            TaskSection(title: group.label, tasks: tasks),
+            TaskSection(
+              title: group.label,
+              tasks: tasks,
+              inToday: group == TaskGroup.today,
+            ),
         if (done.isNotEmpty) ...[
-          TaskSection(
-            title: 'Done',
-            tasks: _showDone ? done : const [],
-            trailing: TextButton(
-              onPressed: () => setState(() => _showDone = !_showDone),
-              child: Text(_showDone ? 'Hide' : 'Show ${done.length}'),
+          const SizedBox(height: 16),
+          Card(
+            margin: EdgeInsets.zero,
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_showDone)
+                  for (final t in done) ...[
+                    TaskTile(task: t),
+                    const Divider(height: 1, indent: 56),
+                  ],
+                ListTile(
+                  title: Text(
+                    _showDone
+                        ? 'Hide finished tasks'
+                        : 'Show finished tasks (${done.length})',
+                    style: TextStyle(color: theme.colorScheme.primary),
+                  ),
+                  onTap: () => setState(() => _showDone = !_showDone),
+                ),
+                if (_showDone)
+                  ListTile(
+                    title: Text(
+                      'Delete finished tasks',
+                      style: TextStyle(color: theme.colorScheme.error),
+                    ),
+                    onTap: () async {
+                      if (await _confirmClear(context, done.length)) {
+                        for (final t in done) {
+                          repo.deleteTask(t.id);
+                        }
+                      }
+                    },
+                  ),
+              ],
             ),
           ),
-          if (_showDone)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton(
-                style: TextButton.styleFrom(
-                  foregroundColor: theme.colorScheme.error,
-                ),
-                onPressed: () async {
-                  if (await _confirmClear(context, done.length)) {
-                    for (final t in done) {
-                      repo.deleteTask(t.id);
-                    }
-                  }
-                },
-                child: const Text('Delete finished tasks'),
-              ),
-            ),
         ],
       ],
     );
@@ -200,12 +246,14 @@ class _TaskListState extends State<_TaskList> {
 class TaskSection extends StatelessWidget {
   final String title;
   final List<TaskItem> tasks;
-  final Widget? trailing;
+
+  /// A list of today's tasks, so "Today" goes without saying on each one.
+  final bool inToday;
   const TaskSection({
     super.key,
     required this.title,
     required this.tasks,
-    this.trailing,
+    this.inToday = false,
   });
 
   @override
@@ -216,91 +264,121 @@ class TaskSection extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(8, 16, 0, 6),
-          child: Row(
+          child: Text(
+            title.toUpperCase(),
+            style: theme.textTheme.labelLarge?.copyWith(
+              color: theme.colorScheme.outline,
+            ),
+          ),
+        ),
+        Card(
+          margin: EdgeInsets.zero,
+          clipBehavior: Clip.antiAlias,
+          child: Column(
             children: [
-              Expanded(
-                child: Text(
-                  title.toUpperCase(),
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: theme.colorScheme.outline,
-                  ),
-                ),
-              ),
-              ?trailing,
+              for (final (i, t) in tasks.indexed) ...[
+                if (i > 0) const Divider(height: 1, indent: 56),
+                TaskTile(task: t, inToday: inToday),
+              ],
             ],
           ),
         ),
-        if (tasks.isNotEmpty)
-          Card(
-            margin: EdgeInsets.zero,
-            clipBehavior: Clip.antiAlias,
-            child: Column(
-              children: [
-                for (final (i, t) in tasks.indexed) ...[
-                  if (i > 0) const Divider(height: 1, indent: 56),
-                  TaskTile(task: t),
-                ],
-              ],
-            ),
-          ),
       ],
     );
   }
 }
 
-/// The four boxes of the matrix, two across when there's room. Each box's
-/// plus button adds a task already marked to go in it.
+/// The Eisenhower matrix as a 2×2 grid that fills the page: urgent on the
+/// left, important on top, so "Do it now" is the top-left box.
 class _Matrix extends StatelessWidget {
   const _Matrix();
 
   @override
-  Widget build(BuildContext context) =>
-      DataBuilder(builder: (context, _) => LayoutBuilder(builder: _layout));
-
-  Widget _layout(BuildContext context, BoxConstraints c) {
-    final boxes = [for (final b in TaskQuadrant.values) _Box(box: b)];
-    if (c.maxWidth < 640) {
-      return Column(
+  Widget build(BuildContext context) {
+    const gap = SizedBox.square(dimension: 10);
+    Widget row(String label, TaskQuadrant a, TaskQuadrant b) => Expanded(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final b in boxes)
-            Padding(padding: const EdgeInsets.only(bottom: 12), child: b),
-        ],
-      );
-    }
-    return Column(
-      children: [
-        for (var i = 0; i < boxes.length; i += 2)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(child: boxes[i]),
-                  const SizedBox(width: 12),
-                  Expanded(child: boxes[i + 1]),
-                ],
-              ),
+          SizedBox(
+            width: 20,
+            child: Center(
+              child: RotatedBox(quarterTurns: 3, child: _AxisLabel(label)),
             ),
           ),
-      ],
+          Expanded(child: _Box(box: a)),
+          gap,
+          Expanded(child: _Box(box: b)),
+        ],
+      ),
+    );
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1100),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 4, 12, 12),
+          child: DataBuilder(
+            builder: (context, _) => Column(
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    children: [
+                      SizedBox(width: 20),
+                      Expanded(child: Center(child: _AxisLabel('Urgent'))),
+                      gap,
+                      Expanded(child: Center(child: _AxisLabel('Not urgent'))),
+                    ],
+                  ),
+                ),
+                row('Important', TaskQuadrant.doNow, TaskQuadrant.plan),
+                gap,
+                row(
+                  'Not important',
+                  TaskQuadrant.keepQuick,
+                  TaskQuadrant.letGo,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
 
-extension on TaskQuadrant {
+class _AxisLabel extends StatelessWidget {
+  final String text;
+  const _AxisLabel(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Text(
+      text.toUpperCase(),
+      maxLines: 1,
+      style: theme.textTheme.labelSmall?.copyWith(
+        color: theme.colorScheme.outline,
+        letterSpacing: 0.6,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+  }
+}
+
+extension TaskQuadrantLook on TaskQuadrant {
   Color get color => switch (this) {
     TaskQuadrant.doNow => Colors.red,
     TaskQuadrant.plan => Colors.blue,
     TaskQuadrant.keepQuick => Colors.orange,
-    TaskQuadrant.letGo => Colors.blueGrey,
+    TaskQuadrant.letGo => Colors.grey,
   };
 
   IconData get icon => switch (this) {
-    TaskQuadrant.doNow => Icons.local_fire_department_outlined,
-    TaskQuadrant.plan => Icons.calendar_today_outlined,
-    TaskQuadrant.keepQuick => Icons.bolt_outlined,
-    TaskQuadrant.letGo => Icons.eco_outlined,
+    TaskQuadrant.doNow => Icons.local_fire_department,
+    TaskQuadrant.plan => Icons.calendar_today,
+    TaskQuadrant.keepQuick => Icons.bolt,
+    TaskQuadrant.letGo => Icons.eco,
   };
 }
 
@@ -312,32 +390,50 @@ class _Box extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tasks = AppScope.of(context).repo.tasksInBox(box);
+    final color = box.color;
     // A Material, so the task rows' ink shows on the tinted box.
     return Material(
       color: Color.alphaBlend(
-        box.color.withValues(alpha: 0.08),
+        color.withValues(alpha: 0.08),
         theme.colorScheme.surface,
       ),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: box.color.withValues(alpha: 0.25)),
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: color.withValues(alpha: 0.2)),
       ),
       clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 8, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 0, 0),
+            child: Row(
               children: [
-                Icon(box.icon, color: box.color, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(box.label, style: theme.textTheme.titleMedium),
+                Icon(box.icon, color: color, size: 18),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    box.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: color,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
+                if (tasks.isNotEmpty) ...[
+                  const SizedBox(width: 6),
+                  Text(
+                    '${tasks.length}',
+                    style: TextStyle(color: color.withValues(alpha: 0.7)),
+                  ),
+                ],
+                const Spacer(),
                 IconButton(
                   tooltip: 'New task in ${box.label}',
-                  icon: const Icon(Icons.add),
+                  color: color,
+                  icon: const Icon(Icons.add, size: 20),
                   onPressed: () => editTask(
                     context,
                     important:
@@ -349,68 +445,93 @@ class _Box extends StatelessWidget {
                 ),
               ],
             ),
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Text(
-                box.hint,
-                style: TextStyle(color: theme.colorScheme.outline),
-              ),
-            ),
-            const SizedBox(height: 4),
-            if (tasks.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Text(
-                  'Nothing here right now.',
-                  style: TextStyle(
-                    color: theme.colorScheme.outline.withValues(alpha: 0.7),
+          ),
+          Expanded(
+            child: tasks.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                    child: Text(
+                      box.hint,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.outline,
+                      ),
+                    ),
+                  )
+                : ListView(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    children: [
+                      for (final t in tasks) TaskTile(task: t, dense: true),
+                    ],
                   ),
-                ),
-              )
-            else
-              for (final t in tasks) TaskTile(task: t, dense: true),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
-/// A task with a circle to tick it off. Tapping the rest opens it to edit;
-/// a long press or right-click marks it important or urgent, or deletes it.
+/// "Overdue", "Today", "Tomorrow", or the date ("Fri, Dec 4"), and whether
+/// it's overdue. Null if the task has no date or is done, or (with
+/// [hidingToday]) if it's due today, where that goes without saying.
+({String text, bool overdue})? dueText(
+  TaskItem t,
+  DateTime today, {
+  bool hidingToday = false,
+}) {
+  final days = t.daysUntilDue(today);
+  if (t.done || days == null) return null;
+  if (days == 0 && hidingToday) return null;
+  final label = dueLabel(t, today);
+  if (label != null) return (text: label, overdue: days < 0);
+  final d = tryParseDateKey(t.due!)!;
+  return (text: '${weekdayShort(d.weekday)}, ${shortDate(d)}', overdue: false);
+}
+
+/// A task with a circle to tick it off, colored by its box in the matrix
+/// so you can tell what matters at a glance. Tapping the rest opens it to
+/// edit; a long press or right-click marks it important or urgent, or
+/// deletes it.
 class TaskTile extends StatelessWidget {
   final TaskItem task;
   final bool dense;
-  const TaskTile({super.key, required this.task, this.dense = false});
+  final bool inToday;
+  const TaskTile({
+    super.key,
+    required this.task,
+    this.dense = false,
+    this.inToday = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     final repo = AppScope.of(context).repo;
     final theme = Theme.of(context);
-    final due = dueLabel(task, repo.today);
-    final overdue = (task.daysUntilDue(repo.today) ?? 0) < 0;
+    final due = dueText(task, repo.today, hidingToday: inToday);
     return GestureDetector(
       onSecondaryTapUp: (d) => _menu(context, d.globalPosition),
       onLongPressStart: (d) => _menu(context, d.globalPosition),
       child: ListTile(
         dense: dense,
-        contentPadding: dense
-            ? EdgeInsets.zero
-            : const EdgeInsets.symmetric(horizontal: 8),
+        visualDensity: dense ? VisualDensity.compact : null,
+        contentPadding: EdgeInsets.only(left: dense ? 0 : 4, right: 12),
+        horizontalTitleGap: dense ? 0 : 4,
         leading: IconButton(
           tooltip: task.done
               ? 'Mark ${task.title} as not done'
               : 'Mark ${task.title} as done',
+          iconSize: dense ? 20 : 24,
           icon: Icon(
             task.done ? Icons.check_circle : Icons.circle_outlined,
             color: task.done
-                ? theme.colorScheme.primary
-                : theme.colorScheme.outline,
+                ? theme.colorScheme.outline
+                : taskQuadrant(task).color,
           ),
           onPressed: () => repo.setTaskDone(task.id, !task.done),
         ),
         title: Text(
           task.title,
+          maxLines: dense ? 2 : null,
+          overflow: dense ? TextOverflow.ellipsis : null,
           style: task.done
               ? TextStyle(
                   decoration: TextDecoration.lineThrough,
@@ -418,25 +539,15 @@ class TaskTile extends StatelessWidget {
                 )
               : null,
         ),
-        subtitle: due == null && !task.important && !task.urgent
+        subtitle: due == null
             ? null
-            : Wrap(
-                spacing: 6,
-                runSpacing: 2,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  if (due != null)
-                    Text(
-                      due,
-                      style: TextStyle(
-                        color: overdue
-                            ? theme.colorScheme.error
-                            : theme.colorScheme.outline,
-                      ),
-                    ),
-                  if (task.important) const _Tag('Important', Colors.blue),
-                  if (task.urgent) const _Tag('Urgent', Colors.orange),
-                ],
+            : Text(
+                due.text,
+                style: TextStyle(
+                  color: due.overdue
+                      ? theme.colorScheme.error
+                      : theme.colorScheme.outline,
+                ),
               ),
         onTap: () => editTask(context, existing: task),
       ),
@@ -453,14 +564,17 @@ class TaskTile extends StatelessWidget {
         Offset.zero & overlay.size,
       ),
       items: [
-        PopupMenuItem(
+        CheckedPopupMenuItem(
           value: 'important',
-          child: Text(task.important ? 'Not important' : 'Important'),
+          checked: task.important,
+          child: const Text('Important'),
         ),
-        PopupMenuItem(
+        CheckedPopupMenuItem(
           value: 'urgent',
-          child: Text(task.urgent ? 'Not urgent' : 'Urgent'),
+          checked: task.urgent,
+          child: const Text('Urgent'),
         ),
+        const PopupMenuDivider(),
         const PopupMenuItem(value: 'edit', child: Text('Edit')),
         const PopupMenuItem(value: 'delete', child: Text('Delete')),
       ],
@@ -482,22 +596,6 @@ class TaskTile extends StatelessWidget {
         repo.deleteTask(task.id);
     }
   }
-}
-
-class _Tag extends StatelessWidget {
-  final String text;
-  final Color color;
-  const _Tag(this.text, this.color);
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-    decoration: BoxDecoration(
-      color: color.withValues(alpha: 0.12),
-      borderRadius: BorderRadius.circular(8),
-    ),
-    child: Text(text, style: TextStyle(color: color, fontSize: 12)),
-  );
 }
 
 /// Adds a task, or edits [existing]. [important] and [urgent] set the marks

@@ -306,7 +306,7 @@ class _HabitList extends StatelessWidget {
         // Tasks due today or overdue, and the ones ticked off today, so the
         // whole day is in one place.
         if (repo.tasksForToday case final tasks when tasks.isNotEmpty)
-          TaskSection(title: 'Tasks', tasks: tasks),
+          TaskSection(title: 'Tasks', tasks: tasks, inToday: true),
         if (notToday.isNotEmpty) _Section(title: 'NOT TODAY', habits: notToday),
         // A nudge toward the scorecard while there's little to track yet.
         if (habits.length < 3 && repo.scorecard.isEmpty) ...[

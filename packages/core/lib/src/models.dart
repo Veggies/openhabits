@@ -537,15 +537,16 @@ TaskGroup taskGroup(TaskItem t, DateTime today) {
   return days <= 0 ? TaskGroup.today : TaskGroup.upcoming;
 }
 
-/// How a task's due date reads in a list: "Overdue", "Due today", "Due
-/// tomorrow", "Due in 3 days". Null if it has no date or is done.
+/// How a task's due date reads in a list when it's close: "Overdue",
+/// "Today" or "Tomorrow". Null if it's further off (screens show the date
+/// instead), has no date or is done.
 String? dueLabel(TaskItem t, DateTime today) {
   final days = t.daysUntilDue(today);
   if (t.done || days == null) return null;
   if (days < 0) return 'Overdue';
-  if (days == 0) return 'Due today';
-  if (days == 1) return 'Due tomorrow';
-  return 'Due in $days days';
+  if (days == 0) return 'Today';
+  if (days == 1) return 'Tomorrow';
+  return null;
 }
 
 /// The four boxes of the Eisenhower matrix: important or not, urgent or
@@ -553,17 +554,17 @@ String? dueLabel(TaskItem t, DateTime today) {
 enum TaskQuadrant {
   doNow('Do it now', "These matter and can't wait."),
   plan(
-    'Plan a time for it',
+    'Plan it',
     "These matter, but they can wait. Pick a day for them so they don't "
         'sneak up on you.',
   ),
   keepQuick(
-    'Get it done quickly',
+    'Do it quickly',
     "These can't wait but don't matter much, so don't let them take over "
         'your day.',
   ),
   letGo(
-    'Maybe let it go',
+    'Let it go',
     "These aren't urgent or important. You might not need to do them at all.",
   );
 
