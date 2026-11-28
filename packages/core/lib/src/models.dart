@@ -563,10 +563,7 @@ enum TaskQuadrant {
     "These can't wait but don't matter much, so don't let them take over "
         'your day.',
   ),
-  letGo(
-    'Let it go',
-    "These aren't urgent or important. You might not need to do them at all.",
-  );
+  later('Later', 'These can wait. Get to them when you have some free time.');
 
   final String label;
 
@@ -577,4 +574,4 @@ enum TaskQuadrant {
 
 TaskQuadrant taskQuadrant(TaskItem t) => t.important
     ? (t.urgent ? TaskQuadrant.doNow : TaskQuadrant.plan)
-    : (t.urgent ? TaskQuadrant.keepQuick : TaskQuadrant.letGo);
+    : (t.urgent ? TaskQuadrant.keepQuick : TaskQuadrant.later);

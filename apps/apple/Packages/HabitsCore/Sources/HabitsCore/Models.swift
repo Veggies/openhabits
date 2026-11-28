@@ -488,14 +488,14 @@ public func dueLabel(_ t: TaskItem, today: Date) -> String? {
 /// The four boxes of the Eisenhower matrix: important or not, urgent or
 /// not, as you marked the task.
 public enum TaskQuadrant: Sendable, CaseIterable {
-    case doNow, plan, keepQuick, letGo
+    case doNow, plan, keepQuick, later
 
     public var label: String {
         switch self {
         case .doNow: "Do it now"
         case .plan: "Plan it"
         case .keepQuick: "Do it quickly"
-        case .letGo: "Let it go"
+        case .later: "Later"
         }
     }
 
@@ -505,7 +505,7 @@ public enum TaskQuadrant: Sendable, CaseIterable {
         case .doNow: "These matter and can't wait."
         case .plan: "These matter, but they can wait. Pick a day for them so they don't sneak up on you."
         case .keepQuick: "These can't wait but don't matter much, so don't let them take over your day."
-        case .letGo: "These aren't urgent or important. You might not need to do them at all."
+        case .later: "These can wait. Get to them when you have some free time."
         }
     }
 }
@@ -515,6 +515,6 @@ public func taskQuadrant(_ t: TaskItem) -> TaskQuadrant {
     case (true, true): return .doNow
     case (true, false): return .plan
     case (false, true): return .keepQuick
-    case (false, false): return .letGo
+    case (false, false): return .later
     }
 }

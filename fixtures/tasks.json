@@ -5,11 +5,11 @@
     {"id": "passport", "fields": {"title": "Renew the passport", "due": "2026-12-04", "important": true}, "due": "2026-12-04", "group": "upcoming", "label": null, "quadrant": "plan"},
     {"id": "rent", "fields": {"title": "Pay the rent", "due": "2026-11-28", "important": true, "urgent": true}, "due": "2026-11-28", "group": "today", "label": "Today", "quadrant": "doNow"},
     {"id": "late", "fields": {"title": "Return the library book", "due": "2026-11-20", "urgent": true}, "due": "2026-11-20", "group": "today", "label": "Overdue", "quadrant": "keepQuick"},
-    {"id": "soon", "fields": {"title": "Call the dentist", "due": "2026-11-29"}, "due": "2026-11-29", "group": "upcoming", "label": "Tomorrow", "quadrant": "letGo"},
-    {"id": "someday", "fields": {"title": "Learn to juggle"}, "due": null, "group": "someday", "label": null, "quadrant": "letGo"},
+    {"id": "soon", "fields": {"title": "Call the dentist", "due": "2026-11-29"}, "due": "2026-11-29", "group": "upcoming", "label": "Tomorrow", "quadrant": "later"},
+    {"id": "someday", "fields": {"title": "Learn to juggle"}, "due": null, "group": "someday", "label": null, "quadrant": "later"},
     {"id": "finished", "fields": {"title": "Book the flights", "due": "2026-11-20", "important": true, "done": true, "doneAt": "2026-11-27T18:00:00.000Z"}, "due": "2026-11-20", "group": "done", "label": null, "quadrant": "plan"},
-    {"id": "no-day", "fields": {"title": "A day that doesn't exist", "due": "2026-02-31"}, "due": null, "group": "someday", "label": null, "quadrant": "letGo"},
-    {"id": "garbled", "fields": {"title": "Not a date", "due": "next week", "important": "yes", "urgent": 1}, "due": null, "group": "someday", "label": null, "quadrant": "letGo"},
-    {"id": "untitled", "fields": {"due": 20261128}, "due": null, "group": "someday", "label": null, "quadrant": "letGo"}
+    {"id": "no-day", "fields": {"title": "A day that doesn't exist", "due": "2026-02-31"}, "due": null, "group": "someday", "label": null, "quadrant": "later"},
+    {"id": "garbled", "fields": {"title": "Not a date", "due": "next week", "important": "yes", "urgent": 1}, "due": null, "group": "someday", "label": null, "quadrant": "later"},
+    {"id": "untitled", "fields": {"due": 20261128}, "due": null, "group": "someday", "label": null, "quadrant": "later"}
   ]
 }

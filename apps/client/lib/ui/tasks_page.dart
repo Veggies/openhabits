@@ -336,7 +336,7 @@ class _Matrix extends StatelessWidget {
                 row(
                   'Not important',
                   TaskQuadrant.keepQuick,
-                  TaskQuadrant.letGo,
+                  TaskQuadrant.later,
                 ),
               ],
             ),
@@ -371,14 +371,14 @@ extension TaskQuadrantLook on TaskQuadrant {
     TaskQuadrant.doNow => Colors.red,
     TaskQuadrant.plan => Colors.blue,
     TaskQuadrant.keepQuick => Colors.orange,
-    TaskQuadrant.letGo => Colors.grey,
+    TaskQuadrant.later => Colors.grey,
   };
 
   IconData get icon => switch (this) {
     TaskQuadrant.doNow => Icons.local_fire_department,
     TaskQuadrant.plan => Icons.calendar_today,
     TaskQuadrant.keepQuick => Icons.bolt,
-    TaskQuadrant.letGo => Icons.eco,
+    TaskQuadrant.later => Icons.schedule,
   };
 }
 

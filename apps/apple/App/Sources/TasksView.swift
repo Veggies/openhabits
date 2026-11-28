@@ -157,7 +157,7 @@ private struct TaskMatrix: View {
             GridRow {
                 AxisLabel(text: "Not important", vertical: true)
                 QuadrantBox(box: .keepQuick, editing: $editing)
-                QuadrantBox(box: .letGo, editing: $editing)
+                QuadrantBox(box: .later, editing: $editing)
             }
         }
         .padding(.horizontal, 16)
@@ -270,7 +270,7 @@ extension TaskQuadrant {
         case .doNow: .red
         case .plan: .blue
         case .keepQuick: .orange
-        case .letGo: .gray
+        case .later: .gray
         }
     }
 
@@ -279,7 +279,7 @@ extension TaskQuadrant {
         case .doNow: "flame.fill"
         case .plan: "calendar"
         case .keepQuick: "bolt.fill"
-        case .letGo: "leaf.fill"
+        case .later: "clock.fill"
         }
     }
 }
