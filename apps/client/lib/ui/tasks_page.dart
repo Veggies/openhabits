@@ -203,8 +203,12 @@ class _TaskListState extends State<_TaskList> {
                     ),
                     onTap: () async {
                       if (await _confirmClear(context, done.length)) {
-                        for (final t in done) {
-                          repo.deleteTask(t.id);
+                        // Only ones still finished: another device may
+                        // have reopened one while this was asking.
+                        for (final t in repo.tasks) {
+                          if (t.done && done.any((d) => d.id == t.id)) {
+                            repo.deleteTask(t.id);
+                          }
                         }
                       }
                     },

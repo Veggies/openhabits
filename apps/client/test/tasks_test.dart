@@ -114,4 +114,32 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  for (final (name, size) in [
+    ('desktop', const Size(1400, 900)),
+    ('phone', const Size(400, 860)),
+  ]) {
+    testWidgets("$name: today's tasks show on Habits with no habits yet", (
+      tester,
+    ) async {
+      final repo = await pumpApp(tester, size);
+      repo.addTask('Pay the rent', due: repo.today);
+      await tester.pumpAndSettle();
+      expect(find.text('Pay the rent'), findsOneWidget);
+    });
+  }
+
+  testWidgets('Settings from the gear keeps a way back when widened', (
+    tester,
+  ) async {
+    await pumpApp(tester, const Size(400, 860));
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    tester.view.physicalSize = const Size(1400, 900);
+    await tester.pumpAndSettle();
+    expect(find.byType(BackButton), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Show the tour again'), findsNothing);
+  });
 }

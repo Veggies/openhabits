@@ -24,7 +24,11 @@ class _SettingsPageState extends State<SettingsPage> {
     final scope = AppScope.of(context);
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: isWide(context) ? null : AppBar(title: const Text('Settings')),
+      // Opened from the gear on Habits, it keeps its back arrow even if the
+      // window is then widened; as a tab in a wide window it needs none.
+      appBar: isWide(context) && !Navigator.of(context).canPop()
+          ? null
+          : AppBar(title: const Text('Settings')),
       body: ListenableBuilder(
         listenable: Listenable.merge([scope.sync, scope.repo.store]),
         builder: (context, _) {

@@ -28,7 +28,8 @@ struct HabitsView: View {
         let days = (0..<7).map { Days.add(weekStart, $0) }
 
         Group {
-            if habits.isEmpty {
+            // Today's tasks still show when there are no habits yet.
+            if habits.isEmpty && tasks.isEmpty {
                 ContentUnavailableView {
                     Label("No habits yet", systemImage: "checklist")
                 } description: {

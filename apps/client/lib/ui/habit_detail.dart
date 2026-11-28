@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:ui' show ImageFilter;
 
 import 'package:core/core.dart';
@@ -616,10 +617,12 @@ class _HabitPreviewState extends State<HabitPreview>
         }
         return LayoutBuilder(
           builder: (context, size) {
-            final width = (size.maxWidth * 0.75).clamp(
-              560.0,
-              size.maxWidth - 120,
-            );
+            // Briefly narrower than 680 while the window is resized, the
+            // smallest size gives way rather than crash.
+            final most = max(0.0, size.maxWidth - 120);
+            final width = (size.maxWidth * 0.75)
+                .clamp(min(560.0, most), most)
+                .toDouble();
             return AnimatedBuilder(
               animation: _curve,
               builder: (context, _) {

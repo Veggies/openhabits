@@ -121,7 +121,11 @@ private struct TaskList: View {
             titleVisibility: .visible
         ) {
             Button("Delete Finished Tasks", role: .destructive) {
-                for t in done { repo.deleteTask(t.id) }
+                // Only ones still finished: another device may have
+                // reopened one while this was asking.
+                for t in done where repo.tasks.first(where: { $0.id == t.id })?.done == true {
+                    repo.deleteTask(t.id)
+                }
             }
         } message: {
             Text("This removes them from all your devices.")

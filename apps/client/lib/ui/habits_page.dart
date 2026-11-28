@@ -18,7 +18,8 @@ class HabitsPage extends StatelessWidget {
     final wide = isWide(context);
     return DataBuilder(
       builder: (context, repo) {
-        final Widget list = repo.habits.isEmpty
+        // Today's tasks still show when there are no habits yet.
+        final Widget list = repo.habits.isEmpty && repo.tasksForToday.isEmpty
             ? const _Empty()
             : const _HabitList();
         return Scaffold(
