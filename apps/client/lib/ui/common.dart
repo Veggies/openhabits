@@ -41,7 +41,7 @@ class AppScope extends InheritedWidget {
 }
 
 /// The main screens.
-enum AppTab { habits, progress, reflect, focus, settings }
+enum AppTab { habits, tasks, progress, reflect, focus, settings }
 
 /// Navigation state that menus and links anywhere can change: which tab is
 /// showing, which habit is open in the desktop preview, and the accent

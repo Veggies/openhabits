@@ -344,3 +344,56 @@ func daysOffCases() throws -> [JSONValue] { try fixture("days_off.json")["cases"
         #expect(r.tomatoesToSpend == 4)
     }
 }
+
+@MainActor @Suite struct Tasks {
+    @Test(arguments: try fixture("tasks.json")["tasks"]!.array!)
+    func readsAndPlacesTask(_ value: JSONValue) throws {
+        let c = value.object!
+        let today = Days.parse(try fixture("tasks.json")["today"]!.string!)!
+        let fields = c["fields"]!.object!
+        let t = TaskItem(id: c["id"]!.string!, fields: fields)
+        let name = c["id"]!.string!
+        #expect(t.title == (fields["title"]?.string ?? ""), "\(name)")
+        #expect(t.due == c["due"]!.string, "\(name)")
+        #expect("\(taskGroup(t, today: today))" == c["group"]!.string, "\(name)")
+        #expect(dueLabel(t, today: today) == c["label"]!.string, "\(name)")
+        #expect("\(taskQuadrant(t))" == c["quadrant"]!.string, "\(name)")
+    }
+
+    @Test func addingTickingOffAndDeleting() throws {
+        let store = try LocalStore()
+        var now = Days.parse("2026-11-28")!.addingTimeInterval(9 * 3600)
+        let r = Repo(store: store, clock: { now })
+        let today = r.today
+        let rent = r.addTask(title: " Pay the rent ", due: today, important: true, urgent: true)
+        let juggle = r.addTask(title: "Learn to juggle")
+        let dentist = r.addTask(title: "Call the dentist", due: Days.add(today, 1))
+        let late = r.addTask(title: "Return the library book", due: Days.add(today, -3))
+        #expect(r.tasks.first { $0.id == rent }?.title == "Pay the rent")
+        #expect(r.tasks(in: .today).map(\.id) == [rent, late])  // important first, then by date
+        #expect(r.tasks(in: .upcoming).map(\.id) == [dentist])
+        #expect(r.tasks(in: .someday).map(\.id) == [juggle])
+        #expect(r.tasks(in: .doNow).map(\.id) == [rent])
+        #expect(r.tasksForToday.map(\.id) == [rent, late])
+
+        r.setTaskDone(rent, true)
+        #expect(r.tasks(in: .done).map(\.id) == [rent])
+        #expect(r.tasks(in: .doNow).isEmpty)
+        #expect(r.tasksForToday.map(\.id) == [late, rent])  // still shows today, after the rest
+        r.setTaskDone(rent, false)
+        #expect(r.tasks.first { $0.id == rent }?.doneAt == nil)
+
+        // Taking the date away moves it to someday.
+        r.updateTask(dentist, title: "Call the dentist", due: nil, important: false, urgent: true)
+        #expect(r.tasks(in: .someday).map(\.id) == [dentist, juggle])  // urgent first
+        #expect(r.tasks(in: .keepQuick).map(\.id) == [dentist])
+
+        r.deleteTask(juggle)
+        #expect(!r.tasks.contains { $0.id == juggle })
+
+        // The next day, yesterday's finished task drops off Today.
+        r.setTaskDone(late, true)
+        now = Days.add(today, 1).addingTimeInterval(9 * 3600)
+        #expect(r.tasksForToday.map(\.id) == [rent])  // due yesterday, so overdue now
+    }
+}

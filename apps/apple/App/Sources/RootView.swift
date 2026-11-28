@@ -51,6 +51,9 @@ struct MainView: View {
             Tab("Habits", systemImage: "checklist", value: AppTab.habits) {
                 NavigationStack { HabitsView() }
             }
+            Tab("Tasks", systemImage: "checkmark.circle", value: AppTab.tasks) {
+                NavigationStack { TasksView() }
+            }
             Tab("Progress", systemImage: "square.grid.3x3", value: AppTab.progress) {
                 NavigationStack { ProgressScreen() }
             }
@@ -61,14 +64,24 @@ struct MainView: View {
                 NavigationStack { FocusView() }
             }
             #if os(iOS)
-            Tab("Settings", systemImage: "gearshape", value: AppTab.settings) {
-                NavigationStack { SettingsView() }
+            // A tab bar fits five tabs, so on iPhone Settings is a button
+            // at the top of Habits instead.
+            if !isPhone {
+                Tab("Settings", systemImage: "gearshape", value: AppTab.settings) {
+                    NavigationStack { SettingsView() }
+                }
             }
             #endif
         }
         .tabViewStyle(.sidebarAdaptable)
     }
 }
+
+#if os(iOS)
+/// iPhone, where the tab bar has room for five tabs; iPad shows them in a
+/// sidebar.
+var isPhone: Bool { UIDevice.current.userInterfaceIdiom == .phone }
+#endif
 
 /// Opened from a pairing link (e.g. a QR code scanned with the Camera app):
 /// signs this device in with one tap.

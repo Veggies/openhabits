@@ -11,6 +11,8 @@ public enum Tables {
     public static let rewards = "rewards"
     /// Tomatoes spent on a reward (`RewardSpend`).
     public static let rewardSpends = "reward_spends"
+    /// One-off to-dos (`TaskItem`).
+    public static let tasks = "tasks"
     /// One row, `Prefs.rowId`: preferences that follow you to every device.
     public static let prefs = "prefs"
 }
@@ -403,4 +405,116 @@ public struct RewardSpend: Identifiable, Sendable, Hashable {
 public func tomatoesToSpend(earnedToday: Int, spends: [RewardSpend], todayKey: String) -> Int {
     let spent = spends.filter { !$0.deleted && $0.day == todayKey }.reduce(0) { $0 + $1.cost }
     return max(0, earnedToday - spent)
+}
+
+// MARK: Tasks
+
+/// A one-off to-do: "Renew the passport", due Friday. Called `TaskItem`
+/// because Swift already has a `Task`. Ticking it off sets `done`; deleting
+/// it sets the usual deleted field.
+public struct TaskItem: Identifiable, Sendable, Hashable {
+    public let id: String
+    public let title: String
+    /// The day it's due (`Days.key`), or nil if it has no date.
+    public let due: String?
+    /// Both marked by you, to place the task in the matrix.
+    public let important: Bool
+    public let urgent: Bool
+    public let done: Bool
+    /// When it was ticked off, for the Done list.
+    public let doneAt: Date?
+    public let created: Date
+    public let deleted: Bool
+
+    public init(id: String, fields f: Fields) {
+        self.id = id
+        title = text(f["title"])
+        // A due day only counts if it reads back as the same text, so a day
+        // that doesn't exist (like 2026-02-31) reads as no date.
+        due = f["due"]?.string.flatMap { key in Days.parse(key).map(Days.key) == key ? key : nil }
+        important = f["important"]?.bool == true
+        urgent = f["urgent"]?.bool == true
+        done = f["done"]?.bool == true
+        doneAt = f["doneAt"]?.string.flatMap(Timestamp.parse)
+        created = f["created"]?.string.flatMap(Timestamp.parse) ?? Date(timeIntervalSince1970: 946_684_800)
+        deleted = isDeleted(f)
+    }
+
+    /// Whole days from `today` until it's due: 0 today, 1 tomorrow, below 0
+    /// if it's overdue. Nil if it has no date.
+    public func daysUntilDue(today: Date) -> Int? {
+        due.flatMap(Days.parse).map { Days.between(today, $0) }
+    }
+}
+
+/// Where a task sits in the Tasks list.
+public enum TaskGroup: Sendable, CaseIterable {
+    /// Due today, or overdue.
+    case today
+    case upcoming
+    /// No due date.
+    case someday
+    case done
+
+    public var label: String {
+        switch self {
+        case .today: "Today"
+        case .upcoming: "Upcoming"
+        case .someday: "Someday"
+        case .done: "Done"
+        }
+    }
+}
+
+public func taskGroup(_ t: TaskItem, today: Date) -> TaskGroup {
+    if t.done { return .done }
+    guard let days = t.daysUntilDue(today: today) else { return .someday }
+    return days <= 0 ? .today : .upcoming
+}
+
+/// How a task's due date reads in a list when it's close: "Overdue",
+/// "Today" or "Tomorrow". Nil if it's further off (screens show the date
+/// instead), has no date or is done.
+public func dueLabel(_ t: TaskItem, today: Date) -> String? {
+    guard !t.done, let days = t.daysUntilDue(today: today) else { return nil }
+    switch days {
+    case ..<0: return "Overdue"
+    case 0: return "Today"
+    case 1: return "Tomorrow"
+    default: return nil
+    }
+}
+
+/// The four boxes of the Eisenhower matrix: important or not, urgent or
+/// not, as you marked the task.
+public enum TaskQuadrant: Sendable, CaseIterable {
+    case doNow, plan, keepQuick, later
+
+    public var label: String {
+        switch self {
+        case .doNow: "Do it now"
+        case .plan: "Plan it"
+        case .keepQuick: "Do it quickly"
+        case .later: "Later"
+        }
+    }
+
+    /// What the box means, in a sentence.
+    public var hint: String {
+        switch self {
+        case .doNow: "These matter and can't wait."
+        case .plan: "These matter, but they can wait. Pick a day for them so they don't sneak up on you."
+        case .keepQuick: "These can't wait but don't matter much, so don't let them take over your day."
+        case .later: "These can wait. Get to them when you have some free time."
+        }
+    }
+}
+
+public func taskQuadrant(_ t: TaskItem) -> TaskQuadrant {
+    switch (t.important, t.urgent) {
+    case (true, true): return .doNow
+    case (true, false): return .plan
+    case (false, true): return .keepQuick
+    case (false, false): return .later
+    }
 }

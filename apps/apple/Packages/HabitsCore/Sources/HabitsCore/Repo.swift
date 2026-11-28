@@ -395,4 +395,81 @@ public final class Repo {
     public func takeBack(_ spend: RewardSpend) {
         store.write(Tables.rewardSpends, spend.id, [deletedField: true])
     }
+
+    // MARK: Tasks
+
+    /// Every task that hasn't been deleted, in list order: important ones
+    /// first, then urgent ones, then by due date (no date last), then oldest first. Done
+    /// tasks are newest first.
+    public var tasks: [TaskItem] {
+        remember("tasks") {
+            store.table(Tables.tasks)
+                .map { TaskItem(id: $0.key, fields: $0.value) }
+                .filter { !$0.deleted }
+                .sorted(by: Repo.taskOrder)
+        }
+    }
+
+    static func taskOrder(_ a: TaskItem, _ b: TaskItem) -> Bool {
+        if a.done != b.done { return !a.done }
+        if a.done { return (a.doneAt ?? a.created) > (b.doneAt ?? b.created) }
+        if a.important != b.important { return a.important }
+        if a.urgent != b.urgent { return a.urgent }
+        if a.due != b.due { return (a.due ?? "9999") < (b.due ?? "9999") }
+        return (a.created, a.id) < (b.created, b.id)
+    }
+
+    public func tasks(in group: TaskGroup) -> [TaskItem] {
+        let day = today
+        return tasks.filter { taskGroup($0, today: day) == group }
+    }
+
+    /// Unfinished tasks in one box of the matrix.
+    public func tasks(in quadrant: TaskQuadrant) -> [TaskItem] {
+        tasks.filter { !$0.done && taskQuadrant($0) == quadrant }
+    }
+
+    /// Unfinished tasks due today or overdue, plus the ones ticked off
+    /// today, for the Habits tab's Today list.
+    public var tasksForToday: [TaskItem] {
+        let day = today
+        return tasks.filter {
+            if $0.done { return $0.doneAt.map { Days.start($0) == day } ?? false }
+            return taskGroup($0, today: day) == .today
+        }
+    }
+
+    @discardableResult
+    public func addTask(title: String, due: Date? = nil, important: Bool = false, urgent: Bool = false) -> String {
+        let id = store.newId()
+        store.write(Tables.tasks, id, [
+            "title": .string(title.trimmingCharacters(in: .whitespacesAndNewlines)),
+            "due": due.map { .string(Days.key($0)) } ?? .null,
+            "important": .bool(important),
+            "urgent": .bool(urgent),
+            "done": .bool(false),
+            "created": .string(Timestamp.format(clock())),
+        ])
+        return id
+    }
+
+    public func updateTask(_ id: String, title: String, due: Date?, important: Bool, urgent: Bool) {
+        store.write(Tables.tasks, id, [
+            "title": .string(title.trimmingCharacters(in: .whitespacesAndNewlines)),
+            "due": due.map { .string(Days.key($0)) } ?? .null,
+            "important": .bool(important),
+            "urgent": .bool(urgent),
+        ])
+    }
+
+    public func setTaskDone(_ id: String, _ done: Bool) {
+        store.write(Tables.tasks, id, [
+            "done": .bool(done),
+            "doneAt": done ? .string(Timestamp.format(clock())) : .null,
+        ])
+    }
+
+    public func deleteTask(_ id: String) {
+        store.write(Tables.tasks, id, [deletedField: true])
+    }
 }

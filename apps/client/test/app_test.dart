@@ -92,12 +92,20 @@ void main() {
     testWidgets('$name: visit every screen', (tester) async {
       final repo = await pumpApp(tester, size);
       repo.createHabit({'name': 'Read'});
-      expect(find.text('Tasks'), findsNothing);
       expect(find.text('Calendar'), findsNothing);
-      final first = name == 'phone' ? 'Habits' : 'Today';
-      for (final tab in ['Progress', 'Reflect', 'Focus', 'Settings', first]) {
+      // On phones the bar fits five tabs, so Settings is a gear on Habits
+      // and opens as its own page.
+      final tabs = name == 'phone'
+          ? ['Tasks', 'Progress', 'Reflect', 'Focus', 'Habits', 'Settings']
+          : ['Tasks', 'Progress', 'Reflect', 'Focus', 'Settings', 'Today'];
+      for (final tab in tabs) {
         await go(tester, tab);
         expect(tester.takeException(), isNull, reason: tab);
+      }
+      if (name == 'phone') {
+        expect(nav('Settings'), findsNothing);
+        await tester.pageBack();
+        await tester.pumpAndSettle();
       }
       expect(find.text('Read'), findsWidgets);
     });

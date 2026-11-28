@@ -9,8 +9,10 @@ import 'focus_page.dart';
 import 'growth_chart.dart';
 import 'habits_page.dart';
 import 'settings_page.dart';
+import 'tasks_page.dart';
 
-/// Top-level navigation, matching the Apple app: a bottom bar on phones,
+/// Top-level navigation, matching the Apple app: a bottom bar in a narrow
+/// window, with Settings behind a gear on Habits so the bar fits five tabs,
 /// and on computers the tabs across the top of the window with Settings
 /// behind a gear. Pages stay alive in an [IndexedStack] so each keeps its
 /// state.
@@ -24,14 +26,15 @@ class Shell extends StatefulWidget {
 class _ShellState extends State<Shell> {
   static const _destinations = [
     (AppTab.habits, Icons.checklist_outlined, Icons.checklist, 'Habits'),
+    (AppTab.tasks, Icons.check_circle_outline, Icons.check_circle, 'Tasks'),
     (AppTab.progress, Icons.grid_view_outlined, Icons.grid_view, 'Progress'),
     (AppTab.reflect, Icons.menu_book_outlined, Icons.menu_book, 'Reflect'),
     (AppTab.focus, Icons.timer_outlined, Icons.timer, 'Focus'),
-    (AppTab.settings, Icons.settings_outlined, Icons.settings, 'Settings'),
   ];
 
   static const _pages = [
     HabitsPage(),
+    TasksPage(),
     ProgressPage(),
     ReflectPage(),
     FocusPage(),
@@ -62,7 +65,10 @@ class _ShellState extends State<Shell> {
         return Scaffold(
           body: body,
           bottomNavigationBar: NavigationBar(
-            selectedIndex: index,
+            // Settings isn't in the bar. If it was left open in a wide
+            // window that's since been made narrow, Habits stays lit, since
+            // its gear leads there.
+            selectedIndex: nav.tab == AppTab.settings ? 0 : index,
             onDestinationSelected: (i) => nav.go(AppTab.values[i]),
             labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
             destinations: [
@@ -121,6 +127,7 @@ class _TopBar extends StatelessWidget {
             showSelectedIcon: false,
             segments: const [
               ButtonSegment(value: AppTab.habits, label: Text('Today')),
+              ButtonSegment(value: AppTab.tasks, label: Text('Tasks')),
               ButtonSegment(value: AppTab.progress, label: Text('Progress')),
               ButtonSegment(value: AppTab.reflect, label: Text('Reflect')),
               ButtonSegment(value: AppTab.focus, label: Text('Focus')),

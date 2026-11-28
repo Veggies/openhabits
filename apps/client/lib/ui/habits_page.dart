@@ -5,6 +5,8 @@ import '../data/repo.dart';
 import 'common.dart';
 import 'habit_detail.dart';
 import 'habit_editor.dart';
+import 'settings_page.dart';
+import 'tasks_page.dart';
 
 /// Today's habits. On phones, opening a habit shows its page; on
 /// computers it slides in over the list (see [HabitPreview]).
@@ -16,11 +18,26 @@ class HabitsPage extends StatelessWidget {
     final wide = isWide(context);
     return DataBuilder(
       builder: (context, repo) {
-        final Widget list = repo.habits.isEmpty
+        // Today's tasks still show when there are no habits yet.
+        final Widget list = repo.habits.isEmpty && repo.tasksForToday.isEmpty
             ? const _Empty()
             : const _HabitList();
         return Scaffold(
-          appBar: wide ? null : AppBar(title: const Text('Habits')),
+          appBar: wide
+              ? null
+              : AppBar(
+                  title: const Text('Habits'),
+                  // The bottom bar fits five tabs, so Settings lives here.
+                  actions: [
+                    IconButton(
+                      tooltip: 'Settings',
+                      icon: const Icon(Icons.settings_outlined),
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const SettingsPage()),
+                      ),
+                    ),
+                  ],
+                ),
           floatingActionButton: wide
               ? null
               : FloatingActionButton.extended(
@@ -287,6 +304,10 @@ class _HabitList extends StatelessWidget {
             title: both || notToday.isNotEmpty ? 'BREAKING' : null,
             habits: quit,
           ),
+        // Tasks due today or overdue, and the ones ticked off today, so the
+        // whole day is in one place.
+        if (repo.tasksForToday case final tasks when tasks.isNotEmpty)
+          TaskSection(title: 'Tasks', tasks: tasks, inToday: true),
         if (notToday.isNotEmpty) _Section(title: 'NOT TODAY', habits: notToday),
         // A nudge toward the scorecard while there's little to track yet.
         if (habits.length < 3 && repo.scorecard.isEmpty) ...[
