@@ -15,6 +15,9 @@ abstract final class Tables {
   /// Tomatoes spent on a reward ([RewardSpend]).
   static const rewardSpends = 'reward_spends';
 
+  /// One-off to-dos ([TaskItem]).
+  static const tasks = 'tasks';
+
   /// Per-person preferences that follow you to every device. One row,
   /// [Prefs.rowId].
   static const prefs = 'prefs';
@@ -467,3 +470,110 @@ int tomatoesToSpend(
   }
   return earnedToday - spent < 0 ? 0 : earnedToday - spent;
 }
+
+/// A one-off to-do: "Renew the passport", due Friday. Ticking it off sets
+/// [done]; deleting it sets the usual [deletedField].
+class TaskItem {
+  final String id;
+  final String title;
+
+  /// The day it's due ([dateKey]), or null if it has no date.
+  final String? due;
+
+  /// Both marked by you, to place the task in the matrix.
+  final bool important;
+  final bool urgent;
+  final bool done;
+
+  /// When it was ticked off, for the Done list.
+  final DateTime? doneAt;
+  final DateTime created;
+  final bool deleted;
+
+  TaskItem.fromFields(this.id, Fields f)
+    : title = _text(f['title']),
+      due = _dueKey(f['due']),
+      important = f['important'] == true,
+      urgent = f['urgent'] == true,
+      done = f['done'] == true,
+      doneAt = _dateTime(f['doneAt'])?.toLocal(),
+      created = _dateTime(f['created'])?.toLocal() ?? DateTime(2000),
+      deleted = _deleted(f);
+
+  /// Whole days from [today] until it's due: 0 today, 1 tomorrow, below 0
+  /// if it's overdue. Null if it has no date.
+  int? daysUntilDue(DateTime today) {
+    final d = due == null ? null : tryParseDateKey(due!);
+    return d == null ? null : daysBetween(today, d);
+  }
+}
+
+/// A due day only counts if it reads back as the same text, so a day that
+/// doesn't exist (like 2026-02-31) reads as no date.
+String? _dueKey(Object? v) {
+  if (v is! String) return null;
+  final d = tryParseDateKey(v);
+  return d != null && dateKey(d) == v ? v : null;
+}
+
+/// Where a task sits in the Tasks list.
+enum TaskGroup {
+  /// Due today, or overdue.
+  today('Today'),
+  upcoming('Upcoming'),
+
+  /// No due date.
+  someday('Someday'),
+  done('Done');
+
+  final String label;
+  const TaskGroup(this.label);
+}
+
+TaskGroup taskGroup(TaskItem t, DateTime today) {
+  if (t.done) return TaskGroup.done;
+  final days = t.daysUntilDue(today);
+  if (days == null) return TaskGroup.someday;
+  return days <= 0 ? TaskGroup.today : TaskGroup.upcoming;
+}
+
+/// How a task's due date reads in a list: "Overdue", "Due today", "Due
+/// tomorrow", "Due in 3 days". Null if it has no date or is done.
+String? dueLabel(TaskItem t, DateTime today) {
+  final days = t.daysUntilDue(today);
+  if (t.done || days == null) return null;
+  if (days < 0) return 'Overdue';
+  if (days == 0) return 'Due today';
+  if (days == 1) return 'Due tomorrow';
+  return 'Due in $days days';
+}
+
+/// The four boxes of the Eisenhower matrix: important or not, urgent or
+/// not, as you marked the task.
+enum TaskQuadrant {
+  doNow('Do it now', "These matter and can't wait."),
+  plan(
+    'Plan a time for it',
+    "These matter, but they can wait. Pick a day for them so they don't "
+        'sneak up on you.',
+  ),
+  keepQuick(
+    'Get it done quickly',
+    "These can't wait but don't matter much, so don't let them take over "
+        'your day.',
+  ),
+  letGo(
+    'Maybe let it go',
+    "These aren't urgent or important. You might not need to do them at all.",
+  );
+
+  final String label;
+
+  /// What the box means, in a sentence.
+  final String hint;
+  const TaskQuadrant(this.label, this.hint);
+}
+
+TaskQuadrant taskQuadrant(TaskItem t) => t.important
+    ? (t.urgent ? TaskQuadrant.doNow : TaskQuadrant.plan)
+    : (t.urgent ? TaskQuadrant.keepQuick : TaskQuadrant.letGo);

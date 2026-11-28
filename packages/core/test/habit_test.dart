@@ -164,4 +164,21 @@ void main() {
       });
     }
   });
+
+  group('tasks (fixtures/tasks.json)', () {
+    final f =
+        jsonDecode(File('../../fixtures/tasks.json').readAsStringSync()) as Map;
+    final today = parseDateKey(f['today'] as String);
+    for (final c in (f['tasks'] as List).cast<Map>()) {
+      test(c['id'], () {
+        final fields = (c['fields'] as Map).cast<String, Object?>();
+        final t = TaskItem.fromFields(c['id'], fields);
+        expect(t.title, fields['title'] is String ? fields['title'] : '');
+        expect(t.due, c['due']);
+        expect(taskGroup(t, today).name, c['group']);
+        expect(dueLabel(t, today), c['label']);
+        expect(taskQuadrant(t).name, c['quadrant']);
+      });
+    }
+  });
 }
